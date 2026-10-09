@@ -1239,6 +1239,34 @@ fun ModalAbilitySelector(
             )
         }
     }
+
+    // Two things about this row used to be invisible, and either one leaves the user with a model
+    // that "just doesn't use tools": a model without Tool is never sent the assistant's tools at
+    // all — the request drops the whole `tools` array — and a manually added model id starts with
+    // NO abilities here, because the built-in registry has nothing to match it against.
+    if (ModelAbility.TOOL !in abilities) {
+        Text(
+            text = stringResource(R.string.setting_provider_page_abilities_tool_off_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+    if (abilities.isEmpty()) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.setting_provider_page_abilities_unknown_model_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = { onUpdateAbilities(abilities + ModelAbility.TOOL) }) {
+                Text(stringResource(R.string.setting_provider_page_abilities_assume_tool))
+            }
+        }
+    }
 }
 
 @Composable
