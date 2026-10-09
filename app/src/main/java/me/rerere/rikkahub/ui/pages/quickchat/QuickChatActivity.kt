@@ -7,11 +7,34 @@ import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.Alignment
 import androidx.core.view.WindowCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil3.ImageLoader
+import coil3.annotation.ExperimentalCoilApi
+import coil3.compose.setSingletonImageLoaderFactory
+import coil3.gif.AnimatedImageDecoder
+import coil3.gif.GifDecoder
+import coil3.network.cachecontrol.CacheControlCacheStrategy
+import coil3.network.okhttp.OkHttpNetworkFetcherFactory
+import coil3.request.crossfade
+import coil3.svg.SvgDecoder
+import com.dokar.sonner.Toaster
+import com.dokar.sonner.rememberToasterState
+import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.service.FloatingBallService
+import me.rerere.rikkahub.ui.context.LocalSettings
+import me.rerere.rikkahub.ui.context.LocalToaster
+import me.rerere.rikkahub.ui.theme.LocalDarkMode
 import me.rerere.rikkahub.ui.theme.RikkahubTheme
+import okhttp3.OkHttpClient
+import org.koin.android.ext.android.inject
+import org.koin.compose.koinInject
 
 /**
  * Half-screen quick-chat panel opened by the floating ball.
@@ -57,6 +80,9 @@ class QuickChatActivity : ComponentActivity() {
             }
     }
 
+    /** Settings store, published through [LocalSettings] for the components the panel hosts. */
+    private val settingsStore: SettingsStore by inject()
+
     /** Mirror the panel when the ball is on the left, so its controls fall under that thumb. */
     private val mirror = mutableStateOf(false)
     private val ballCenterY = mutableIntStateOf(0)
@@ -71,16 +97,36 @@ class QuickChatActivity : ComponentActivity() {
         readPanelExtras(intent)
         setContent {
             RikkahubTheme {
-                QuickChatPanel(
-                    holdToTalk = holdToTalk.value,
-                    mirror = mirror.value,
-                    ballCenterY = ballCenterY.intValue,
-                    // Told from the panel's first frame, not from onCreate: the ball folds itself
-                    // away exactly as the panel unfolds, and stands the idle countdown down while
-                    // the panel owns the screen. It comes back when we finish.
-                    onUnfoldStart = { FloatingBallService.notifyPanel(this, open = true) },
-                    onClose = { finish() },
-                )
+                val settings by settingsStore.settingsFlow.collectAsStateWithLifecycle()
+                val toaster = rememberToasterState()
+                ConfigureImageLoader()
+                // The panel hosts real app components (the assistant avatar in its header), and
+                // those reach for the app-level CompositionLocals that only RouteActivity used to
+                // provide. Without them here AssistantAvatar -> UIAvatar -> useCropLauncher dies on
+                // LocalToaster.current — whose default is `error("Not provided")` — the moment the
+                // panel composes, so provide the same set the main activity does.
+                CompositionLocalProvider(
+                    LocalSettings provides settings,
+                    LocalToaster provides toaster,
+                ) {
+                    Toaster(
+                        state = toaster,
+                        darkTheme = LocalDarkMode.current,
+                        richColors = true,
+                        alignment = Alignment.TopCenter,
+                        showCloseButton = true,
+                    )
+                    QuickChatPanel(
+                        holdToTalk = holdToTalk.value,
+                        mirror = mirror.value,
+                        ballCenterY = ballCenterY.intValue,
+                        // Told from the panel's first frame, not from onCreate: the ball folds itself
+                        // away exactly as the panel unfolds, and stands the idle countdown down while
+                        // the panel owns the screen. It comes back when we finish.
+                        onUnfoldStart = { FloatingBallService.notifyPanel(this, open = true) },
+                        onClose = { finish() },
+                    )
+                }
             }
         }
     }
@@ -119,5 +165,37 @@ class QuickChatActivity : ComponentActivity() {
         mirror.value = intent?.getStringExtra(EXTRA_BALL_SIDE) == "left"
         ballCenterY.intValue = intent?.getIntExtra(EXTRA_BALL_CENTER_Y, 0) ?: 0
         holdToTalk.value = intent?.getBooleanExtra(EXTRA_VOICE, false) == true
+    }
+}
+
+/**
+ * Installs the same singleton Coil loader the main activity does. The panel needs it because
+ * [me.rerere.rikkahub.ui.components.ui.AssistantAvatar] falls back to the assistant's model brand
+ * icon for a default avatar, and those live in `assets/icons` as SVG — with no [SvgDecoder] the
+ * header avatar comes up as a blank circle instead. `setSingletonImageLoaderFactory` is a no-op
+ * once a singleton exists, so whichever activity gets there first installs an identical loader.
+ */
+@OptIn(ExperimentalCoilApi::class)
+@Composable
+private fun ConfigureImageLoader() {
+    val okHttpClient = koinInject<OkHttpClient>()
+    setSingletonImageLoaderFactory { context ->
+        ImageLoader.Builder(context)
+            .crossfade(true)
+            .components {
+                add(
+                    OkHttpNetworkFetcherFactory(
+                        callFactory = { okHttpClient },
+                        cacheStrategy = { CacheControlCacheStrategy() },
+                    )
+                )
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    add(AnimatedImageDecoder.Factory())
+                } else {
+                    add(GifDecoder.Factory())
+                }
+                add(SvgDecoder.Factory(scaleToDensity = true))
+            }
+            .build()
     }
 }
