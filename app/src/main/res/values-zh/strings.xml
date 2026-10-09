@@ -1120,6 +1120,9 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="skills_page_empty_title">无技能</string>
   <string name="skills_page_import_confirm">导入</string>
   <string name="skills_page_import_description">输入 GitHub 仓库 URL，将自动下载根目录中的 SKILL.md 文件。</string>
+  <string name="skills_page_import_batch">从文件批量导入</string>
+  <string name="skills_page_import_batch_success">已导入 %1$d 个技能</string>
+  <string name="skills_page_import_batch_partial">已导入 %1$d 个技能，%2$d 个失败：%3$s</string>
   <string name="skills_page_import_failed">导入失败：%s</string>
   <string name="skills_page_import_from_github">从 GitHub 导入</string>
   <string name="skills_page_import_success">技能已导入：%s</string>

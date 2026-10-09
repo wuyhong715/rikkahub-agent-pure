@@ -159,21 +159,48 @@ class SkillsVM(
      */
     fun importFromLocalFile(uri: Uri, onResult: (success: Boolean, message: String) -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
-            val type = detectFileType(uri)
-            try {
-                val outcome: Pair<Boolean, String> = when (type) {
-                    LocalFileType.Markdown -> importLocalMarkdown(uri)
-                    LocalFileType.Zip -> importLocalZip(uri)
-                    LocalFileType.Unsupported -> false to "skill_import_unsupported_file_type"
-                }
-                _skills.value = skillManager.listSkills()
-                withContext(Dispatchers.Main) { onResult(outcome.first, outcome.second) }
-            } catch (t: Throwable) {
-                Log.w(TAG, "importFromLocalFile failed for $uri", t)
-                withContext(Dispatchers.Main) {
-                    onResult(false, t.message ?: "skill_import_unsupported_file_type")
+            val outcome = importOne(uri)
+            _skills.value = skillManager.listSkills()
+            withContext(Dispatchers.Main) { onResult(outcome.first, outcome.second) }
+        }
+    }
+
+    /**
+     * Batch variant of [importFromLocalFile] for a multi-select pick: import each URI in turn and
+     * report how many landed plus the first failure reason. Sequential on purpose — a zip import
+     * extracts into a temp dir, so running them concurrently would only add memory pressure.
+     */
+    fun importFromLocalFiles(uris: List<Uri>, onResult: (BatchImportResult) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            var imported = 0
+            val failures = mutableListOf<BatchImportFailure>()
+            val seen = mutableSetOf<String>()
+            for (uri in uris) {
+                // Some pickers hand back the same document twice; import it once.
+                if (!seen.add(uri.toString())) continue
+                val (success, message) = importOne(uri)
+                if (success) {
+                    imported++
+                } else {
+                    failures += BatchImportFailure(queryDisplayName(uri), message)
                 }
             }
+            _skills.value = skillManager.listSkills()
+            withContext(Dispatchers.Main) { onResult(BatchImportResult(imported, failures)) }
+        }
+    }
+
+    /** Single-file import shared by the one-shot and batch entry points. */
+    private fun importOne(uri: Uri): Pair<Boolean, String> {
+        return try {
+            when (detectFileType(uri)) {
+                LocalFileType.Markdown -> importLocalMarkdown(uri)
+                LocalFileType.Zip -> importLocalZip(uri)
+                LocalFileType.Unsupported -> false to "skill_import_unsupported_file_type"
+            }
+        } catch (t: Throwable) {
+            Log.w(TAG, "import failed for $uri", t)
+            false to (t.message ?: "skill_import_unsupported_file_type")
         }
     }
 
@@ -383,3 +410,17 @@ class SkillsVM(
         }
     }
 }
+
+/**
+ * Outcome of a multi-file skill import. [failures] carries the display name (when the picker
+ * exposes one) plus the same localised-string-key / free-form message the single-file path emits.
+ */
+data class BatchImportResult(
+    val imported: Int,
+    val failures: List<BatchImportFailure>,
+)
+
+data class BatchImportFailure(
+    val name: String?,
+    val message: String,
+)

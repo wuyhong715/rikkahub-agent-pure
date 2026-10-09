@@ -55,6 +55,7 @@ import androidx.compose.ui.text.font.FontWeight
 import com.composables.icons.lucide.Globe
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.X
+import com.dokar.sonner.ToastType
 import me.rerere.rikkahub.R
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Add01
@@ -205,6 +206,34 @@ fun SkillsPage() {
         }
     }
 
+    // Batch import — pick several `.md` / `.zip` files at once from the system file manager.
+    val openMultipleLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            vm.importFromLocalFiles(uris) { result ->
+                showImportDialog = false
+                if (result.failures.isEmpty()) {
+                    toaster.show(
+                        context.getString(R.string.skills_page_import_batch_success, result.imported),
+                        type = ToastType.Success,
+                    )
+                } else {
+                    val reason = mapImportErrorKeyToString(context, result.failures.first().message)
+                    toaster.show(
+                        context.getString(
+                            R.string.skills_page_import_batch_partial,
+                            result.imported,
+                            result.failures.size,
+                            reason,
+                        ),
+                        type = ToastType.Error,
+                    )
+                }
+            }
+        }
+    }
+
     if (showImportDialog) {
         ImportSkillDialog(
             onDismiss = { showImportDialog = false },
@@ -220,6 +249,14 @@ fun SkillsPage() {
             },
             onPickFile = {
                 openDocumentLauncher.launch(arrayOf(
+                    "text/markdown",
+                    "text/plain",
+                    "application/zip",
+                    "application/octet-stream",
+                ))
+            },
+            onPickMultipleFiles = {
+                openMultipleLauncher.launch(arrayOf(
                     "text/markdown",
                     "text/plain",
                     "application/zip",
@@ -516,6 +553,7 @@ private fun ImportSkillDialog(
     onDismiss: () -> Unit,
     onConfirm: (repoUrl: String) -> Unit,
     onPickFile: () -> Unit,
+    onPickMultipleFiles: () -> Unit,
 ) {
     var url by rememberSaveable { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
@@ -550,6 +588,15 @@ private fun ImportSkillDialog(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(stringResource(R.string.skill_import_from_file_label))
+                }
+                // Batch entry point: the picker allows selecting several bundles at once and
+                // the VM reports back how many landed / failed.
+                OutlinedButton(
+                    onClick = onPickMultipleFiles,
+                    enabled = !loading,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.skills_page_import_batch))
                 }
                 if (loading) {
                     Row(
