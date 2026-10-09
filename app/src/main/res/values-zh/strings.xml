@@ -736,6 +736,8 @@
   <string name="setting_display_page_message_jumper_position_title">消息导航按钮位置</string>
   <string name="setting_display_page_notification_message_generated">生成消息后启用通知</string>
   <string name="setting_display_page_notification_message_generated_desc">当应用不在前台时，若生成消息则显示通知</string>
+  <string name="setting_display_page_parse_text_tool_calls_desc">部分模型会把工具调用直接写进回复正文，而不是标准的 tool_calls 字段。开启后会识别并执行这些调用；关闭则把这段标记原样显示出来。</string>
+  <string name="setting_display_page_parse_text_tool_calls_title">解析正文中的工具调用</string>
   <string name="setting_display_page_paste_long_text_as_file_desc">当粘贴的文本超过阈值时，自动将其保存为文件附件</string>
   <string name="setting_display_page_paste_long_text_as_file_title">粘贴长文本为文件</string>
   <string name="setting_display_page_paste_long_text_threshold_title">文本长度阈值</string>

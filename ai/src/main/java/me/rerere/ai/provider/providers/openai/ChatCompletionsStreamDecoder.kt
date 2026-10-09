@@ -10,10 +10,12 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import me.rerere.ai.core.MessageRole
+import me.rerere.ai.core.Tool
 import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.provider.stream.DecodeResult
 import me.rerere.ai.provider.stream.SseEvent
 import me.rerere.ai.provider.stream.StreamChunkDecoder
+import me.rerere.ai.provider.stream.TextToolCallParser
 import me.rerere.ai.ui.StreamChunk
 import me.rerere.ai.ui.OpenRouterReasoningMetadata
 import me.rerere.ai.ui.UIMessage
@@ -27,7 +29,19 @@ import me.rerere.common.http.jsonObjectOrNull
 import me.rerere.common.http.jsonPrimitiveOrNull
 import kotlin.time.Clock
 
-internal class ChatCompletionsStreamDecoder : StreamChunkDecoder {
+internal class ChatCompletionsStreamDecoder(
+    /**
+     * Tools offered on this request. Passed through to [TextToolCallParser], which only accepts a
+     * text-emitted tool call naming one of them — an empty list therefore parses nothing at all.
+     */
+    tools: List<Tool> = emptyList(),
+    /**
+     * Whether a tool call written as literal content text (`<tool_call>{…}</tool_call>` instead of
+     * a structured `tool_calls` delta) should be recovered and executed. See
+     * `Settings.parseTextToolCalls`; when false, content is passed through untouched.
+     */
+    textToolCallsEnabled: Boolean = true,
+) : StreamChunkDecoder {
     private val streamState = ChatCompletionsStreamState()
     private val toolIdsByIndex = mutableMapOf<Int, String>()
     private val reasoningDetailsByIndex = linkedMapOf<Int, JsonObject>()
@@ -35,6 +49,14 @@ internal class ChatCompletionsStreamDecoder : StreamChunkDecoder {
     private var responseModel: String? = null
     private var finishReason: String? = null
     private var finished = false
+
+    /**
+     * Only ever fed content that arrived as literal text. A provider that emits real `tool_calls`
+     * deltas keeps that out of `content`, so this stays inert on the normal path. Null when the
+     * user turned the fallback off.
+     */
+    private val textToolParser =
+        if (textToolCallsEnabled) TextToolCallParser(tools) else null
 
     override fun accept(event: SseEvent): DecodeResult {
         if (finished) return DecodeResult(completed = true)
@@ -88,7 +110,21 @@ internal class ChatCompletionsStreamDecoder : StreamChunkDecoder {
     private fun finish(): List<StreamChunk> {
         if (finished) return emptyList()
         finished = true
-        return streamState.finish(finishReason, responseId, responseModel)
+        // Flush any trailing text the text-tool parser was still holding (an unterminated tag, or
+        // a partial opening tag at end of stream) before the stream state closes its parts.
+        val trailing = textToolParser?.let { parser ->
+            parser.flushPending().takeIf { parts -> parts.isNotEmpty() }?.let { parts ->
+                streamState.append(
+                    UIMessage(role = MessageRole.ASSISTANT, parts = parts),
+                    responseId,
+                )
+            }
+        }.orEmpty()
+        // If the model wrote its tool call as text, report "tool_calls" so the turn is not treated
+        // as finished prose. Matches AICoreProvider's precedence: the recovered call wins over
+        // whatever the gateway declared, which for these gateways is a plain "stop".
+        val reason = textToolParser?.consumePendingFinishReason() ?: finishReason
+        return trailing + streamState.finish(reason, responseId, responseModel)
     }
 
     private fun parseMessage(payload: JsonObject): UIMessage {
@@ -117,7 +153,14 @@ internal class ChatCompletionsStreamDecoder : StreamChunkDecoder {
                         metadata = reasoningMetadata,
                     ))
                 }
-                if (content.isNotEmpty()) add(UIMessagePart.Text(content))
+                if (content.isNotEmpty()) {
+                    // The model may have written its tool call as plain text instead of sending a
+                    // structured delta (MiniMax-style gateways); recover it rather than showing
+                    // the markup. Null parser = the fallback is switched off.
+                    val parser = textToolParser
+                    if (parser != null) addAll(parser.feed(content))
+                    else add(UIMessagePart.Text(content))
+                }
                 images.forEach { image ->
                     val imageObject = image.jsonObjectOrNull ?: return@forEach
                     if (imageObject["type"]?.jsonPrimitive?.contentOrNull != "image_url") return@forEach

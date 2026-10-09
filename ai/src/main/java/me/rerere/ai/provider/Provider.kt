@@ -81,6 +81,12 @@ data class TextGenerationParams(
      */
     val maxStreamRetries: Int = 0,
     val tools: List<Tool> = emptyList(),
+    /**
+     * Recover a tool call a model wrote as literal content text (`<tool_call>{…}</tool_call>`)
+     * instead of as a structured call. Only the OpenAI-compatible providers implement it today;
+     * see `Settings.parseTextToolCalls` for the user-facing switch.
+     */
+    val textToolCallParsing: Boolean = true,
     val reasoningLevel: ReasoningLevel = ReasoningLevel.OFF,
     val customHeaders: List<CustomHeader> = emptyList(),
     val customBody: List<CustomBody> = emptyList(),

@@ -233,6 +233,7 @@ class SettingsStore(
         val SEARCH_COMMON = stringPreferencesKey("search_common")
         val SEARCH_SELECTED = intPreferencesKey("search_selected")
         val ENABLE_WEB_FETCH_TOOLS = booleanPreferencesKey("enable_web_fetch_tools")
+        val PARSE_TEXT_TOOL_CALLS = booleanPreferencesKey("parse_text_tool_calls")
 
         // MCP
         val MCP_SERVERS = stringPreferencesKey("mcp_servers")
@@ -359,6 +360,7 @@ class SettingsStore(
                 preferences[SEARCH_SELECTED] =
                     settings.searchServiceSelected.coerceIn(0, maxOf(0, settings.searchServices.size - 1))
                 preferences[ENABLE_WEB_FETCH_TOOLS] = settings.enableWebFetchTools
+                preferences[PARSE_TEXT_TOOL_CALLS] = settings.parseTextToolCalls
 
                 preferences[MCP_SERVERS] = JsonInstant.encodeToString(settings.mcpServers)
                 preferences[WEBDAV_CONFIG] = JsonInstant.encodeToString(settings.webDavConfig)
@@ -527,6 +529,7 @@ class SettingsStore(
                 } ?: SearchCommonOptions(),
                 searchServiceSelected = preferences[SEARCH_SELECTED] ?: 0,
                 enableWebFetchTools = preferences[ENABLE_WEB_FETCH_TOOLS] != false,
+                parseTextToolCalls = preferences[PARSE_TEXT_TOOL_CALLS] != false,
                 mcpServers = preferences[MCP_SERVERS]?.let { raw ->
                     runCatching { JsonInstant.decodeFromString<List<McpServerConfig>>(raw) }.getOrElse {
                         Log.w(TAG, "Failed to decode mcpServers, using default", it)
@@ -998,6 +1001,14 @@ data class Settings(
     val searchCommonOptions: SearchCommonOptions = SearchCommonOptions(),
     val searchServiceSelected: Int = 0,
     val enableWebFetchTools: Boolean = true,
+    /**
+     * Recover a tool call a model wrote as literal reply text (`<tool_call>{…}</tool_call>`)
+     * instead of in the structured field. Some OpenAI-compatible gateways serve models whose chat
+     * template asks for that shape and then stream it as ordinary content, which without this
+     * would both show the markup to the user and never execute the tool. On by default; an escape
+     * hatch for anyone whose model legitimately writes that markup in prose.
+     */
+    val parseTextToolCalls: Boolean = true,
     val mcpServers: List<McpServerConfig> = emptyList(),
     val webDavConfig: WebDavConfig = WebDavConfig(),
     val s3Config: S3Config = S3Config(),
