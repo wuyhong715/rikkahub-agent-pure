@@ -80,7 +80,6 @@ fun ConversationList(
     listState: LazyListState,
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues(0.dp),
-    header: (@Composable () -> Unit)? = null,
     onClick: (Conversation) -> Unit = {},
     onDelete: (Conversation) -> Unit = {},
     onRename: (Conversation) -> Unit = {},
@@ -89,19 +88,16 @@ fun ConversationList(
     onMoveToFolder: (Conversation) -> Unit = {}
 ) {
     var hasScrolledToCurrent by remember(current.id) { mutableStateOf(false) }
-    // The optional header is the first list item, so paging indices are shifted by one.
-    val headerOffset = if (header != null) 1 else 0
 
-    LaunchedEffect(current.id, conversations.itemCount, hasScrolledToCurrent, headerOffset) {
+    LaunchedEffect(current.id, conversations.itemCount, hasScrolledToCurrent) {
         if (hasScrolledToCurrent) return@LaunchedEffect
-        val itemIndex = conversations.itemSnapshotList.items.indexOfFirst {
+        val currentIndex = conversations.itemSnapshotList.items.indexOfFirst {
             (it as? ConversationListItem.Item)?.conversation?.id == current.id
         }
-        if (itemIndex >= 0) {
-            val listIndex = itemIndex + headerOffset
-            val isVisible = listState.layoutInfo.visibleItemsInfo.any { it.index == listIndex }
+        if (currentIndex >= 0) {
+            val isVisible = listState.layoutInfo.visibleItemsInfo.any { it.index == currentIndex }
             if (!isVisible) {
-                listState.scrollToItem(listIndex)
+                listState.scrollToItem(currentIndex)
             }
             hasScrolledToCurrent = true
         }
@@ -113,10 +109,6 @@ fun ConversationList(
         contentPadding = contentPadding,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        header?.let {
-            item(key = "drawer_header", contentType = "drawer_header") { it() }
-        }
-
         if (conversations.itemCount == 0) {
             item {
                 Surface(
