@@ -8,6 +8,7 @@ import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.Brand
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -177,17 +178,17 @@ class FileManagerToolTest {
 
     // ========== write_text_file ==========
 
-    @Test fun `write_text_file auto creates RikkaHub shared-storage parents`() {
+    @Test fun `write_text_file auto creates brand shared-storage parents`() {
         assertTrue(
             shouldAutoCreateParent(
-                "/sdcard/Documents/RikkaHub/nested/note.txt",
-                "/sdcard/Documents/RikkaHub/nested/note.txt"
+                "/sdcard/Documents/${Brand.NAME}/nested/note.txt",
+                "/sdcard/Documents/${Brand.NAME}/nested/note.txt"
             )
         )
         assertTrue(
             shouldAutoCreateParent(
-                "/storage/emulated/0/Download/RikkaHub/nested/note.txt",
-                "/storage/emulated/0/Download/RikkaHub/nested/note.txt"
+                "/storage/emulated/0/Download/${Brand.NAME}/nested/note.txt",
+                "/storage/emulated/0/Download/${Brand.NAME}/nested/note.txt"
             )
         )
         assertFalse(

@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.pages.setting.doctor
 
+import me.rerere.rikkahub.Brand
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -40,7 +41,7 @@ class DoctorReportTest {
 
     @Test fun `default header is used when none supplied`() {
         val out = DoctorReport.format(emptyList()) { names.getValue(it) }
-        assertTrue(out.startsWith("RikkaHub-agent — diagnostic report\n"))
+        assertTrue(out.startsWith("${Brand.NAME}-agent — diagnostic report\n"))
     }
 
     @Test fun `summary counts every severity`() {
