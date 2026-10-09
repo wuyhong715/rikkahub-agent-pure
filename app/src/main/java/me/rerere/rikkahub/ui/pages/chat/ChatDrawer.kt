@@ -99,6 +99,9 @@ import me.rerere.rikkahub.ui.context.Navigator
 import com.dokar.sonner.ToastType
 import dev.chrisbanes.haze.HazeInput
 import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.blur.HazeBlurStyle
+import dev.chrisbanes.haze.blur.hazeBlur
+import dev.chrisbanes.haze.blur.material3.Material3
 import dev.chrisbanes.haze.glass.GlassDefaults
 import dev.chrisbanes.haze.glass.GlassStyle
 import dev.chrisbanes.haze.glass.OpticalSizeValue
@@ -233,15 +236,18 @@ fun ChatDrawerContent(
     var bottomBarHeightPx by remember { mutableStateOf(0) }
     val bottomBarHeight = with(LocalDensity.current) { bottomBarHeightPx.toDp() }
 
-    // 整块抽屉做成磨砂玻璃：面板半透明，透出并折射背后的聊天页（共用聊天页的 Haze 来源）。
+    // 整块抽屉做成磨砂：面板半透明，背后的聊天页被均匀虚化；上下的通透玻璃卡片与它拉开层次。
     val drawerShape = RoundedCornerShape(topEnd = 16.dp, bottomEnd = 16.dp)
+    val drawerBlurStyle = HazeBlurStyle.Material3 {
+        blurRadius(24.dp)
+    }
     ModalDrawerSheet(
         modifier = Modifier
             .width(300.dp)
             .clip(drawerShape)
-            .hazeGlass(
+            .hazeBlur(
                 input = HazeInput.Sources(hazeState),
-                style = drawerGlassStyle(drawerShape),
+                style = drawerBlurStyle,
             ),
         drawerShape = drawerShape,
         drawerContainerColor = Color.Transparent,
@@ -278,6 +284,10 @@ fun ChatDrawerContent(
                 color = Color.Transparent,
                 tonalElevation = 0.dp,
             ) {
+                Column(
+                    modifier = Modifier.padding(vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
             // 用户头像和昵称自定义区域
             Row(
                 modifier = Modifier
@@ -346,6 +356,7 @@ fun ChatDrawerContent(
                 onRename = { folderToRename = it },
                 onDelete = { folderToDelete = it },
             )
+                }
 
             }
 
