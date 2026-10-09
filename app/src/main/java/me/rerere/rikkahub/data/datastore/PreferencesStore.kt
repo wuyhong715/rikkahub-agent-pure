@@ -55,6 +55,7 @@ import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.QuickMessage
 import me.rerere.rikkahub.data.model.Tag
+import me.rerere.rikkahub.data.sync.BackupItem
 import me.rerere.rikkahub.data.sync.s3.S3Config
 import me.rerere.rikkahub.subagent.SubAgentDefaults
 import me.rerere.rikkahub.ui.theme.CustomTheme
@@ -1141,17 +1142,11 @@ data class WebDavConfig(
     val username: String = "",
     val password: String = "",
     val path: String = "rikkahub_backups",
-    val items: List<BackupItem> = listOf(
-        BackupItem.DATABASE,
-        BackupItem.FILES
-    ),
-) {
-    @Serializable
-    enum class BackupItem {
-        DATABASE,
-        FILES,
-    }
-}
+    // Backed-up slices. New installs default to everything; a pre-granular `["DATABASE","FILES"]`
+    // still decodes because BackupItem keeps the legacy FILES value, and is expanded on the next
+    // write by BackupItem.normalize.
+    val items: List<BackupItem> = BackupItem.selectable,
+)
 
 @Serializable
 data class BackupReminderConfig(

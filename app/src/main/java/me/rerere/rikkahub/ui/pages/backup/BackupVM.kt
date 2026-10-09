@@ -12,10 +12,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
-import me.rerere.rikkahub.data.datastore.WebDavConfig
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.files.saveUploadFromBytes
 import me.rerere.rikkahub.data.repository.ConversationRepository
+import me.rerere.rikkahub.data.sync.BackupItem
 import me.rerere.rikkahub.data.sync.importer.ChatboxImporter
 import me.rerere.rikkahub.data.sync.importer.CherryStudioProviderImporter
 import me.rerere.rikkahub.data.sync.webdav.WebDavBackupItem
@@ -42,7 +42,7 @@ class BackupVM(
 
     val webDavBackupItems = MutableStateFlow<UiState<List<WebDavBackupItem>>>(UiState.Idle)
     val s3BackupItems = MutableStateFlow<UiState<List<S3BackupItem>>>(UiState.Idle)
-    val localBackupItems = MutableStateFlow(WebDavConfig.BackupItem.entries.toList())
+    val localBackupItems = MutableStateFlow(BackupItem.selectable)
 
     init {
         loadBackupFileItems()
@@ -55,7 +55,7 @@ class BackupVM(
         }
     }
 
-    fun updateLocalBackupItems(items: List<WebDavConfig.BackupItem>) {
+    fun updateLocalBackupItems(items: List<BackupItem>) {
         localBackupItems.value = items
     }
 

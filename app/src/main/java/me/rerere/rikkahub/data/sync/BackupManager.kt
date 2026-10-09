@@ -16,7 +16,6 @@ import me.rerere.rikkahub.data.db.AppDatabaseFactory
 import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.db.ImportedDatabaseReconciler
 import me.rerere.rikkahub.data.db.SQLiteConfiguration
-import me.rerere.rikkahub.data.files.FileFolders
 import java.io.File
 import java.io.FileOutputStream
 import java.nio.file.Files
@@ -35,7 +34,8 @@ class BackupManager(
 ) {
     private val restoreMutex = Mutex()
 
-    suspend fun createBackup(includeDatabase: Boolean, includeFiles: Boolean): File = withContext(Dispatchers.IO) {
+    suspend fun createBackup(items: Collection<BackupItem>): File = withContext(Dispatchers.IO) {
+        val selected = BackupItem.normalize(items).toSet()
         val timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"))
         val archive = File.createTempFile("backup_${timestamp}_", ".zip", context.cacheDir)
         val staging = Files.createTempDirectory(context.cacheDir.toPath(), "backup-").toFile()
@@ -45,23 +45,26 @@ class BackupManager(
                 zip.putNextEntry(ZipEntry("settings.json"))
                 zip.write(json.encodeToString(settings).toByteArray(Charsets.UTF_8))
                 zip.closeEntry()
-                if (includeDatabase) {
+                if (BackupItem.DATABASE in selected) {
                     val snapshot = File(staging, SQLiteConfiguration.DATABASE_NAME)
                     DatabaseBackup.createSnapshot(database.openHelper.writableDatabase, snapshot)
                     addFile(zip, snapshot, DatabaseBackup.ARCHIVE_DATABASE)
                 }
-                if (includeFiles) {
-                    for (folder in listOf(FileFolders.UPLOAD, FileFolders.SKILLS, FileFolders.FONTS, FileFolders.IMAGES)) {
-                        val directory = File(context.filesDir, folder)
-                        val files = if (folder == FileFolders.SKILLS) directory.walkTopDown().asSequence()
-                        else directory.listFiles().orEmpty().asSequence()
-                        for (file in files.filter { it.isFile }) {
-                            currentCoroutineContext().ensureActive()
-                            val relative = file.relativeTo(directory).invariantSeparatorsPath
-                            PendingRestore.resolveInside(directory, relative)
-                            addFile(zip, file, "$folder/$relative")
-                        }
+                if (BackupItem.CONFIG in selected) {
+                    for (name in BackupLayout.configStoreFiles) {
+                        val file = File(context.filesDir, "${BackupLayout.DATASTORE_DIR}/$name")
+                        if (!file.isFile) continue
+                        currentCoroutineContext().ensureActive()
+                        addFile(zip, file, "${BackupLayout.DATASTORE_DIR}/$name")
                     }
+                }
+                for ((item, folder) in BackupLayout.subtreeFolders) {
+                    if (item !in selected) continue
+                    val directory = File(context.filesDir, folder)
+                    addTree(zip, directory, folder)
+                }
+                if (BackupItem.WORKSPACES in selected) {
+                    addWorkspaces(zip)
                 }
             }
             archive
@@ -73,8 +76,43 @@ class BackupManager(
         }
     }
 
-    suspend fun stageRestore(archive: File, includeDatabase: Boolean, includeFiles: Boolean) =
+    /** Archives every file under [directory] as `<prefix>/<relative path>`. */
+    private suspend fun addTree(zip: ZipOutputStream, directory: File, prefix: String) {
+        for (file in directory.walkTopDown()) {
+            if (!file.isFile) continue
+            currentCoroutineContext().ensureActive()
+            val relative = file.relativeTo(directory).invariantSeparatorsPath
+            PendingRestore.resolveInside(directory, relative)
+            addFile(zip, file, "$prefix/$relative")
+        }
+    }
+
+    /**
+     * Workspace data, deliberately excluding the proot rootfs (`workspaces/<root>/linux`, often
+     * hundreds of MB and reproducible by reinstalling) and scratch dirs (`tmp`). Two areas are
+     * captured: the per-workspace `files/` tree, and the on-device agent's `~`.
+     */
+    private suspend fun addWorkspaces(zip: ZipOutputStream) {
+        val roots = File(context.filesDir, BackupLayout.WORKSPACES_ROOT)
+        for (root in roots.listFiles().orEmpty()) {
+            if (!root.isDirectory) continue
+            val filesDir = File(root, BackupLayout.WORKSPACE_FILES_DIR)
+            addTree(
+                zip = zip,
+                directory = filesDir,
+                prefix = "${BackupLayout.WORKSPACES_ROOT}/${root.name}/${BackupLayout.WORKSPACE_FILES_DIR}",
+            )
+        }
+        addTree(
+            zip = zip,
+            directory = File(context.filesDir, BackupLayout.AGENT_WORKSPACE_DIR),
+            prefix = BackupLayout.AGENT_WORKSPACE_DIR,
+        )
+    }
+
+    suspend fun stageRestore(archive: File, items: Collection<BackupItem>) =
         withContext(Dispatchers.IO) {
+            val selected = BackupItem.normalize(items).toSet()
             restoreMutex.withLock {
                 val restore = pendingRestore(context)
                 val staging = restore.createStagingDirectory()
@@ -90,12 +128,19 @@ class BackupManager(
                             if (entry.isDirectory) continue
                             val target = when (entry.name) {
                                 "settings.json" -> File(staging, "settings.json")
-                                DatabaseBackup.ARCHIVE_DATABASE -> if (includeDatabase) stagedDatabase else null
-                                DatabaseBackup.WAL -> if (includeDatabase) stagedWal else null
+                                DatabaseBackup.ARCHIVE_DATABASE ->
+                                    if (BackupItem.DATABASE in selected) stagedDatabase else null
+
+                                DatabaseBackup.WAL ->
+                                    if (BackupItem.DATABASE in selected) stagedWal else null
+
                                 DatabaseBackup.SHM -> null // Rebuilt by SQLite; never restore shared-memory state.
-                                else -> if (includeFiles && isAttachment(entry.name)) {
-                                    PendingRestore.resolveInside(File(payload, "files"), entry.name)
-                                } else null
+                                else -> {
+                                    val item = BackupLayout.itemForEntry(entry.name)
+                                    if (item != null && item in selected) {
+                                        PendingRestore.resolveInside(File(payload, "files"), entry.name)
+                                    } else null
+                                }
                             } ?: continue
                             require(seen.add(entry.name)) { "Duplicate backup entry: ${entry.name}" }
                             check(target.parentFile!!.isDirectory || target.parentFile!!.mkdirs()) {
@@ -142,15 +187,6 @@ class BackupManager(
                 }
             }
         }
-
-    private fun isAttachment(name: String): Boolean {
-        val folder = name.substringBefore('/')
-        if (folder !in listOf(FileFolders.UPLOAD, FileFolders.SKILLS, FileFolders.FONTS, FileFolders.IMAGES) || '/' !in name) return false
-        val relative = name.substringAfter('/')
-        require(relative.isNotBlank()) { "Invalid backup attachment: $name" }
-        require(folder == FileFolders.SKILLS || '/' !in relative) { "Invalid backup attachment: $name" }
-        return true
-    }
 
     private fun addFile(zip: ZipOutputStream, file: File, name: String) {
         zip.putNextEntry(ZipEntry(name))

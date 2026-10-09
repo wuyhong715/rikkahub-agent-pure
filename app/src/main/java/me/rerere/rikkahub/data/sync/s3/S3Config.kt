@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.data.sync.s3
 
 import kotlinx.serialization.Serializable
+import me.rerere.rikkahub.data.sync.BackupItem
 
 @Serializable
 data class S3Config(
@@ -10,10 +11,10 @@ data class S3Config(
     val bucket: String = "",
     val region: String = "auto",
     val pathStyle: Boolean = true,
-    val items: List<BackupItem> = listOf(
-        BackupItem.DATABASE,
-        BackupItem.FILES
-    ),
+    // Backed-up slices. New installs default to everything; a pre-granular `["DATABASE","FILES"]`
+    // still decodes because BackupItem keeps the legacy FILES value, and is expanded on the next
+    // write by BackupItem.normalize.
+    val items: List<BackupItem> = BackupItem.selectable,
 ) {
     val host: String
         get() = endpoint
@@ -31,11 +32,5 @@ data class S3Config(
             val scheme = if (isHttps) "https://" else "http://"
             "$scheme$bucket.$host"
         }
-    }
-
-    @Serializable
-    enum class BackupItem {
-        DATABASE,
-        FILES,
     }
 }

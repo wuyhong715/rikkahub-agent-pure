@@ -14,9 +14,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MultiChoiceSegmentedButtonRow
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -33,11 +30,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dokar.sonner.ToastType
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
-import me.rerere.rikkahub.data.datastore.WebDavConfig
+import me.rerere.rikkahub.data.sync.BackupItem
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.StickyHeader
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.pages.backup.BackupVM
+import me.rerere.rikkahub.ui.pages.backup.components.BackupItemPicker
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
@@ -194,34 +192,17 @@ fun ImportExportTab(
                 item(
                     headlineContent = { Text(stringResource(R.string.backup_page_backup_items)) },
                     supportingContent = {
-                        MultiChoiceSegmentedButtonRow(
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            WebDavConfig.BackupItem.entries.forEachIndexed { index, item ->
-                                SegmentedButton(
-                                    shape = SegmentedButtonDefaults.itemShape(
-                                        index = index,
-                                        count = WebDavConfig.BackupItem.entries.size
-                                    ),
-                                    onCheckedChange = { checked ->
-                                        val newItems = if (checked) {
-                                            selectedBackupItems + item
-                                        } else {
-                                            selectedBackupItems - item
-                                        }
-                                        vm.updateLocalBackupItems(newItems)
-                                    },
-                                    checked = item in selectedBackupItems
-                                ) {
-                                    Text(
-                                        when (item) {
-                                            WebDavConfig.BackupItem.DATABASE -> stringResource(R.string.backup_page_chat_records)
-                                            WebDavConfig.BackupItem.FILES -> stringResource(R.string.backup_page_files)
-                                        }
-                                    )
+                        BackupItemPicker(
+                            selected = selectedBackupItems,
+                            onToggle = { item ->
+                                val newItems = if (item in selectedBackupItems) {
+                                    selectedBackupItems - item
+                                } else {
+                                    selectedBackupItems + item
                                 }
-                            }
-                        }
+                                vm.updateLocalBackupItems(BackupItem.normalize(newItems))
+                            },
+                        )
                     },
                 )
                 item(
