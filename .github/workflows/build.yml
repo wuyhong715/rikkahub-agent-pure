@@ -8,7 +8,10 @@ on:
       # Maintenance branches (CI tweaks, dependency bumps, docs) build too — they
       # are still code that will be merged, so they deserve the same gate.
       - 'chore/**'
-    # Doc-only pushes (README, notes, licence) do not need a 13-20 min assemblePure
+      # Moxw Agent is a long-lived product branch (not a feature to merge back),
+      # but it is still code: every push runs the same gate.
+      - 'moxw'
+    # Doc-only pushes (README, notes, licence) do not need a 13-20 min assemble
     # run: no source, resource or build file changes are involved. A push is
     # skipped only when *every* changed path matches; mixing docs with code still
     # triggers CI. Add `[skip ci]` to the commit message for one-off skips.
@@ -31,15 +34,21 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: build-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
   assemble:
-    name: assemblePure + unit tests
+    name: assemble ${{ matrix.flavor }} + unit tests
     runs-on: ubuntu-latest
     timeout-minutes: 150
+    # One job per shipping flavor (pure / moxw); they build in parallel.
+    strategy:
+      fail-fast: false
+      matrix:
+        flavor: [pure, moxw]
+    # Include the flavor: both matrix jobs share this workflow ref, and a shared
+    # group with cancel-in-progress would let the second job cancel the first.
+    concurrency:
+      group: build-${{ github.ref }}-${{ matrix.flavor }}
+      cancel-in-progress: true
     # NDK >= r23 reads this and, when ccache is on PATH, routes the C/C++
     # toolchain through it. llama.cpp (a submodule, thousands of translation
     # units x arm64-v8a + x86_64) is by far the longest pole, so a warm ccache
@@ -140,44 +149,47 @@ jobs:
             bun install
           fi
 
-      # Single Gradle invocation: one daemon, one configuration phase. Build only
-      # the shipping variant ("pure": R8 + optimized resource shrinking, keep rules
-      # in src/main/keepRules) and run the JVM unit tests against that same variant.
-      # The old debug build is gone on purpose: it compiled every library subproject
-      # a second time and rebuilt the llama.cpp native libs a second time, for an
-      # artifact nothing shipped. The published APK is `app-*-pure-unsigned.apk`,
-      # re-signed on the VPS with p2.keystore (dl2.sh apk-pure).
+      # Single Gradle invocation: one daemon, one configuration phase. Build the
+      # shipping variant of the matrix flavor (R8 + optimized resource shrinking,
+      # keep rules in src/main/keepRules) and run the JVM unit tests against that
+      # same variant. The old debug build is gone on purpose: it compiled every
+      # library subproject a second time and rebuilt the llama.cpp native libs a
+      # second time, for an artifact nothing shipped. The published APK is
+      # `app-<flavor>-release-unsigned.apk`, re-signed on the VPS with p2.keystore
+      # (dl2.sh apk-pure / apk-moxw).
       #
-      # :ai:testDebugUnitTest is listed explicitly: :app:testPureUnitTest does not
-      # run the library modules' tests, so the provider request-shape tests in
-      # :ai never executed in CI. They are plain JVM tests (android.util.Log is
-      # stubbed via returnDefaultValues), so this is seconds, not minutes.
-      - name: Assemble pure APK + unit tests
+      # :ai:testDebugUnitTest is listed explicitly: the app's own unit-test task
+      # does not run the library modules' tests, so the provider request-shape
+      # tests in :ai never executed in CI. They are plain JVM tests
+      # (android.util.Log is stubbed via returnDefaultValues), so this is seconds.
+      - name: Assemble ${{ matrix.flavor }} APK + unit tests
         env:
           # Fast lane: a push to a non-master branch (feat/**) skips the release
           # lint pass. master pushes and pull requests keep lintVital as the
           # release gate — see skipLintVital in app/build.gradle.kts.
           SKIP_LINT: ${{ github.event_name == 'push' && github.ref != 'refs/heads/master' }}
+          FLAVOR: ${{ matrix.flavor }}
         run: |
+          F="${FLAVOR^}"
           FLAGS=""
           if [ "$SKIP_LINT" = "true" ]; then
             echo "fast lane: -PskipLintVital"
             FLAGS="-PskipLintVital"
           fi
-          ./gradlew :app:assemblePure :app:testPureUnitTest :ai:testDebugUnitTest $FLAGS --stacktrace
+          ./gradlew ":app:assemble${F}Release" ":app:test${F}ReleaseUnitTest" :ai:testDebugUnitTest $FLAGS --stacktrace
 
-      - name: Show pure APK sizes
-        run: ls -la app/build/outputs/apk/pure/*.apk || true
+      - name: Show ${{ matrix.flavor }} APK sizes
+        run: ls -la app/build/outputs/apk/${{ matrix.flavor }}/release/*.apk || true
 
       - name: Show ccache stats
         if: always()
         run: ccache -s -v || true
 
-      - name: Upload pure APK
+      - name: Upload ${{ matrix.flavor }} APK
         uses: actions/upload-artifact@v4
         with:
-          name: apk-pure
-          path: app/build/outputs/apk/pure/*.apk
+          name: apk-${{ matrix.flavor }}
+          path: app/build/outputs/apk/${{ matrix.flavor }}/release/*.apk
           if-no-files-found: error
           retention-days: 14
 
@@ -185,7 +197,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: unit-test-report
+          name: unit-test-report-${{ matrix.flavor }}
           path: |
             app/build/reports/tests/
             ai/build/reports/tests/

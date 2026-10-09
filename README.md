@@ -155,7 +155,8 @@ git clone --recursive https://github.com/wuyhong715/rikkahub-agent-pure.git
 cd rikkahub-agent-pure
 
 ./gradlew :app:assembleDebug      # -> app/build/outputs/apk/debug/*.apk
-./gradlew :app:assemblePure       # -> app/build/outputs/apk/pure/*.apk (R8-optimized, unsigned)
+./gradlew :app:assemblePureRelease # -> app/build/outputs/apk/pure/release/*.apk (R8-optimized, unsigned)
+./gradlew :app:assembleMoxwRelease # -> app/build/outputs/apk/moxw/release/*.apk (Moxw Agent, R8-optimized, unsigned)
 ./gradlew :app:testDebugUnitTest  # unit tests
 ```
 
@@ -262,7 +263,8 @@ Pure 不删任何功能，只让长跑变得**可存活、可观察、可封顶*
 git clone --recursive https://github.com/wuyhong715/rikkahub-agent-pure.git
 cd rikkahub-agent-pure
 ./gradlew :app:assembleDebug      # 产物：app/build/outputs/apk/debug/*.apk
-./gradlew :app:assemblePure       # 产物：app/build/outputs/apk/pure/*.apk（R8 优化，未签名）
+./gradlew :app:assemblePureRelease # 产物：app/build/outputs/apk/pure/release/*.apk（R8 优化，未签名）
+./gradlew :app:assembleMoxwRelease # 产物：app/build/outputs/apk/moxw/release/*.apk（Moxw Agent，R8 优化，未签名）
 ./gradlew :app:testDebugUnitTest  # 单元测试
 ```
 

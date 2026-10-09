@@ -21,21 +21,64 @@ plugins {
 // runs the full report locally.
 val skipLintVital = providers.gradleProperty("skipLintVital").isPresent
 
+// The release keystore must never be a hard requirement to *build* — CI has no
+// local.properties, and published APKs are re-signed on the VPS. Only attach
+// the signing config when the material is actually present, otherwise
+// `validateSigning<Flavor>Release` fails on the CI runner.
+val hasReleaseSigning: Boolean = rootProject.file("local.properties").let { f ->
+    if (!f.exists()) false
+    else Properties().apply { FileInputStream(f).use { load(it) } }.let { p ->
+        listOf("storeFile", "storePassword", "keyAlias", "keyPassword")
+            .all { !p.getProperty(it).isNullOrBlank() }
+    }
+}
+
 android {
     namespace = "me.rerere.rikkahub"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "excp.rikkahub"
         minSdk = 26
         targetSdk = 37
-        versionCode = 203
-        versionName = "2.5.3-pure.7"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         ndk {
             abiFilters += listOf("arm64-v8a", "x86_64")
+        }
+    }
+
+    // Two products ship out of one tree. They differ in *identity* (applicationId,
+    // display name, version line), not in code, so they are modelled as a flavor
+    // dimension rather than a branch-of-truth per variant:
+    //
+    //  · pure — RikkaHub Agent · Pure. Keeps the historical ".debug"
+    //    applicationId on purpose: devices already running the debug-signed
+    //    build upgrade in place. Shipped unsigned, re-signed on the VPS.
+    //  · moxw — Moxw Agent. A standalone brand (own applicationId so it can
+    //    coexist with pure on one device) carrying the local-vector work.
+    //    Its version line is independent (0.x), see cold-memory M21.
+    flavorDimensions += "brand"
+    productFlavors {
+        create("pure") {
+            dimension = "brand"
+            applicationId = "excp.rikkahub.debug"
+            versionCode = 203
+            versionName = "2.5.3-pure.7"
+            resValue("string", "app_name", "RikkaHub Agent")
+            buildConfigField("String", "VERSION_NAME", "\"2.5.3-pure.7\"")
+            buildConfigField("String", "VERSION_CODE", "\"203\"")
+            buildConfigField("String", "UPDATE_API_URL", "\"\"")
+        }
+        create("moxw") {
+            dimension = "brand"
+            applicationId = "com.moxw.agent"
+            versionCode = 1
+            versionName = "0.1.0"
+            resValue("string", "app_name", "Moxw Agent")
+            buildConfigField("String", "VERSION_NAME", "\"0.1.0\"")
+            buildConfigField("String", "VERSION_CODE", "\"1\"")
+            buildConfigField("String", "UPDATE_API_URL", "\"\"")
         }
     }
 
@@ -88,40 +131,15 @@ android {
 
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("release")
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             optimization {
                 enable = true
             }
-            buildConfigField("String", "VERSION_NAME", "\"${android.defaultConfig.versionName}\"")
-            buildConfigField("String", "VERSION_CODE", "\"${android.defaultConfig.versionCode}\"")
-            buildConfigField("String", "UPDATE_API_URL", "\"\"")
         }
         debug {
             applicationIdSuffix = ".debug"
-            buildConfigField("String", "VERSION_NAME", "\"${android.defaultConfig.versionName}\"")
-            buildConfigField("String", "VERSION_CODE", "\"${android.defaultConfig.versionCode}\"")
-            buildConfigField("String", "UPDATE_API_URL", "\"\"")
-        }
-        // Shipping variant for RikkaHub Agent · Pure. Turns on the same
-        // release-grade R8 + (AGP 9) optimized resource shrinking as `release`
-        // — the keep rules live in src/main/keepRules/rikkahub.keep — while
-        // staying on the ".debug" applicationId so devices already running the
-        // debug-signed build upgrade in place. It is built unsigned on purpose:
-        // p2.keystore never leaves the VPS, which re-signs this APK with the
-        // same key as the old debug package, so the on-device signature is
-        // unchanged. Debug builds stay unoptimized for day-to-day iteration.
-        create("pure") {
-            applicationIdSuffix = ".debug"
-            // The library subprojects (:ai, :local-llm, :llama-cpp, …) only
-            // publish debug/release variants, so "pure" resolves to their
-            // release variant.
-            matchingFallbacks += listOf("release")
-            optimization {
-                enable = true
-            }
-            buildConfigField("String", "VERSION_NAME", "\"${android.defaultConfig.versionName}\"")
-            buildConfigField("String", "VERSION_CODE", "\"${android.defaultConfig.versionCode}\"")
-            buildConfigField("String", "UPDATE_API_URL", "\"\"")
         }
     }
     compileOptions {
@@ -131,6 +149,9 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+        // AGP 9 leaves resValues off by default; the brand flavors set app_name
+        // through resValue(), so the feature has to be on.
+        resValues = true
         // agent-keyboard IPC (IKeyboardApi.aidl + EditorInfoBundle.aidl) and the Shizuku
         // user service (IShizukuUserService.aidl) both live in src/main/aidl.
         aidl = true
@@ -180,11 +201,12 @@ android {
 
 // AGP 9 only creates a JVM unit-test task for the default tested build type
 // (debug): `unitTestEnabled` / `enableUnitTest` are gone, and a non-default
-// build type has to opt in through the host-tests API. CI ships `pure`, so run
-// the unit tests against that same variant — which also means the debug variant
-// (and its own copy of the llama.cpp native libs) is never built in CI.
+// build type has to opt in through the host-tests API. CI ships the *release*
+// variant of both flavors, so run the unit tests against that same variant —
+// which also means the debug variant (and its own copy of the llama.cpp native
+// libs) is never built in CI.
 androidComponents {
-    beforeVariants(selector().withBuildType("pure")) { variantBuilder ->
+    beforeVariants(selector().withBuildType("release")) { variantBuilder ->
         (variantBuilder as? HasHostTestsBuilder)
             ?.hostTests
             ?.get(HostTestBuilder.UNIT_TEST_TYPE)
@@ -199,8 +221,8 @@ composeCompiler {
 }
 
 tasks.register("buildAll") {
-    dependsOn("assembleRelease", "bundleRelease")
-    description = "Build both APK and AAB"
+    dependsOn("assemblePureRelease", "bundlePureRelease")
+    description = "Build the Pure APK and AAB"
 }
 
 ksp {
