@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.service
 
+import me.rerere.rikkahub.Brand
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -182,7 +183,7 @@ class MediaPlaybackService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        mediaSession = MediaSessionCompat(this, "RikkaHubMediaSession").apply {
+        mediaSession = MediaSessionCompat(this, "${Brand.NAME}MediaSession").apply {
             @Suppress("DEPRECATION")  // flags are no-ops on API 26+; harmless on the call site
             setFlags(
                 MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS or

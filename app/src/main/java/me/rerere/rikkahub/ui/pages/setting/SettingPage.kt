@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.pages.setting
 
+import me.rerere.rikkahub.Brand
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.widget.Toast
@@ -507,9 +508,9 @@ private data class QQGroup(
 )
 
 private val QQ_GROUPS = listOf(
-    QQGroup("RikkaHub 一群", "4POE46u9e_zoy1TkNfWdCvueR9CKFJdk"),
-    QQGroup("RikkaHub 二群", "Qsm0whzbPsm1UyNpR683ulLyMZ2Pqrw0"),
-    QQGroup("RikkaHub 三群", "Qc9oP-9tXioZeQEvEvI2_owWtBAIx3lS"),
+    QQGroup("${Brand.NAME} 一群", "4POE46u9e_zoy1TkNfWdCvueR9CKFJdk"),
+    QQGroup("${Brand.NAME} 二群", "Qsm0whzbPsm1UyNpR683ulLyMZ2Pqrw0"),
+    QQGroup("${Brand.NAME} 三群", "Qc9oP-9tXioZeQEvEvI2_owWtBAIx3lS"),
     QQGroup("抖音一群", number = "569655479852", icon = HugeIcons.Tiktok),
 )
 

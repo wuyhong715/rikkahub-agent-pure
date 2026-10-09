@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.skills
 
+import me.rerere.rikkahub.Brand
 import android.util.Log
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.buildJsonObject
@@ -137,9 +138,9 @@ fun skillInstallFromUrlTool(
 ): Tool = Tool(
     name = "skill_install_from_url",
     description = """
-        Download and install a skill from a URL. Accepts native (RikkaHub markdown +
+        Download and install a skill from a URL. Accepts native (${Brand.NAME} markdown +
         frontmatter), openclaw markdown, or Hermes JSON formats. Tool names are best-effort
-        transcoded to RikkaHub equivalents. The user reviews and approves the URL + final
+        transcoded to ${Brand.NAME} equivalents. The user reviews and approves the URL + final
         skill name before save. Newly-installed skills are auto-enabled for the calling
         assistant unless they previously existed and were disabled. Returns
         { ok, name, format, source_url, auto_enabled, auto_enabled_detail } on success.

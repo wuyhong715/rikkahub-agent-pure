@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.di
 
+import me.rerere.rikkahub.Brand
 import android.content.Context
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
@@ -226,7 +227,7 @@ val dataSourceModule = module {
                 if (originalRequest.header(HttpHeaders.UserAgent) == null) {
                     val userAgent = settingsStore.settingsFlow.value.networkSetting.userAgent
                         .trim()
-                        .ifEmpty { "RikkaHub-Android/${BuildConfig.VERSION_NAME}" }
+                        .ifEmpty { "${Brand.NAME}-Android/${BuildConfig.VERSION_NAME}" }
                     requestBuilder.addHeader(HttpHeaders.UserAgent, userAgent)
                 }
 

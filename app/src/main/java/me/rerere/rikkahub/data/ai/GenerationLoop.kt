@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.data.ai
 
+import me.rerere.rikkahub.Brand
 import android.content.Context
 import android.content.Intent
 import android.os.Handler
@@ -1412,7 +1413,7 @@ class GenerationLoop(
             Handler(Looper.getMainLooper()).post {
                 Toast.makeText(
                     context.applicationContext,
-                    "RikkaHub: skipped auto-return because you switched apps. (Safety feature)",
+                    "${Brand.NAME}: skipped auto-return because you switched apps. (Safety feature)",
                     Toast.LENGTH_LONG
                 ).show()
             }

@@ -1,5 +1,6 @@
 package me.rerere.ai.util
 
+import me.rerere.ai.AppBranding
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -43,7 +44,7 @@ fun Request.Builder.configureReferHeaders(url: String): Request.Builder {
 
         "openrouter.ai" -> {
             this
-                .addHeader("X-Title", "RikkaHub")
+                .addHeader("X-Title", AppBranding.name)
                 .addHeader("HTTP-Referer", "https://rikka-ai.com")
         }
 

@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.data.ai.tools.local
 
+import me.rerere.rikkahub.Brand
 import android.content.ComponentName
 import android.content.Context
 import android.provider.Settings
@@ -41,6 +42,6 @@ object NotificationListenerHandle {
 
     fun notBoundEnvelope(): JsonObject = buildJsonObject {
         put("error", "notification_listener_not_bound")
-        put("recovery", "Enable RikkaHub in Settings → Notification access. Then return to the app.")
+        put("recovery", "Enable ${Brand.NAME} in Settings → Notification access. Then return to the app.")
     }
 }

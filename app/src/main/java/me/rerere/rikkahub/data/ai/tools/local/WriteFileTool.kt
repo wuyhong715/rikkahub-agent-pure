@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.data.ai.tools.local
 
+import me.rerere.rikkahub.Brand
 import android.content.Context
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
@@ -190,9 +191,9 @@ private fun errEnvelope(code: String, detail: String): List<UIMessagePart> =
 
 internal fun shouldAutoCreateParent(rawPath: String, expandedPath: String): Boolean =
     rawPath.startsWith("~/") ||
-        expandedPath.startsWith("/sdcard/Documents/RikkaHub/") ||
-        expandedPath.startsWith("/sdcard/Download/RikkaHub/") ||
-        expandedPath.startsWith("/sdcard/Pictures/RikkaHub/") ||
-        expandedPath.startsWith("/storage/emulated/0/Documents/RikkaHub/") ||
-        expandedPath.startsWith("/storage/emulated/0/Download/RikkaHub/") ||
-        expandedPath.startsWith("/storage/emulated/0/Pictures/RikkaHub/")
+        expandedPath.startsWith("/sdcard/Documents/${Brand.NAME}/") ||
+        expandedPath.startsWith("/sdcard/Download/${Brand.NAME}/") ||
+        expandedPath.startsWith("/sdcard/Pictures/${Brand.NAME}/") ||
+        expandedPath.startsWith("/storage/emulated/0/Documents/${Brand.NAME}/") ||
+        expandedPath.startsWith("/storage/emulated/0/Download/${Brand.NAME}/") ||
+        expandedPath.startsWith("/storage/emulated/0/Pictures/${Brand.NAME}/")

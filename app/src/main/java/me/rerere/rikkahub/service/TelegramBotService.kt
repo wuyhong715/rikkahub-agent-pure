@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.service
 
+import me.rerere.rikkahub.Brand
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
@@ -255,7 +256,7 @@ class TelegramBotService : Service() {
         val body = if (rejected != null) {
             "Rejected sender ${rejected.senderId} (chat ${rejected.chatId}). Add to whitelist if that was you."
         } else {
-            "Routing inbound messages to RikkaHub"
+            "Routing inbound messages to ${Brand.NAME}"
         }
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Telegram bot listening")

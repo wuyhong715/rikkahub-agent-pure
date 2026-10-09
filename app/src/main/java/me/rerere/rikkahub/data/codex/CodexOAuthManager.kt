@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.data.codex
 
+import me.rerere.rikkahub.Brand
 import android.content.Context
 import android.content.Intent
 import android.net.ConnectivityManager
@@ -209,11 +210,11 @@ class CodexOAuthManager(
                 <meta charset="utf-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1">
                 <meta http-equiv="refresh" content="0; url=$deepLink">
-                <title>RikkaHub Codex OAuth</title>
+                <title>${Brand.NAME} Codex OAuth</title>
               </head>
               <body>
-                <p>${if (success) "Returning to RikkaHub..." else "Sign-in failed."}</p>
-                <p><a href="$deepLink">Return to RikkaHub</a></p>
+                <p>${if (success) "Returning to ${Brand.NAME}..." else "Sign-in failed."}</p>
+                <p><a href="$deepLink">Return to ${Brand.NAME}</a></p>
                 <script>
                   window.location.replace("$deepLink");
                   setTimeout(function () { window.location.href = "$deepLink"; }, 500);

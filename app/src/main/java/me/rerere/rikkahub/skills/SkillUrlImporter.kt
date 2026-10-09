@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.skills
 
+import me.rerere.rikkahub.Brand
 import me.rerere.rikkahub.data.files.SkillFrontmatterParser
 import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.data.files.SkillMetadata
@@ -266,7 +267,7 @@ class SkillUrlImporter(
             }
             appendLine("## Source")
             appendLine()
-            appendLine("Imported from Hermes skill at $sourceUrl. Tool names were not transcoded — Hermes references its own tool surface, which doesn't always map 1:1 to RikkaHub's. Edit any tool references manually if the skill misbehaves.")
+            appendLine("Imported from Hermes skill at $sourceUrl. Tool names were not transcoded — Hermes references its own tool surface, which doesn't always map 1:1 to ${Brand.NAME}'s. Edit any tool references manually if the skill misbehaves.")
         }
         return ToolNameTranscoder.transcode(body)
     }

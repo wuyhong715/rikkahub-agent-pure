@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.data.ai.mcp
 
+import me.rerere.rikkahub.Brand
 import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.CancellationException
@@ -180,7 +181,7 @@ internal class McpOAuthCoordinator(
                 val registration = oauthClient.registerClient(
                     registrationEndpoint = registrationEndpoint,
                     request = OAuthHttpClient.ClientRegistrationRequest(
-                        clientName = config.commonOptions.name.ifBlank { "RikkaHub" },
+                        clientName = config.commonOptions.name.ifBlank { Brand.NAME },
                         redirectUris = listOf(redirectUri),
                         scope = scope,
                     ),

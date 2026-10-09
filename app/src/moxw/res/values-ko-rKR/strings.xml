@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Moxw Agent brand overrides (flavor `moxw`). Same string names as
+     app/src/main/res/values-ko-rKR/strings.xml with the product name swapped; the
+     main resources stay 100% untouched so the `pure` flavor is unaffected.
+     Keep in sync when the base wording changes. -->
+<resources>
+  <string name="setting_page_share_text">Moxw Agent - 오픈소스 Android AI 어시스턴트\n\n프로젝트: https://github.com/wuyhong715/rikkahub-agent-pure</string>
+  <string name="setting_page_web_server_desc">웹을 통해 Moxw에 접근할 수 있도록 허용</string>
+  <string name="accessibility_service_summary">LLM이 화면 자동화 도구를 사용할 때 Moxw가 탭, 스와이프, 스크롤, 화면 내용 읽기, 스크린샷 촬영을 할 수 있도록 합니다.</string>
+  <string name="assistant_page_local_tools_workflows_hint_message">워크플로가 활성화되었습니다. 일부 트리거 유형은 토글이 요청할 수 없는 권한이 필요합니다:\n\n• 지오펜스(어딘가에 도착): 설정 → 앱 → Moxw → 권한 → 위치 → 항상 허용.\n• 알림 도착: 설정 → 앱 → 특수 액세스 → 알림 액세스 → Moxw 활성화.\n• 앱 실행/종료: 설정 → 접근성 → Moxw 활성화.\n• Bluetooth 연결/해제: 시스템이 물어볼 때 BLUETOOTH_CONNECT 부여.\n\n일정, WiFi, 헤드폰, 전원, 화면 켜짐/꺼짐, 배터리 트리거는 바로 작동합니다. 추가 설정이 필요한 워크플로를 작성하는 순간 어시스턴트가 알려줍니다.</string>
+  <string name="local_llm_download_message">Moxw는 이 제공자를 위해 시작 모델을 다운로드해야 합니다. 다운로드는 약 1.5 GB(Qwen2.5 1.5B Q8)입니다. 계속할까요?</string>
+  <string name="setting_page_accessibility_status_help">Moxw는 LLM을 위해 탭, 스와이프, 화면 읽기를 수행하려면 접근성 권한이 필요합니다. 설정 → 접근성 → 설치된 앱 → Moxw 를 열고 켜세요.</string>
+  <string name="setting_page_notifications_status_help">Moxw는 수신 알림을 읽으려면 알림 액세스가 필요합니다. 설정 → 알림 액세스 → 알림 액세스 를 열고 Moxw를 활성화하세요.</string>
+  <string name="setting_page_permissions_desc">Moxw가 사용하는 모든 권한을 자동으로 검색한 목록이며, 각 항목에 원탭 부여 버튼이 있습니다.</string>
+  <string name="setting_page_telegram_battery_desc">화면이 꺼지면 공격적인 OEM ROM(Xiaomi, OPPO, OnePlus, Vivo)은 등록되지 않은 앱의 네트워크를 차단합니다. 봇은 가끔 있는 유지 관리 시간에만 전달할 수 있습니다. 탭하여 Moxw를 화이트리스트에 등록하세요.</string>
+  <string name="setting_provider_aicore_status_help">기기 내에서 실행. AICore 앱이 설치된 Pixel 8/9/10 과 GenAI Prompt-API 얼리 액세스 프로그램 등록(별도 옵트인)이 필요합니다. 첫 실행 시 ErrorCode 606 / FEATURE_NOT_FOUND가 표시되면, AICore는 설치되어 있지만 Prompt-API 채널이 없는 것입니다 — GenAI Prompt-API 얼리 액세스 양식으로 액세스를 요청한 다음 재부팅하세요. 도구 호출은 프롬프트 엔지니어링으로 지원됩니다 — Gemini Nano가 &lt;tool_call&gt; 마크업을 내보내면 Moxw가 이를 구문 분석하여 디스패치합니다.</string>
+</resources>

@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.data.gemini
 
+import me.rerere.rikkahub.Brand
 import android.content.Context
 import android.content.Intent
 import android.net.ConnectivityManager
@@ -205,11 +206,11 @@ class GeminiOAuthManager(
                 <meta charset="utf-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1">
                 <meta http-equiv="refresh" content="0; url=$deepLink">
-                <title>RikkaHub Gemini OAuth</title>
+                <title>${Brand.NAME} Gemini OAuth</title>
               </head>
               <body>
-                <p>${if (success) "Returning to RikkaHub..." else "Sign-in failed."}</p>
-                <p><a href="$deepLink">Return to RikkaHub</a></p>
+                <p>${if (success) "Returning to ${Brand.NAME}..." else "Sign-in failed."}</p>
+                <p><a href="$deepLink">Return to ${Brand.NAME}</a></p>
                 <script>
                   window.location.replace("$deepLink");
                   setTimeout(function () { window.location.href = "$deepLink"; }, 500);

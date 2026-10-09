@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Moxw Agent brand overrides (flavor `moxw`). Same string names as
+     app/src/main/res/values-ru/strings.xml with the product name swapped; the
+     main resources stay 100% untouched so the `pure` flavor is unaffected.
+     Keep in sync when the base wording changes. -->
+<resources>
+  <string name="setting_page_share_text">Moxw Agent — открытый Android-ассистент с ИИ\n\nПроект: https://github.com/wuyhong715/rikkahub-agent-pure</string>
+  <string name="setting_page_web_server_desc">Разрешить доступ к Moxw через веб</string>
+  <string name="accessibility_service_summary">Позволяет Moxw нажимать, проводить, прокручивать, читать содержимое экрана и делать снимки экрана, когда LLM использует инструменты автоматизации экрана.</string>
+  <string name="assistant_page_local_tools_workflows_hint_message">Рабочие процессы включены. Некоторым типам триггеров нужны разрешения, которые переключатель не может запросить:\n\n• Геозоны (вы куда-то прибываете): Настройки → Приложения → Moxw → Разрешения → Местоположение → Разрешить всегда.\n• Приходит уведомление: Настройки → Приложения → Особый доступ → Доступ к уведомлениям → включить Moxw.\n• Запуск/закрытие приложений: Настройки → Специальные возможности → включить Moxw.\n• Подключение/отключение Bluetooth: предоставьте BLUETOOTH_CONNECT, когда система спросит.\n\nТриггеры расписания, WiFi, наушников, питания, включения/выключения экрана и батареи работают сразу. Ассистент укажет на любую дополнительную настройку в момент, когда вы создаёте рабочий процесс, которому она нужна.</string>
+  <string name="local_llm_download_message">Moxw нужно загрузить стартовую модель для этого провайдера. Загрузка ~1,5 ГБ (Qwen2.5 1.5B Q8). Продолжить?</string>
+  <string name="setting_page_accessibility_status_help">Moxw нужно разрешение специальных возможностей для выполнения нажатий, проведений и чтения экрана для LLM. Откройте Настройки → Специальные возможности → Установленные приложения → Moxw и включите его.</string>
+  <string name="setting_page_notifications_status_help">Moxw нужен доступ к уведомлениям для чтения входящих уведомлений. Откройте Настройки → Доступ к уведомлениям → Доступ к уведомлениям и включите Moxw.</string>
+  <string name="setting_page_permissions_desc">Автоматически обнаруженный список всех разрешений, используемых Moxw, с кнопкой предоставления в одно нажатие для каждого.</string>
+  <string name="setting_page_telegram_battery_desc">При выключении экрана агрессивные OEM-прошивки (Xiaomi, OPPO, OnePlus, Vivo) отключают сеть для приложений не из белого списка. Бот сможет доставлять только во время редких окон обслуживания. Нажмите, чтобы добавить Moxw в белый список.</string>
+  <string name="setting_provider_aicore_status_help">На устройстве. Требуется Pixel 8/9/10 с установленным приложением AICore И регистрация в программе раннего доступа GenAI Prompt-API (отдельное согласие). Если при первом запуске вы видите ErrorCode 606 / FEATURE_NOT_FOUND, у вас установлен AICore, но нет канала Prompt-API — запросите доступ через форму раннего доступа GenAI Prompt-API, затем перезагрузитесь. Вызов инструментов поддерживается через инженерию запросов — Gemini Nano выдаёт разметку &lt;tool_call&gt;, которую Moxw разбирает и обрабатывает.</string>
+</resources>

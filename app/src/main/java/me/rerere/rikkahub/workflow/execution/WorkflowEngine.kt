@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.workflow.execution
 
+import me.rerere.rikkahub.Brand
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -259,20 +260,20 @@ class WorkflowEngine(
                     ) == android.content.pm.PackageManager.PERMISSION_GRANTED
                 } else true
                 when {
-                    !fineGranted -> "geofence_unavailable: ACCESS_FINE_LOCATION not granted — open Settings → Apps → RikkaHub → Permissions → Location and pick Allow all the time"
-                    !bgGranted -> "geofence_unavailable: ACCESS_BACKGROUND_LOCATION not granted — open Settings → Apps → RikkaHub → Permissions → Location and pick Allow all the time"
+                    !fineGranted -> "geofence_unavailable: ACCESS_FINE_LOCATION not granted — open Settings → Apps → ${Brand.NAME} → Permissions → Location and pick Allow all the time"
+                    !bgGranted -> "geofence_unavailable: ACCESS_BACKGROUND_LOCATION not granted — open Settings → Apps → ${Brand.NAME} → Permissions → Location and pick Allow all the time"
                     else -> null
                 }
             }
             is me.rerere.rikkahub.workflow.model.TriggerSpec.NotificationReceived -> {
                 if (!me.rerere.rikkahub.data.ai.tools.local.NotificationListenerHandle.isBound()) {
-                    "notification_listener_not_enabled: enable the RikkaHub notification listener in Settings → Apps → Special access → Notification access"
+                    "notification_listener_not_enabled: enable the ${Brand.NAME} notification listener in Settings → Apps → Special access → Notification access"
                 } else null
             }
             is me.rerere.rikkahub.workflow.model.TriggerSpec.AppLaunched,
             is me.rerere.rikkahub.workflow.model.TriggerSpec.AppClosed -> {
                 if (!me.rerere.rikkahub.data.ai.tools.local.AccessibilityServiceHandle.isRunning()) {
-                    "accessibility_not_enabled: enable the RikkaHub accessibility service in Settings → Accessibility (required for app_launched / app_closed triggers)"
+                    "accessibility_not_enabled: enable the ${Brand.NAME} accessibility service in Settings → Accessibility (required for app_launched / app_closed triggers)"
                 } else null
             }
             is me.rerere.rikkahub.workflow.model.TriggerSpec.BluetoothDeviceConnected,

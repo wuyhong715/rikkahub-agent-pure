@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.service
 
+import me.rerere.rikkahub.Brand
 import android.util.Log
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.serialization.json.add
@@ -82,7 +83,7 @@ internal suspend fun TelegramBotService.handleBuiltInCommand(
 internal suspend fun TelegramBotService.sendStart(chatId: Long) {
     val (modelName, _) = activeModelDisplay()
     val msg = """
-        👋 Hey - RikkaHub agent here, running $modelName.
+        👋 Hey - ${Brand.NAME} agent here, running $modelName.
 
         Just talk to me normally. Or use one of these:
 
@@ -247,7 +248,7 @@ internal suspend fun TelegramBotService.handleStatusCommand(chatId: Long) {
     val whitelistLabel = if (whitelistCount == 1) "1 chat" else "$whitelistCount chats"
 
     val msg = buildString {
-        appendLine("📊 RikkaHub agent status")
+        appendLine("📊 ${Brand.NAME} agent status")
         appendLine()
         appendLine("${if (isRunning) "🟢" else "🔴"} Service: ${if (isRunning) "running" else "stopped"}")
         appendLine("👤 Assistant: ${assistant.name.ifBlank { "(default)" }}")

@@ -1,5 +1,6 @@
 package me.rerere.rikkahub
 
+import me.rerere.ai.AppBranding
 import android.app.Application
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -77,6 +78,9 @@ class RikkaHubApp : Application() {
             Toast.makeText(this, "备份恢复失败，已保留原数据。请重新导入备份。", Toast.LENGTH_LONG).show()
         }
 
+        // Wire the flavor's product name into :ai (which has no BuildConfig of its own),
+        // then gate debug logging.
+        AppBranding.name = Brand.NAME
         // :ai (and other sub-:app modules) have no BuildConfig of their own, so this is
         // how their provider code learns whether it's running a debug build — needed to
         // gate full request/response body logging the same way HttpLoggingInterceptor

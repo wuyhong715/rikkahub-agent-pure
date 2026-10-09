@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Moxw Agent brand overrides (flavor `moxw`). Same string names as
+     app/src/main/res/values-ar/strings.xml with the product name swapped; the
+     main resources stay 100% untouched so the `pure` flavor is unaffected.
+     Keep in sync when the base wording changes. -->
+<resources>
+  <string name="setting_page_telegram_battery_desc">عند إطفاء الشاشة، تقطع أنظمة OEM العدوانية (Xiaomi، OPPO، OnePlus، Vivo) الشبكة عن التطبيقات غير المدرجة في القائمة البيضاء. لن يتمكن البوت من التسليم إلا أثناء فترات الصيانة العرضية. انقر لإضافة Moxw إلى القائمة البيضاء.</string>
+  <string name="setting_page_share_text">Moxw Agent - مساعد ذكاء اصطناعي مفتوح المصدر لـ Android\n\nالمشروع: https://github.com/wuyhong715/rikkahub-agent-pure</string>
+  <string name="setting_page_web_server_desc">السماح لك بالوصول إلى Moxw عبر الويب</string>
+  <string name="accessibility_service_summary">يتيح لـ Moxw النقر والسحب والتمرير وقراءة محتوى الشاشة والتقاط لقطات شاشة عندما يستخدم النموذج اللغوي أدوات أتمتة الشاشة.</string>
+  <string name="setting_page_accessibility_status_help">يحتاج Moxw إلى إذن إمكانية الوصول لتنفيذ النقرات والسحبات وقراءة الشاشة للنموذج اللغوي. افتح الإعدادات → إمكانية الوصول → التطبيقات المثبتة → Moxw وفعّله.</string>
+  <string name="setting_page_permissions_desc">قائمة مُكتشَفة تلقائيًا بكل إذن يستخدمه Moxw، مع زر منح بنقرة واحدة لكل منها.</string>
+  <string name="setting_provider_aicore_status_help">على الجهاز. يتطلب Pixel 8/9/10 مع تثبيت تطبيق AICore والتسجيل في برنامج الوصول المبكر لـ GenAI Prompt-API (موافقة منفصلة). إذا رأيت ErrorCode 606 / FEATURE_NOT_FOUND عند أول تشغيل، فلديك AICore مثبت لكن دون قناة Prompt-API — اطلب الوصول عبر نموذج الوصول المبكر لـ GenAI Prompt-API، ثم أعد التشغيل. استدعاء الأدوات مدعوم عبر هندسة التوجيهات — يُصدر Gemini Nano ترميز &lt;tool_call&gt; الذي يحلله Moxw ويوزّعه.</string>
+  <string name="setting_page_notifications_status_help">يحتاج Moxw إلى الوصول إلى الإشعارات لقراءة الإشعارات الواردة. افتح الإعدادات → الوصول إلى الإشعارات → الوصول إلى الإشعارات وفعّل Moxw.</string>
+  <string name="assistant_page_local_tools_workflows_hint_message">سير العمل مُمكَّن. تحتاج بعض أنواع المُحفِّزات إلى أذونات لا يستطيع المفتاح طلبها:\n\n• الأسوار الجغرافية (تصل إلى مكان ما): الإعدادات → التطبيقات → Moxw → الأذونات → الموقع → السماح طوال الوقت.\n• وصول إشعار: الإعدادات → التطبيقات → الوصول الخاص → الوصول إلى الإشعارات → فعّل Moxw.\n• تشغيل/إغلاق التطبيقات: الإعدادات → إمكانية الوصول → فعّل Moxw.\n• اتصال/فصل Bluetooth: امنح BLUETOOTH_CONNECT عندما يسأل النظام.\n\nمُحفِّزات الجدولة وWiFi والسماعات والطاقة وتشغيل/إطفاء الشاشة والبطارية تعمل مباشرةً. سيشير المساعد إلى أي إعداد إضافي في اللحظة التي تُنشئ فيها سير عمل يحتاجه.</string>
+  <string name="local_llm_download_message">يحتاج Moxw إلى تنزيل نموذج بدء لهذا المزوّد. التنزيل ~1.5 غيغابايت (Qwen2.5 1.5B Q8). متابعة؟</string>
+  <string name="setting_termux_help_allow_external_apps_body">لتسمح لـ Moxw بتشغيل الأوامر في Termux:\n\n1. افتح تطبيق Termux.\n2. قم بتعديل أو إضافة السطر التالي إلى ملف الخصائص:\n   echo \"allow-external-apps = true\" &gt;&gt; ~/.termux/termux.properties\n3. أعد تحميل التكوين:\n   termux-reload-settings</string>
+  <string name="setting_shizuku_help_body">ثبّت Shizuku من صفحة إصداراته على GitHub، ثم شغّل خدمته: من تطبيق Shizuku على جهاز به صلاحيات root، أو عبر إقران التصحيح اللاسلكي على أندرويد 11 فما فوق (خيارات المطور ← التصحيح اللاسلكي ← إقران جهاز برمز الإقران، ثم تشغيل أمر البدء الذي يعرضه Shizuku). بعد تشغيل الخدمة، انقر على الإذن أعلاه لمنح Moxw الوصول.</string>
+</resources>

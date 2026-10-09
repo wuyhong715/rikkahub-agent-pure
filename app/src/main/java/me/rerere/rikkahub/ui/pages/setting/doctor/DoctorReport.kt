@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.pages.setting.doctor
 
+import me.rerere.rikkahub.Brand
 import android.content.Context
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -11,12 +12,12 @@ import java.util.Locale
  * output is greppable for support flows.
  */
 object DoctorReport {
-    fun format(context: Context, checks: List<DoctorCheck>, header: String = "RikkaHub-agent — diagnostic report"): String =
+    fun format(context: Context, checks: List<DoctorCheck>, header: String = "${Brand.NAME}-agent — diagnostic report"): String =
         format(checks, header) { context.getString(it.displayNameRes) }
 
     fun format(
         checks: List<DoctorCheck>,
-        header: String = "RikkaHub-agent — diagnostic report",
+        header: String = "${Brand.NAME}-agent — diagnostic report",
         categoryName: (DoctorCategory) -> String,
     ): String =
         buildString {

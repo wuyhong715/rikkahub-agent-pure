@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.pages.setting
 
+import me.rerere.rikkahub.Brand
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -89,7 +90,7 @@ fun SettingPreferencesNetworkPage(vm: SettingVM = koinViewModel()) {
     var firstOutputTimeout by remember(settings.networkSetting.streamFirstOutputTimeoutSeconds) {
         mutableStateOf(settings.networkSetting.streamFirstOutputTimeoutSeconds.toString())
     }
-    val defaultUserAgent = "RikkaHub-Android/${BuildConfig.VERSION_NAME}"
+    val defaultUserAgent = "${Brand.NAME}-Android/${BuildConfig.VERSION_NAME}"
     val proxyUrlInvalid = proxyUrlDraft.isNotBlank() && proxyUrlDraft.toProxyOrNull() == null
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val scope = rememberCoroutineScope()

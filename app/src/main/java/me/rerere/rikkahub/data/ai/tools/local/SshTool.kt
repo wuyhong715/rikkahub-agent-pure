@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.data.ai.tools.local
 
+import me.rerere.rikkahub.Brand
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
@@ -408,9 +409,9 @@ internal fun unreachableEnvelope(
         })
         put("recovery", "Direct TCP to $resolvedIp:$port failed across every available " +
             "network (${totalMs}ms total). If Termux ssh from the same device reaches " +
-            "this host, RikkaHub's process is being filtered. Check Settings → Network → " +
+            "this host, ${Brand.NAME}'s process is being filtered. Check Settings → Network → " +
             "Private DNS (try Off), any active VPN's per-app routing, and Settings → Apps → " +
-            "RikkaHub → Mobile data & Wi-Fi (enable Background data and Unrestricted data usage).")
+            "${Brand.NAME} → Mobile data & Wi-Fi (enable Background data and Unrestricted data usage).")
     }
 
 /** Run a single command on an open session. Returns a JSON object with exit_code/stdout/stderr. */

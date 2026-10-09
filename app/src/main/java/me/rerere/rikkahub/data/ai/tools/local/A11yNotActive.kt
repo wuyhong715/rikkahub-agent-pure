@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.data.ai.tools.local
 
+import me.rerere.rikkahub.Brand
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -31,15 +32,15 @@ object A11yNotActive {
             )
             put(
                 "recovery",
-                "Re-enable it: Settings → Accessibility → RikkaHub (or use the 'One-tap repair " +
+                "Re-enable it: Settings → Accessibility → ${Brand.NAME} (or use the 'One-tap repair " +
                     "(Shizuku)' button on the in-app 设置 → 无障碍 page). If it keeps dropping, " +
-                    "allow-list RikkaHub against the system's power management: autostart + allow " +
+                    "allow-list ${Brand.NAME} against the system's power management: autostart + allow " +
                     "background battery use + lock it in the recents list.",
             )
         } else {
             put(
                 "recovery",
-                "Enable RikkaHub in Settings → Accessibility → Installed Apps",
+                "Enable ${Brand.NAME} in Settings → Accessibility → Installed Apps",
             )
         }
     }

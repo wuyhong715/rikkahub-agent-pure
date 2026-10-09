@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.utils
 
+import me.rerere.rikkahub.Brand
 import android.app.DownloadManager
 import android.content.Context
 import android.os.Environment
@@ -63,7 +64,7 @@ class UpdateChecker(
                     .get()
                     .addHeader(
                         "User-Agent",
-                        "RikkaHub $currentVersionName #${BuildConfig.VERSION_CODE}"
+                        "${Brand.NAME} $currentVersionName #${BuildConfig.VERSION_CODE}"
                     )
                     .build()
             ).await()

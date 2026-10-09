@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.shizuku
 
+import me.rerere.rikkahub.Brand
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -47,7 +48,7 @@ object ShizukuStatusMapper {
             put(
                 "recovery",
                 "Install Shizuku from https://github.com/RikkaApps/Shizuku/releases/latest , start its service, then grant " +
-                    "RikkaHub permission from Settings -> Shizuku."
+                    "${Brand.NAME} permission from Settings -> Shizuku."
             )
         }
 
@@ -64,7 +65,7 @@ object ShizukuStatusMapper {
             put("error", "shizuku_permission_denied")
             put(
                 "recovery",
-                "Grant RikkaHub the Shizuku permission from Settings -> Shizuku, then retry."
+                "Grant ${Brand.NAME} the Shizuku permission from Settings -> Shizuku, then retry."
             )
         }
     }

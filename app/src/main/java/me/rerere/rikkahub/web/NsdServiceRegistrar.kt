@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.web
 
+import me.rerere.rikkahub.Brand
 import android.content.Context
 import android.net.wifi.WifiManager
 import android.util.Log
@@ -63,7 +64,7 @@ class NsdServiceRegistrar(
                 serviceType,
                 serviceName,
                 port,
-                "RikkaHub Web Server"
+                "${Brand.NAME} Web Server"
             )
             mdns.registerService(serviceInfo)
 
