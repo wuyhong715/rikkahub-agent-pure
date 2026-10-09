@@ -79,6 +79,13 @@ val dataSourceModule = module {
     single { get<UsageLedgerDatabase>().usageRecordDao() }
     single { UsageLedger(get()) }
 
+    // Moxw - the vector index also lives in its own database file (see VectorIndexDatabase for
+    // why). Every row in it is derivable from a document plus an embedding model, so it is a
+    // cache rather than user data: it must never sit on the main database's upgrade path, and
+    // forgetting it is just deleting the file.
+    single { me.rerere.rikkahub.data.vector.VectorIndexDatabaseFactory.create(context = get()) }
+    single { me.rerere.rikkahub.data.vector.VectorIndexStore(database = get()) }
+
     // P2-06 - the expert library also lives in its own database file (see
     // AgentDefinitionDatabase for why). Unlike the usage ledger this holds USER data, so a
     // future shape change ships a real migration rather than dropping and recreating the
