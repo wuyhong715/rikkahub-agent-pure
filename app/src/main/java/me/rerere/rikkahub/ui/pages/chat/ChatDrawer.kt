@@ -241,23 +241,11 @@ fun ChatDrawerContent(
     val drawerBlurStyle = HazeBlurStyle.Material3 {
         blurRadius(24.dp)
     }
-    ModalDrawerSheet(
-        modifier = Modifier
-            .width(300.dp)
-            .clip(drawerShape)
-            .hazeBlur(
-                input = HazeInput.Sources(hazeState),
-                style = drawerBlurStyle,
-            ),
-        drawerShape = drawerShape,
-        drawerContainerColor = Color.Transparent,
-        drawerContentColor = MaterialTheme.colorScheme.onSurface,
-        drawerTonalElevation = 0.dp,
-    ) {
+    // 上方功能区：磨砂玻璃卡片；作为列表头项，跟随列表一起滚动。
+    val topBarShape = RoundedCornerShape(20.dp)
+    val drawerTopArea: @Composable () -> Unit = {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(8.dp),
+            modifier = Modifier.padding(horizontal = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             if (updateChecksEnabled && !isPlayStore) {
@@ -269,16 +257,15 @@ fun ChatDrawerContent(
                 onClick = { navController.navigate(Screen.Backup) },
             )
 
-            // 上方功能区：整块做成浮起来的玻璃卡片（无边框，靠阴影 + 玻璃高光做出立体感）。
-            val topBarShape = RoundedCornerShape(20.dp)
+            // 上方功能区：磨砂玻璃卡片（无边框；阴影 + 磨砂做出浮起感，与背后磨砂面板一致）。
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
                     .shadow(6.dp, topBarShape, clip = false)
                     .clip(topBarShape)
-                    .hazeGlass(
+                    .hazeBlur(
                         input = HazeInput.Sources(hazeState),
-                        style = drawerGlassStyle(topBarShape),
+                        style = HazeBlurStyle.Material3 { blurRadius(14.dp) },
                     ),
                 shape = topBarShape,
                 color = Color.Transparent,
@@ -357,25 +344,36 @@ fun ChatDrawerContent(
                 onDelete = { folderToDelete = it },
             )
                 }
-
             }
+        }
+    }
 
-            // 列表区域：对话列表铺满整块，底部功能区浮在它上面做玻璃。
-            Box(
+    ModalDrawerSheet(
+        modifier = Modifier
+            .width(300.dp)
+            .clip(drawerShape)
+            .hazeBlur(
+                input = HazeInput.Sources(hazeState),
+                style = drawerBlurStyle,
+            ),
+        drawerShape = drawerShape,
+        drawerContainerColor = Color.Transparent,
+        drawerContentColor = MaterialTheme.colorScheme.onSurface,
+        drawerTonalElevation = 0.dp,
+    ) {
+        // 列表铺满整块：上方功能区作为列表头项随列表一起滚动；底部功能区浮在列表之上。
+        Box(modifier = Modifier.fillMaxSize()) {
+            ConversationList(
+                current = current,
+                conversations = conversations,
+                conversationJobs = conversationJobs.keys,
+                listState = conversationListState,
+                contentPadding = PaddingValues(top = 8.dp, bottom = bottomBarHeight + 12.dp),
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-            ) {
-                ConversationList(
-                    current = current,
-                    conversations = conversations,
-                    conversationJobs = conversationJobs.keys,
-                    listState = conversationListState,
-                    contentPadding = PaddingValues(bottom = bottomBarHeight + 12.dp),
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .hazeSource(state = drawerHazeState),
-                onClick = {
+                    .fillMaxSize()
+                    .hazeSource(state = drawerHazeState),
+                header = drawerTopArea,
+            onClick = {
                     navigateToChatPage(navController, it.id)
                 },
                 onRename = {
@@ -527,7 +525,6 @@ fun ChatDrawerContent(
             }
                     }
                 }
-            }
         }
     }
 
