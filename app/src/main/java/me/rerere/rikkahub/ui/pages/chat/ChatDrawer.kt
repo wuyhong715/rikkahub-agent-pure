@@ -1,7 +1,6 @@
 package me.rerere.rikkahub.ui.pages.chat
 
 import androidx.activity.ComponentActivity
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -13,7 +12,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -22,10 +20,10 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
@@ -51,7 +49,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -96,13 +93,17 @@ import me.rerere.rikkahub.ui.components.ui.AssistantAvatar
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.ui.components.ui.UpdateCard
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.context.Navigator
 import com.dokar.sonner.ToastType
 import dev.chrisbanes.haze.HazeInput
-import dev.chrisbanes.haze.blur.HazeBlurStyle
-import dev.chrisbanes.haze.blur.hazeBlur
-import dev.chrisbanes.haze.blur.material3.Material3
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.glass.GlassDefaults
+import dev.chrisbanes.haze.glass.GlassStyle
+import dev.chrisbanes.haze.glass.OpticalSizeValue
+import dev.chrisbanes.haze.glass.hazeGlass
+import dev.chrisbanes.haze.glass.material3.Material3
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import me.rerere.rikkahub.ui.hooks.EditStateContent
@@ -116,12 +117,37 @@ import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import kotlin.uuid.Uuid
 
+/**
+ * Glass style shared by the drawer panel and its two floating bars.
+ *
+ * Frosted rather than clear so the page refracting through stays legible. The built-in lighting
+ * and edge highlight supply the "glass" depth; callers stack a soft [shadow] behind it so the
+ * bar reads as floating above the panel.
+ */
+@Composable
+private fun drawerGlassStyle(containerShape: RoundedCornerShape): GlassStyle {
+    val base = MaterialTheme.colorScheme.surfaceContainer
+    return GlassStyle.Material3(
+        containerColor = base,
+        tint = base.copy(alpha = 0.30f),
+    ) {
+        optics(
+            GlassDefaults.optics.copy(
+                blurRadius = OpticalSizeValue.Fixed(20.dp),
+                depth = OpticalSizeValue.Fixed(0.5f),
+            )
+        )
+        shape(containerShape)
+    }
+}
+
 @Composable
 fun ChatDrawerContent(
     navController: Navigator,
     vm: ChatVM,
     settings: Settings,
     current: Conversation,
+    hazeState: HazeState,
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -202,23 +228,25 @@ fun ChatDrawerContent(
         }
     }
 
-    // 底部功能区悬浮在对话列表之上做磨砂（与输入框同款），因此自建一个 Haze 状态：
-    // 对话列表标记为模糊来源，底部面板做 hazeBlur，列表内容从面板下方滑过时被虚化。
+    // 底部功能区浮在对话列表之上：对话列表作为玻璃来源，底部卡片折射列表内容。
     val drawerHazeState = rememberHazeState()
-    val bottomBarHazeStyle = HazeBlurStyle.Material3 {
-        blurRadius(12.dp)
-    }
-    // 分隔线颜色：浅色模式纯黑，深色模式自动转浅色（避免深色下看不见）。
-    val separatorColor = if (MaterialTheme.colorScheme.background.luminance() < 0.5f) {
-        Color.White.copy(alpha = 0.45f)
-    } else {
-        Color.Black
-    }
     var bottomBarHeightPx by remember { mutableStateOf(0) }
     val bottomBarHeight = with(LocalDensity.current) { bottomBarHeightPx.toDp() }
 
+    // 整块抽屉做成磨砂玻璃：面板半透明，透出并折射背后的聊天页（共用聊天页的 Haze 来源）。
+    val drawerShape = RoundedCornerShape(topEnd = 16.dp, bottomEnd = 16.dp)
     ModalDrawerSheet(
-        modifier = Modifier.width(300.dp)
+        modifier = Modifier
+            .width(300.dp)
+            .clip(drawerShape)
+            .hazeGlass(
+                input = HazeInput.Sources(hazeState),
+                style = drawerGlassStyle(drawerShape),
+            ),
+        drawerShape = drawerShape,
+        drawerContainerColor = Color.Transparent,
+        drawerContentColor = MaterialTheme.colorScheme.onSurface,
+        drawerTonalElevation = 0.dp,
     ) {
         Column(
             modifier = Modifier
@@ -235,6 +263,21 @@ fun ChatDrawerContent(
                 onClick = { navController.navigate(Screen.Backup) },
             )
 
+            // 上方功能区：整块做成浮起来的玻璃卡片（无边框，靠阴影 + 玻璃高光做出立体感）。
+            val topBarShape = RoundedCornerShape(20.dp)
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .shadow(6.dp, topBarShape, clip = false)
+                    .clip(topBarShape)
+                    .hazeGlass(
+                        input = HazeInput.Sources(hazeState),
+                        style = drawerGlassStyle(topBarShape),
+                    ),
+                shape = topBarShape,
+                color = Color.Transparent,
+                tonalElevation = 0.dp,
+            ) {
             // 用户头像和昵称自定义区域
             Row(
                 modifier = Modifier
@@ -304,16 +347,9 @@ fun ChatDrawerContent(
                 onDelete = { folderToDelete = it },
             )
 
-            // 上方功能区与对话列表的分界：黑线贴左接边，右侧略微留空不接边。
-            HorizontalDivider(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .offset(x = (-8).dp),
-                thickness = 1.dp,
-                color = separatorColor,
-            )
+            }
 
-            // 列表区域：对话列表铺满整块，底部功能区浮在它上面做磨砂。
+            // 列表区域：对话列表铺满整块，底部功能区浮在它上面做玻璃。
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -356,21 +392,23 @@ fun ChatDrawerContent(
                 }
             )
 
-                // 底部功能区：圆角磨砂背景 + 细边线，与聊天输入框同款；列表从它下方滑过时被虚化。
+                // 底部功能区：浮在对话列表之上的玻璃卡片（无边框；阴影 + 玻璃高光做立体感），
+                // 列表从它下方滑过时被折射虚化。
+                val bottomBarShape = RoundedCornerShape(20.dp)
                 Surface(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
-                        .clip(MaterialTheme.shapes.largeIncreased)
-                        .hazeBlur(
+                        .shadow(6.dp, bottomBarShape, clip = false)
+                        .clip(bottomBarShape)
+                        .hazeGlass(
                             input = HazeInput.Sources(drawerHazeState),
-                            style = bottomBarHazeStyle,
+                            style = drawerGlassStyle(bottomBarShape),
                         )
                         .onSizeChanged { bottomBarHeightPx = it.height },
-                    shape = MaterialTheme.shapes.largeIncreased,
+                    shape = bottomBarShape,
                     color = Color.Transparent,
                     tonalElevation = 0.dp,
-                    border = BorderStroke(1.dp, separatorColor),
                 ) {
                     Column(
                         modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
