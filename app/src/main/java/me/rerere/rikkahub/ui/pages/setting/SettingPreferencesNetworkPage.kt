@@ -30,6 +30,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
@@ -85,6 +86,9 @@ fun SettingPreferencesNetworkPage(vm: SettingVM = koinViewModel()) {
     var proxyPasswordDraft by remember { mutableStateOf("") }
     var proxyPasswordVisible by remember { mutableStateOf(false) }
     var proxyDialogVisible by remember { mutableStateOf(false) }
+    var firstOutputTimeout by remember(settings.networkSetting.streamFirstOutputTimeoutSeconds) {
+        mutableStateOf(settings.networkSetting.streamFirstOutputTimeoutSeconds.toString())
+    }
     val defaultUserAgent = "RikkaHub-Android/${BuildConfig.VERSION_NAME}"
     val proxyUrlInvalid = proxyUrlDraft.isNotBlank() && proxyUrlDraft.toProxyOrNull() == null
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -300,6 +304,60 @@ fun SettingPreferencesNetworkPage(vm: SettingVM = koinViewModel()) {
                                     )
                                 },
                             )
+                        },
+                    )
+                    item(
+                        headlineContent = {
+                            Text(stringResource(R.string.setting_page_preferences_network_first_output_timeout))
+                        },
+                        supportingContent = {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(stringResource(R.string.setting_page_preferences_network_first_output_timeout_desc))
+                                OutlinedTextField(
+                                    value = firstOutputTimeout,
+                                    onValueChange = { value ->
+                                        firstOutputTimeout = value.filter(Char::isDigit).take(3)
+                                        firstOutputTimeout.toIntOrNull()?.let { parsed ->
+                                            val normalized = parsed.coerceIn(0, 600)
+                                            if (normalized != settings.networkSetting.streamFirstOutputTimeoutSeconds) {
+                                                vm.updateSettings { current ->
+                                                    current.copy(
+                                                        networkSetting = current.networkSetting.copy(
+                                                            streamFirstOutputTimeoutSeconds = normalized,
+                                                        ),
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    },
+                                    singleLine = true,
+                                    label = {
+                                        Text(stringResource(R.string.setting_page_preferences_network_first_output_timeout_input))
+                                    },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .onFocusChanged { focusState ->
+                                            if (!focusState.isFocused) {
+                                                val normalized = firstOutputTimeout.toIntOrNull()
+                                                    ?.coerceIn(0, 600)
+                                                    ?: settings.networkSetting.streamFirstOutputTimeoutSeconds
+                                                firstOutputTimeout = normalized.toString()
+                                                vm.updateSettings { current ->
+                                                    if (current.networkSetting.streamFirstOutputTimeoutSeconds == normalized) {
+                                                        current
+                                                    } else {
+                                                        current.copy(
+                                                            networkSetting = current.networkSetting.copy(
+                                                                streamFirstOutputTimeoutSeconds = normalized,
+                                                            ),
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        },
+                                )
+                            }
                         },
                     )
                 }

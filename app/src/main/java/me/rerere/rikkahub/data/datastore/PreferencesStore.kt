@@ -1080,6 +1080,14 @@ data class NetworkSetting(
     val proxyUsername: String = "",
     val proxyPassword: String = "",
     val enableAutoRetry: Boolean = true,
+    /**
+     * Seconds to wait for the first byte of a streamed model reply before treating the
+     * connection as dead and re-issuing the request on a fresh one. `0` disables the watchdog.
+     * A silently-dead socket otherwise emits nothing and fails nothing, so the 10-minute
+     * transport readTimeout is the only thing that would ever notice - the "thinking forever
+     * with no content" report. Kept well above a legitimate long-context prefill.
+     */
+    val streamFirstOutputTimeoutSeconds: Int = 120,
 )
 
 @Serializable

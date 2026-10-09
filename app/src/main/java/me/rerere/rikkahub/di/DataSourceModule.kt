@@ -187,6 +187,14 @@ val dataSourceModule = module {
             .connectTimeout(20, TimeUnit.SECONDS)
             .readTimeout(10, TimeUnit.MINUTES)
             .writeTimeout(120, TimeUnit.SECONDS)
+            // HTTP/2 keepalive. Without it a half-open socket (app backgrounded across a network
+            // change, OEM freeze, or a peer that vanishes without a FIN) is invisible: readTimeout
+            // only bounds the gap BETWEEN bytes, so a stream that goes quiet can hang for the full
+            // 10 minutes with the UI stuck on "thinking". A PING every 30s makes OkHttp tear the
+            // dead connection down promptly, which surfaces as an ordinary stream failure the
+            // retry policy can recover (see StreamFirstOutputWatchdog for the HTTP/1.1 / silent
+            // -server case). HTTP/1.1 connections simply ignore pingInterval.
+            .pingInterval(30, TimeUnit.SECONDS)
             .followSslRedirects(true)
             .followRedirects(true)
             .retryOnConnectionFailure(true)
