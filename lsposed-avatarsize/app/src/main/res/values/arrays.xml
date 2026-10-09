@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- RikkaHub debug package. Add the release package here too if needed. -->
+    <string-array name="xposedscope">
+        <item>excp.rikkahub.debug</item>
+        <!-- <item>me.rerere.rikkahub</item> -->
+    </string-array>
+</resources>
