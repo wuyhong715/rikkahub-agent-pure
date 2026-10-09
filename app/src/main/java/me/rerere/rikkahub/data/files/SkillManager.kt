@@ -2,10 +2,12 @@ package me.rerere.rikkahub.data.files
 
 import android.content.Context
 import android.util.Log
+import java.io.ByteArrayOutputStream
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import me.rerere.rikkahub.Brand
 import me.rerere.rikkahub.data.datastore.SettingsStore
 
 class SkillManager(
@@ -457,9 +459,11 @@ class SkillManager(
                 continue
             }
             val outFile = targetDir.resolve(child)
-            assetMgr.open(source).use { input ->
-                outFile.outputStream().use { out -> input.copyTo(out) }
-            }
+            // Rewrite the product name on the way out (see [substituteProductBrand]) so one
+            // shared asset tree can seed either flavour's brand without keeping a second
+            // copy of every file that would silently drift.
+            val bytes = assetMgr.open(source).use { it.readBytes() }
+            outFile.writeBytes(substituteProductBrand(bytes))
         }
     }
 
@@ -607,3 +611,47 @@ data class SkillContent(
     val argsSchema: kotlinx.serialization.json.JsonObject? = null,
 )
 
+
+/**
+ * Rewrite the ASCII product name inside a bundled asset on its way out of the APK.
+ *
+ * The default skills are one shared source of truth for both shipping flavours, so their
+ * prose says "RikkaHub" while the moxw build must seed "Moxw". Rewriting here — at the one
+ * place where assets are copied into the user's skills directory — preserves that single
+ * source of truth: `pure` substitutes its own name for itself, which is the identity, so
+ * its seeded bytes are unchanged.
+ *
+ * The needle is plain ASCII and only ever appears in prose, so a byte-level replacement
+ * cannot split a UTF-8 sequence and cannot touch the lowercase `rikkahub` slugs.
+ *
+ * @return the input unchanged (same instance) when there is nothing to rewrite.
+ */
+internal fun substituteProductBrand(bytes: ByteArray, brand: String = Brand.NAME): ByteArray {
+    val from = "RikkaHub".toByteArray(Charsets.US_ASCII)
+    val to = brand.toByteArray(Charsets.UTF_8)
+    if (from.contentEquals(to)) return bytes
+    var hit = indexOfBytes(bytes, from, 0)
+    if (hit < 0) return bytes
+    val out = ByteArrayOutputStream(bytes.size + 16)
+    var emitted = 0
+    while (hit >= 0) {
+        out.write(bytes, emitted, hit - emitted)
+        out.write(to)
+        emitted = hit + from.size
+        hit = indexOfBytes(bytes, from, emitted)
+    }
+    out.write(bytes, emitted, bytes.size - emitted)
+    return out.toByteArray()
+}
+
+/** First index at or after [start] where [needle] occurs in [haystack], or -1. */
+private fun indexOfBytes(haystack: ByteArray, needle: ByteArray, start: Int): Int {
+    if (needle.isEmpty()) return -1
+    val last = haystack.size - needle.size
+    if (start > last) return -1
+    outer@ for (i in start..last) {
+        for (j in needle.indices) if (haystack[i + j] != needle[j]) continue@outer
+        return i
+    }
+    return -1
+}
