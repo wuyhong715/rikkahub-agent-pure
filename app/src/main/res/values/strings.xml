@@ -1012,6 +1012,9 @@
   <string name="setting_page_web_server_start">Start</string>
   <string name="setting_page_web_server_stop">Stop</string>
   <string name="setting_provider_page_abilities">Abilities</string>
+  <string name="setting_provider_page_abilities_assume_tool">Assume Tool support</string>
+  <string name="setting_provider_page_abilities_tool_off_hint">Without Tool, the assistant\'s tools are not sent to this model at all — the request goes out with an empty tool list, so tool use quietly does nothing.</string>
+  <string name="setting_provider_page_abilities_unknown_model_hint">This model id isn\'t in the built-in registry, so its abilities start empty. Most chat models do support tool calling.</string>
   <string name="setting_provider_page_add">Add</string>
   <string name="setting_provider_page_add_model">Add Model</string>
   <string name="setting_provider_page_add_models_hint">Click the button below to add models</string>
@@ -1250,7 +1253,7 @@
   <string name="theme_name_sakura">Sakura Pink</string>
   <string name="theme_name_spring">Meadow Green</string>
   <string name="title_activity_safe_mode">Safe Mode</string>
-  <string name="tools_warning">The current model does not have tool calling enabled. Please enable the model\'s tool capabilities in the settings to use features like search/MCP.</string>
+  <string name="tools_warning">The current model does not have tool calling enabled, so the assistant\'s tools (on-device ones and MCP alike) are not sent to it. Turn on the model\'s Tool ability in its settings.</string>
   <string name="translate">Translate</string>
   <string name="translating">Translating...</string>
   <string name="translation_clear">Clear Translation</string>

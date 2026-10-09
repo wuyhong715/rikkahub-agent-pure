@@ -624,6 +624,10 @@ class ChatService(
         }
     }
 
+    // Conversations we have already told that the selected model can't use tools. Kept so the
+    // warning below fires once per conversation instead of on every turn — see its call site.
+    private val toolUnavailableWarned = ConcurrentHashMap.newKeySet<Uuid>()
+
     // 错误状态
     private val _errors = MutableStateFlow<List<ChatError>>(emptyList())
     val errors: StateFlow<List<ChatError>> = _errors.asStateFlow()
@@ -1687,9 +1691,22 @@ class ChatService(
             // reset suggestions
             updateConversation(conversationId, initialConversation.copy(chatSuggestions = emptyList()))
 
-            // memory tool
+            // Tools the assistant has enabled that this model will never see. The gate lives in
+            // the provider (the `tools` array is only emitted for a model marked as supporting
+            // them), so the request goes out with no tools at all and the model has to improvise —
+            // which is how you end up with raw tool-call markup in the chat bubble and nothing
+            // pointing at the model setting three screens away. The old condition only looked at
+            // MCP servers and external web search, so an assistant whose tools are all on-device
+            // got no warning at all.
+            //
+            // Deliberately once per conversation: Assistant.localTools defaults to time_info, so
+            // nearly every assistant has something to advertise, and an unguarded warning would
+            // fire on every single turn.
             if (!model.abilities.contains(ModelAbility.TOOL)) {
-                if (useExternalWebSearch || mcpManager.getAllAvailableTools().isNotEmpty()) {
+                val advertisesTools = useExternalWebSearch ||
+                    mcpManager.getAllAvailableTools().isNotEmpty() ||
+                    assistant.localTools.isNotEmpty()
+                if (advertisesTools && toolUnavailableWarned.add(conversationId)) {
                     addError(
                         IllegalStateException(context.getString(R.string.tools_warning)),
                         conversationId,
