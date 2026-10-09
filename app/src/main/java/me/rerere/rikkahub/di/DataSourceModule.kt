@@ -86,6 +86,25 @@ val dataSourceModule = module {
     single { me.rerere.rikkahub.data.vector.VectorIndexDatabaseFactory.create(context = get()) }
     single { me.rerere.rikkahub.data.vector.VectorIndexStore(database = get()) }
 
+    // The embedder is resolved from what is installed, lazily, so nothing here has to know
+    // whether the user ever downloaded a model.
+    single {
+        val appContext: Context = get()
+        val settings: SettingsStore = get()
+        me.rerere.rikkahub.data.vector.EmbeddingService(
+            modelsDir = { me.rerere.locallm.ModelInstall.localModelsDir(appContext) },
+            configuredFileName = {
+                settings.settingsFlow.value.embeddingModelFile.takeIf { it.isNotBlank() }
+            },
+        )
+    }
+    single {
+        me.rerere.rikkahub.data.vector.MemoryVectorSource(
+            store = get(),
+            embeddings = get(),
+        )
+    }
+
     // P2-06 - the expert library also lives in its own database file (see
     // AgentDefinitionDatabase for why). Unlike the usage ledger this holds USER data, so a
     // future shape change ships a real migration rather than dropping and recreating the

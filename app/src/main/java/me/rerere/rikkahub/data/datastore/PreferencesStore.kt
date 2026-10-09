@@ -193,6 +193,16 @@ class SettingsStore(
         val SUGGESTION_PROMPT = stringPreferencesKey("suggestion_prompt")
         val OCR_MODEL = stringPreferencesKey("ocr_model")
         val OCR_PROMPT = stringPreferencesKey("ocr_prompt")
+        /**
+         * Moxw - which installed GGUF the vector index embeds with. A file name inside
+         * `local-models/llamacpp`, because that is what the local-model page writes: the ordinary
+         * install flow is the only download UI this needs.
+         *
+         * Empty means "pick automatically" - the first installed file from
+         * me.rerere.llamacpp.LlamaCppEmbeddingCatalog, so installing the recommended model is
+         * enough to turn semantic search on. See EmbeddingModelRules.
+         */
+        val EMBEDDING_MODEL_FILE = stringPreferencesKey("embedding_model_file")
         val COMPRESS_MODEL = stringPreferencesKey("compress_model")
         val COMPRESS_PROMPT = stringPreferencesKey("compress_prompt")
         val ENABLE_AUTO_COMPACTION = booleanPreferencesKey("enable_auto_compaction")
@@ -317,6 +327,7 @@ class SettingsStore(
                 preferences[SUGGESTION_PROMPT] = settings.suggestionPrompt
                 preferences[OCR_MODEL] = settings.ocrModelId.toString()
                 preferences[OCR_PROMPT] = settings.ocrPrompt
+                preferences[EMBEDDING_MODEL_FILE] = settings.embeddingModelFile
                 preferences[COMPRESS_MODEL] = settings.compressModelId.toString()
                 preferences[COMPRESS_PROMPT] = settings.compressPrompt
                 preferences[ENABLE_AUTO_COMPACTION] = settings.enableAutoCompaction
@@ -433,6 +444,7 @@ class SettingsStore(
                 suggestionPrompt = preferences[SUGGESTION_PROMPT] ?: DEFAULT_SUGGESTION_PROMPT,
                 ocrModelId = preferences[OCR_MODEL]?.let { runCatching { Uuid.parse(it) }.getOrNull() } ?: Uuid.random(),
                 ocrPrompt = preferences[OCR_PROMPT] ?: DEFAULT_OCR_PROMPT,
+                embeddingModelFile = preferences[EMBEDDING_MODEL_FILE] ?: "",
                 compressModelId = preferences[COMPRESS_MODEL]?.let { runCatching { Uuid.parse(it) }.getOrNull() } ?: DEFAULT_AUTO_MODEL_ID,
                 compressPrompt = preferences[COMPRESS_PROMPT] ?: DEFAULT_COMPRESS_PROMPT,
                 assistantId = preferences[SELECT_ASSISTANT]?.let { runCatching { Uuid.parse(it) }.getOrNull() }
@@ -1088,6 +1100,14 @@ data class NetworkSetting(
      * with no content" report. Kept well above a legitimate long-context prefill.
      */
     val streamFirstOutputTimeoutSeconds: Int = 120,
+    /**
+     * Moxw - the GGUF file name the vector index embeds with, or empty to pick automatically.
+     * Stored per field like everything else here, which is what
+     * SettingsPersistenceCoverageTest enforces: a field without a Preferences.Key would look
+     * saved and then vanish on the next launch.
+     * Appended last on purpose: a new field may never shift the position of an existing one.
+     */
+    val embeddingModelFile: String = "",
 )
 
 @Serializable
