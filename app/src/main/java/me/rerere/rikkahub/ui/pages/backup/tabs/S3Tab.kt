@@ -29,11 +29,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.MultiChoiceSegmentedButtonRow
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.SheetValue
@@ -56,11 +53,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dokar.sonner.ToastType
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.sync.BackupItem
 import me.rerere.rikkahub.data.sync.S3BackupItem
 import me.rerere.rikkahub.data.sync.s3.S3Config
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.pages.backup.BackupVM
+import me.rerere.rikkahub.ui.pages.backup.components.BackupItemPicker
 import me.rerere.rikkahub.utils.UiState
 import me.rerere.rikkahub.utils.fileSizeToString
 import me.rerere.rikkahub.utils.onError
@@ -208,34 +207,18 @@ fun S3Tab(
                 item(
                     headlineContent = { Text(stringResource(R.string.backup_page_backup_items)) },
                     supportingContent = {
-                        MultiChoiceSegmentedButtonRow(
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            S3Config.BackupItem.entries.forEachIndexed { index, item ->
-                                SegmentedButton(
-                                    shape = SegmentedButtonDefaults.itemShape(
-                                        index = index,
-                                        count = S3Config.BackupItem.entries.size
-                                    ),
-                                    onCheckedChange = { checked ->
-                                        val newItems = if (checked) {
-                                            s3Config.items + item
-                                        } else {
-                                            s3Config.items - item
-                                        }
-                                        updateS3Config(s3Config.copy(items = newItems))
-                                    },
-                                    checked = item in s3Config.items
-                                ) {
-                                    Text(
-                                        when (item) {
-                                            S3Config.BackupItem.DATABASE -> stringResource(R.string.backup_page_chat_records)
-                                            S3Config.BackupItem.FILES -> stringResource(R.string.backup_page_files)
-                                        }
-                                    )
+                        BackupItemPicker(
+                            selected = BackupItem.normalize(s3Config.items),
+                            onToggle = { item ->
+                                val current = BackupItem.normalize(s3Config.items)
+                                val newItems = if (item in current) {
+                                    current - item
+                                } else {
+                                    current + item
                                 }
-                            }
-                        }
+                                updateS3Config(s3Config.copy(items = BackupItem.normalize(newItems)))
+                            },
+                        )
                     },
                 )
             }

@@ -188,6 +188,14 @@
   <string name="avatar_url_dialog_title">Input Image URL</string>
   <string name="avatar_url_hint">Enter image URL</string>
   <string name="back">Back</string>
+  <string name="backup_item_skills">Skills</string>
+  <string name="backup_item_upload">Uploads</string>
+  <string name="backup_item_images">Images</string>
+  <string name="backup_item_videos">Videos</string>
+  <string name="backup_item_fonts">Fonts</string>
+  <string name="backup_item_workspaces">Workspaces</string>
+  <string name="backup_item_tool_outputs">Tool outputs</string>
+  <string name="backup_item_config">Preferences</string>
   <string name="backup_page_backing_up">Backing up...</string>
   <string name="backup_page_backup_items">Backup Items</string>
   <string name="backup_page_backup_now">Backup Now</string>

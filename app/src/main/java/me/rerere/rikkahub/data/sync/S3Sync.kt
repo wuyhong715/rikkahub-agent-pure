@@ -94,15 +94,11 @@ class S3Sync(
         Log.i(TAG, "deleteS3BackupFile: Deleted ${item.key}")
     }
 
-    suspend fun prepareBackupFile(config: S3Config): File = backupManager.createBackup(
-        includeDatabase = S3Config.BackupItem.DATABASE in config.items,
-        includeFiles = S3Config.BackupItem.FILES in config.items,
-    )
+    suspend fun prepareBackupFile(config: S3Config): File = backupManager.createBackup(config.items)
 
     private suspend fun restoreFromBackupFile(backupFile: File, config: S3Config) = backupManager.stageRestore(
         archive = backupFile,
-        includeDatabase = S3Config.BackupItem.DATABASE in config.items,
-        includeFiles = S3Config.BackupItem.FILES in config.items,
+        items = config.items,
     )
 
 }

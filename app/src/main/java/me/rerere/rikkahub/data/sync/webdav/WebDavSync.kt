@@ -102,15 +102,11 @@ class WebDavSync(
         restoreFromBackupFile(file, config)
     }
 
-    suspend fun prepareBackupFile(config: WebDavConfig): File = backupManager.createBackup(
-        includeDatabase = WebDavConfig.BackupItem.DATABASE in config.items,
-        includeFiles = WebDavConfig.BackupItem.FILES in config.items,
-    )
+    suspend fun prepareBackupFile(config: WebDavConfig): File = backupManager.createBackup(config.items)
 
     private suspend fun restoreFromBackupFile(backupFile: File, config: WebDavConfig) = backupManager.stageRestore(
         archive = backupFile,
-        includeDatabase = WebDavConfig.BackupItem.DATABASE in config.items,
-        includeFiles = WebDavConfig.BackupItem.FILES in config.items,
+        items = config.items,
     )
 
 }
