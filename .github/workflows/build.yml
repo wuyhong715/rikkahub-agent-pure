@@ -176,7 +176,11 @@ jobs:
             echo "fast lane: -PskipLintVital"
             FLAGS="-PskipLintVital"
           fi
-          ./gradlew ":app:assemble${F}Release" ":app:test${F}ReleaseUnitTest" :ai:testDebugUnitTest $FLAGS --stacktrace
+          # :llama-cpp and :ai carry real JVM unit tests (the embedding vector maths, the
+          # embedder's handle lifecycle, the cold-memory rules) that nothing used to run: the
+          # module tests are flavour-independent, so they are named explicitly rather than
+          # reached through :app.
+          ./gradlew ":app:assemble${F}Release" ":app:test${F}ReleaseUnitTest" :ai:testDebugUnitTest :llama-cpp:testDebugUnitTest $FLAGS --stacktrace
 
       - name: Show ${{ matrix.flavor }} APK sizes
         run: ls -la app/build/outputs/apk/${{ matrix.flavor }}/release/*.apk || true

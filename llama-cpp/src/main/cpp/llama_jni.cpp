@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "llama.h"
+#include "llama_embed.h"
 #include "jni_util.h"
 #include "chat.h"
 #include "sampling.h"
@@ -159,10 +160,15 @@ Java_me_rerere_llamacpp_LlamaCppJni_nativeApplyTemplate(
         }
 
         // Carried as a byte[], not a jstring: GetStringUTFChars would hand back Modified UTF-8
-        // (see jni_util.h), which nlohmann's strict UTF-8 parser rejects for any request
-        // containing a supplementary-plane character, e.g. an emoji in a chat message.
-        const std::string requestStr = byteArrayToUtf8(env, requestIn);
-        const nlohmann::ordered_json request = nlohmann::ordered_json::parse(requestStr);
+        // (see jni_util.h), which a strict UTF-8 parser rejects for any request containing a
+        // supplementary-plane character, e.g. an emoji in a chat message.
+        //
+        // Parsed with llama.cpp's own common_json rather than nlohmann directly: the chat
+        // helpers below (`common_chat_msgs_parse_oaicompat` and friends) take a common_json,
+        // and the wrapper is deliberately pimpl'd - an nlohmann value does not convert into
+        // one. `out` further down is still nlohmann, because that blob is ours end to end and
+        // never crosses into llama.cpp's types.
+        const common_json request = common_json::parse(byteArrayToUtf8(env, requestIn));
 
         // Reads the Jinja template out of the GGUF itself. Passing "" does not fail on a
         // model with no stored template: common_chat_templates_init (common/chat.cpp) falls
@@ -713,5 +719,84 @@ Java_me_rerere_llamacpp_LlamaCppJni_nativeParseChat(
 
         const common_chat_msg msg = common_chat_parse(text, isPartial == JNI_TRUE, params);
         return utf8ToByteArray(env, msg.to_json_oaicompat().dump());
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Embeddings
+// ---------------------------------------------------------------------------
+//
+// The engine itself lives in llama_embed.h, so the host-side probe under
+// xtest/llamacpp-host can exercise the exact same code against a real GGUF. Everything below
+// is handle marshalling plus the JSON shape the Kotlin side parses.
+
+extern "C" JNIEXPORT jlong JNICALL
+Java_me_rerere_llamacpp_LlamaCppJni_nativeCreateEmbedContext(
+        JNIEnv *env, jobject, jlong modelHandle, jint nCtx, jint nThreads) {
+    JNI_GUARD(env, 0L, {
+        auto *model = reinterpret_cast<llama_model *>(modelHandle);
+        if (model == nullptr) {
+            throwJava(env, "model handle is null");
+            return 0L;
+        }
+        if (nCtx <= 0 || nThreads <= 0) {
+            throwJava(env, "embedding context size and thread count must both be positive");
+            return 0L;
+        }
+        auto *engine = new llamajni::EmbedEngine(model, static_cast<uint32_t>(nCtx), nThreads);
+        return reinterpret_cast<jlong>(engine);
+    })
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_me_rerere_llamacpp_LlamaCppJni_nativeFreeEmbedContext(JNIEnv *env, jobject, jlong handle) {
+    JNI_GUARD_VOID(env, {
+        if (handle == 0L) {
+            return;
+        }
+        delete reinterpret_cast<llamajni::EmbedEngine *>(handle);
+    })
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_me_rerere_llamacpp_LlamaCppJni_nativeEmbedModelInfo(JNIEnv *env, jobject, jlong handle) {
+    JNI_GUARD(env, nullptr, {
+        auto *engine = reinterpret_cast<llamajni::EmbedEngine *>(handle);
+        if (engine == nullptr) {
+            throwJava(env, "embedding handle is null");
+            return nullptr;
+        }
+        const llamajni::EmbedModelFacts &facts = engine->facts();
+        std::ostringstream out;
+        out << "{"
+            << "\"dim\":"         << facts.dim                              << ","
+            << "\"pooling\":\""   << llamajni::poolingName(facts.pooling)  << "\","
+            << "\"has_encoder\":" << (facts.has_encoder ? "true" : "false") << ","
+            << "\"has_decoder\":" << (facts.has_decoder ? "true" : "false") << ","
+            << "\"n_ctx_train\":" << facts.n_ctx_train
+            << "}";
+        return env->NewStringUTF(out.str().c_str());
+    })
+}
+
+extern "C" JNIEXPORT jfloatArray JNICALL
+Java_me_rerere_llamacpp_LlamaCppJni_nativeEmbed(
+        JNIEnv *env, jobject, jlong handle, jbyteArray textIn) {
+    JNI_GUARD(env, nullptr, {
+        auto *engine = reinterpret_cast<llamajni::EmbedEngine *>(handle);
+        if (engine == nullptr) {
+            throwJava(env, "embedding handle is null");
+            return nullptr;
+        }
+        // Bytes rather than a jstring for the same reason the chat path carries bytes: the
+        // standard UTF-8 a Kotlin String encodes to is not the Modified UTF-8 a jstring
+        // requires, so a supplementary-plane character in a document would arrive mangled.
+        std::vector<float> vec;
+        engine->embed(byteArrayToUtf8(env, textIn), vec);
+        jfloatArray result = env->NewFloatArray(static_cast<jsize>(vec.size()));
+        if (result != nullptr && !vec.empty()) {
+            env->SetFloatArrayRegion(result, 0, static_cast<jsize>(vec.size()), vec.data());
+        }
+        return result;
     })
 }
