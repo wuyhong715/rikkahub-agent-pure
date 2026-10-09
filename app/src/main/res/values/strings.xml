@@ -1173,6 +1173,9 @@
   <string name="skills_page_empty_title">No Skills</string>
   <string name="skills_page_import_confirm">Import</string>
   <string name="skills_page_import_description">Enter a GitHub repository URL, and the SKILL.md file in the root directory will be downloaded automatically.</string>
+  <string name="skills_page_import_batch">Import multiple from files</string>
+  <string name="skills_page_import_batch_success">Imported %1$d skills</string>
+  <string name="skills_page_import_batch_partial">Imported %1$d skills, %2$d failed: %3$s</string>
   <string name="skills_page_import_failed">Import failed: %s</string>
   <string name="skills_page_import_from_github">Import from GitHub</string>
   <string name="skills_page_import_success">Skill imported: %s</string>
