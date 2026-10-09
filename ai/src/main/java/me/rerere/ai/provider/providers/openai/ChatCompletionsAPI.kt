@@ -41,6 +41,7 @@ import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.provider.stream.SseEvent
 import me.rerere.ai.provider.providers.PartGroup
 import me.rerere.ai.provider.providers.groupPartsByToolBoundary
+import me.rerere.ai.provider.stream.TextToolCallParser
 import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.StreamChunk
 import me.rerere.ai.ui.OpenRouterReasoningMetadata
@@ -133,11 +134,41 @@ class ChatCompletionsAPI(
             ?: "unknown"
         val usage = parseTokenUsage(bodyJson["usage"] as? JsonObject)
 
+        // Same recovery as the streaming decoder: a model that writes its tool call as text would
+        // otherwise silently lose it for assistants with streaming turned off. Applied after
+        // parsing so `parseMessage` keeps taking just the payload.
+        val textToolParser = if (
+            params.textToolCallParsing && params.model.abilities.contains(ModelAbility.TOOL)
+        ) {
+            TextToolCallParser(params.tools)
+        } else {
+            null
+        }
+        val parsedMessage = parseMessage(message).let { msg ->
+            if (textToolParser == null) {
+                msg
+            } else {
+                msg.copy(
+                    parts = msg.parts.flatMap { part ->
+                        if (part is UIMessagePart.Text) {
+                            textToolParser.feed(part.text) + textToolParser.flushPending()
+                        } else {
+                            listOf(part)
+                        }
+                    },
+                )
+            }
+        }
+
         TextGenerationResult(
             id = id,
             model = model,
-            message = parseMessage(message),
-            finishReason = finishReason,
+            message = parsedMessage,
+            finishReason = if (textToolParser?.consumePendingFinishReason() != null) {
+                "tool_calls"
+            } else {
+                finishReason
+            },
             usage = usage
         )
     }
@@ -171,7 +202,13 @@ class ChatCompletionsAPI(
         // just for debugging response body
         // println(client.newCall(request).await().body.string())
 
-        val decoder = ChatCompletionsStreamDecoder()
+        // Tools handed to the decoder so a text-emitted tool call can be told apart from prose and
+        // checked against what this request actually offered. Empty when the model has no tool
+        // support, which also switches the fallback off.
+        val decoder = ChatCompletionsStreamDecoder(
+            tools = if (params.model.abilities.contains(ModelAbility.TOOL)) params.tools else emptyList(),
+            textToolCallsEnabled = params.textToolCallParsing,
+        )
 
         fun sendChunks(chunks: Iterable<StreamChunk>) {
             chunks.forEach { chunk ->

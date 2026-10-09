@@ -1506,6 +1506,7 @@ class GenerationLoop(
             maxTokens = assistant.maxTokens,
             maxStreamRetries = if (settings.networkSetting.enableAutoRetry) settings.responseStreamMaxRetries else 0,
             tools = tools,
+            textToolCallParsing = settings.parseTextToolCalls,
             reasoningLevel = assistant.reasoningLevel,
             customHeaders = buildList {
                 addAll(assistant.customHeaders)
