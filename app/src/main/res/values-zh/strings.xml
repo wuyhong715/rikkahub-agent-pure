@@ -962,8 +962,9 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_page_web_server_stop">停止</string>
   <string name="setting_provider_page_abilities">能力</string>
   <string name="setting_provider_page_abilities_assume_tool">假定支持 Tool</string>
+  <string name="setting_provider_page_abilities_assumed_tool_hint">已按支持工具调用处理：这个模型 ID 不在内置模型库里。若该端点不支持工具调用，请取消勾选 Tool。</string>
   <string name="setting_provider_page_abilities_tool_off_hint">未启用 Tool 时，助手已启用的工具根本不会发给这个模型（请求里的工具列表是空的），工具调用会静默失效。</string>
-  <string name="setting_provider_page_abilities_unknown_model_hint">这个模型 ID 不在内置模型库里，能力列表初始为空。多数对话模型都支持工具调用。</string>
+  <string name="setting_provider_page_abilities_unknown_model_hint">这个模型 ID 不在内置模型库里。多数对话模型都支持工具调用。</string>
   <string name="setting_provider_page_add">添加</string>
   <string name="setting_provider_page_add_model">添加模型</string>
   <string name="setting_provider_page_add_models_hint">点击下方按钮添加模型</string>
