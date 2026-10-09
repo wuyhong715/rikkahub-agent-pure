@@ -278,6 +278,10 @@ fun ChatDrawerContent(
                 color = Color.Transparent,
                 tonalElevation = 0.dp,
             ) {
+                Column(
+                    modifier = Modifier.padding(vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
             // 用户头像和昵称自定义区域
             Row(
                 modifier = Modifier
@@ -346,6 +350,7 @@ fun ChatDrawerContent(
                 onRename = { folderToRename = it },
                 onDelete = { folderToDelete = it },
             )
+                }
 
             }
 
