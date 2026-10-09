@@ -1638,6 +1638,10 @@ class GenerationLoop(
                                 idleWatchdog.cancel()
                             }
                         }
+                        // The stream finished normally: leave the attempt loop. Without this the
+                        // `while (true)` above immediately re-issues the very same request, so a
+                        // plain reply never ends (and a tool-call reply never reaches the tool).
+                        break
                     } catch (failure: Throwable) {
                         // Only a plain-text partial can be continued; a half-streamed tool call
                         // would produce a dangling call and no result, which providers reject.
