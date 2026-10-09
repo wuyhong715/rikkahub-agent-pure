@@ -235,17 +235,20 @@ fun ChatDrawerContent(
     val drawerHazeState = rememberHazeState()
     var bottomBarHeightPx by remember { mutableStateOf(0) }
     val bottomBarHeight = with(LocalDensity.current) { bottomBarHeightPx.toDp() }
+    // 上方功能区固定悬浮在顶部，对话列表从其下方滚过；用实测高度给列表留出顶部空间。
+    var topAreaHeightPx by remember { mutableStateOf(0) }
+    val topAreaHeight = with(LocalDensity.current) { topAreaHeightPx.toDp() }
 
     // 整块抽屉做成磨砂：面板半透明，背后的聊天页被均匀虚化；上下的通透玻璃卡片与它拉开层次。
     val drawerShape = RoundedCornerShape(topEnd = 16.dp, bottomEnd = 16.dp)
     val drawerBlurStyle = HazeBlurStyle.Material3 {
         blurRadius(24.dp)
     }
-    // 上方功能区：磨砂玻璃卡片；作为列表头项，跟随列表一起滚动。
+    // 上方功能区：磨砂玻璃卡片，固定悬浮在抽屉顶部；对话列表从其下方滚过并被虚化。
     val topBarShape = RoundedCornerShape(20.dp)
     val drawerTopArea: @Composable () -> Unit = {
         Column(
-            modifier = Modifier.padding(horizontal = 8.dp),
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             if (updateChecksEnabled && !isPlayStore) {
@@ -264,8 +267,8 @@ fun ChatDrawerContent(
                     .shadow(6.dp, topBarShape, clip = false)
                     .clip(topBarShape)
                     .hazeBlur(
-                        input = HazeInput.Sources(hazeState),
-                        style = HazeBlurStyle.Material3 { blurRadius(14.dp) },
+                        input = HazeInput.Sources(drawerHazeState),
+                        style = HazeBlurStyle.Material3 { blurRadius(16.dp) },
                     ),
                 shape = topBarShape,
                 color = Color.Transparent,
@@ -361,18 +364,17 @@ fun ChatDrawerContent(
         drawerContentColor = MaterialTheme.colorScheme.onSurface,
         drawerTonalElevation = 0.dp,
     ) {
-        // 列表铺满整块：上方功能区作为列表头项随列表一起滚动；底部功能区浮在列表之上。
+        // 列表铺满整块，从上下玻璃卡片下方滚过；上方功能区固定悬浮，底部功能区浮在列表之上。
         Box(modifier = Modifier.fillMaxSize()) {
             ConversationList(
                 current = current,
                 conversations = conversations,
                 conversationJobs = conversationJobs.keys,
                 listState = conversationListState,
-                contentPadding = PaddingValues(top = 8.dp, bottom = bottomBarHeight + 12.dp),
+                contentPadding = PaddingValues(top = topAreaHeight + 12.dp, bottom = bottomBarHeight + 12.dp),
                 modifier = Modifier
                     .fillMaxSize()
                     .hazeSource(state = drawerHazeState),
-                header = drawerTopArea,
             onClick = {
                     navigateToChatPage(navController, it.id)
                 },
@@ -400,6 +402,16 @@ fun ChatDrawerContent(
                     showMoveToFolderSheet = true
                 }
             )
+
+                // 上方功能区：固定悬浮在抽屉顶部，对话列表从其下方滚过时被磨砂虚化。
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .fillMaxWidth()
+                        .onSizeChanged { topAreaHeightPx = it.height },
+                ) {
+                    drawerTopArea()
+                }
 
                 // 底部功能区：浮在对话列表之上的玻璃卡片（无边框；阴影 + 玻璃高光做立体感），
                 // 列表从它下方滑过时被折射虚化。
@@ -888,7 +900,7 @@ private fun DrawerActions(navController: Navigator) {
                 .fillMaxWidth()
                 .padding(horizontal = 4.dp),
             shape = MaterialTheme.shapes.medium,
-            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            color = Color.Transparent,
         ) {
             Row(
                 modifier = Modifier
@@ -918,7 +930,7 @@ private fun DrawerActions(navController: Navigator) {
                 .fillMaxWidth()
                 .padding(horizontal = 4.dp),
             shape = MaterialTheme.shapes.medium,
-            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            color = Color.Transparent,
         ) {
             Row(
                 modifier = Modifier
@@ -1063,9 +1075,9 @@ private fun FolderChip(
     Surface(
         shape = CircleShape,
         color = if (selected) {
-            MaterialTheme.colorScheme.secondaryContainer
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
         } else {
-            MaterialTheme.colorScheme.surfaceContainerLow
+            Color.Transparent
         },
         modifier = Modifier
             .clip(CircleShape)
