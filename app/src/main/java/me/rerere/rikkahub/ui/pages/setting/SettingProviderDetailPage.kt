@@ -710,6 +710,7 @@ private fun ModelSettingsForm(
 
                         if (model.type == ModelType.CHAT) {
                             ModalAbilitySelector(
+                                modelId = model.modelId,
                                 abilities = model.abilities,
                                 onUpdateAbilities = {
                                     onModelChange(model.copy(abilities = it))
@@ -1205,9 +1206,15 @@ private fun ModelModalitySelector(
 
 @Composable
 fun ModalAbilitySelector(
+    modelId: String,
     abilities: List<ModelAbility>,
     onUpdateAbilities: (List<ModelAbility>) -> Unit
 ) {
+    // A model id the built-in registry has never heard of gets Tool assumed for it (see
+    // ModelRegistry.MODEL_ABILITIES), so this row has to say that out loud — otherwise the one
+    // setting that decides whether the model is sent any tools at all is a guess the user cannot
+    // see.
+    val registryKnowsModel = remember(modelId) { ModelRegistry.hasEntryFor(modelId) }
     Text(
         stringResource(R.string.setting_provider_page_abilities),
         style = MaterialTheme.typography.titleSmall
@@ -1240,32 +1247,37 @@ fun ModalAbilitySelector(
         }
     }
 
-    // Two things about this row used to be invisible, and either one leaves the user with a model
-    // that "just doesn't use tools": a model without Tool is never sent the assistant's tools at
-    // all — the request drops the whole `tools` array — and a manually added model id starts with
-    // NO abilities here, because the built-in registry has nothing to match it against.
+    // What turning Tool off actually does is invisible from here, and so is the assumption made
+    // for an unrecognised id. Either one leaves the user with a model that "just doesn't use
+    // tools", so both get said.
     if (ModelAbility.TOOL !in abilities) {
         Text(
             text = stringResource(R.string.setting_provider_page_abilities_tool_off_hint),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-    }
-    if (abilities.isEmpty()) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(
-                text = stringResource(R.string.setting_provider_page_abilities_unknown_model_hint),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f),
-            )
-            TextButton(onClick = { onUpdateAbilities(abilities + ModelAbility.TOOL) }) {
-                Text(stringResource(R.string.setting_provider_page_abilities_assume_tool))
+        if (!registryKnowsModel) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.setting_provider_page_abilities_unknown_model_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = { onUpdateAbilities(abilities + ModelAbility.TOOL) }) {
+                    Text(stringResource(R.string.setting_provider_page_abilities_assume_tool))
+                }
             }
         }
+    } else if (!registryKnowsModel) {
+        Text(
+            text = stringResource(R.string.setting_provider_page_abilities_assumed_tool_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

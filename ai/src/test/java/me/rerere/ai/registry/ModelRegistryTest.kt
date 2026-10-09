@@ -142,6 +142,30 @@ class ModelRegistryTest {
     }
 
     @Test
+    fun testUnknownIdsAssumeToolSupport() {
+        // A manually added OpenAI-compatible model matches no registry entry. Reporting no
+        // abilities for it meant the assistant's tools were dropped from every request to it with
+        // no hint anywhere — a model that looks fine and quietly cannot use tools. Assume the
+        // common case instead, and let the model editor surface the assumption.
+        assertEquals(
+            listOf(ModelAbility.TOOL),
+            ModelRegistry.MODEL_ABILITIES.getData("unknown-model-xyz")
+        )
+        assertFalse(ModelRegistry.hasEntryFor("unknown-model-xyz"))
+        assertTrue(ModelRegistry.hasEntryFor("glm-5"))
+    }
+
+    @Test
+    fun testKnownModelsKeepTheirOwnAbilities() {
+        // The assumption above must not leak into ids the registry does know about: a recognised
+        // entry still reports exactly the capabilities it declares.
+        assertEquals(
+            listOf(ModelAbility.TOOL, ModelAbility.REASONING),
+            ModelRegistry.MODEL_ABILITIES.getData("claude-opus-5")
+        )
+    }
+
+    @Test
     fun testContextLengthDefault() {
         assertEquals(null, ModelRegistry.MODEL_CONTEXT_LENGTH.getData("unknown-model-xyz"))
         assertEquals(null, ModelRegistry.MODEL_CONTEXT_LENGTH.getData("gpt-4o"))

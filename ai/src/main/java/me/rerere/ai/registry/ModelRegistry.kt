@@ -700,14 +700,27 @@ object ModelRegistry {
     }
 
     val MODEL_ABILITIES = ModelData { modelId ->
-        val abilities = resolveModels(modelId)
-            .flatMap { it.abilities }
-            .toSet()
+        val matched = resolveModels(modelId)
+        val abilities = matched.flatMap { it.abilities }.toSet()
         buildList {
             if (ModelAbility.TOOL in abilities) add(ModelAbility.TOOL)
             if (ModelAbility.REASONING in abilities) add(ModelAbility.REASONING)
+            // An id the registry has never heard of is not the same as one it knows to lack tool
+            // support. A manually added OpenAI-compatible model resolves to no entry at all, and
+            // leaving it without capabilities means the assistant's tools are silently dropped
+            // from every request to it (the provider only emits `tools` when TOOL is set). Tool
+            // calling is the overwhelmingly common case for such endpoints, so assume it here;
+            // [hasEntryFor] lets the UI say out loud that the assumption was made.
+            if (matched.isEmpty()) add(ModelAbility.TOOL)
         }
     }
+
+    /**
+     * Whether the built-in registry knows anything about [modelId]. An unrecognised id has no
+     * real capabilities to report — [MODEL_ABILITIES] assumes tool support for one so that it is
+     * not silently unusable, and the model editor uses this to say so.
+     */
+    fun hasEntryFor(modelId: String): Boolean = resolveModels(modelId).isNotEmpty()
 
     val MODEL_CONTEXT_LENGTH = ModelData { modelId ->
         resolveModels(modelId).firstNotNullOfOrNull { it.contextLength }

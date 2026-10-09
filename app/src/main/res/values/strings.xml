@@ -1021,8 +1021,9 @@
   <string name="setting_page_web_server_stop">Stop</string>
   <string name="setting_provider_page_abilities">Abilities</string>
   <string name="setting_provider_page_abilities_assume_tool">Assume Tool support</string>
+  <string name="setting_provider_page_abilities_assumed_tool_hint">Tool is assumed on for this model: the id isn\'t in the built-in registry. Uncheck it if this endpoint doesn\'t support tool calling.</string>
   <string name="setting_provider_page_abilities_tool_off_hint">Without Tool, the assistant\'s tools are not sent to this model at all — the request goes out with an empty tool list, so tool use quietly does nothing.</string>
-  <string name="setting_provider_page_abilities_unknown_model_hint">This model id isn\'t in the built-in registry, so its abilities start empty. Most chat models do support tool calling.</string>
+  <string name="setting_provider_page_abilities_unknown_model_hint">This model id isn\'t in the built-in registry. Most chat models do support tool calling.</string>
   <string name="setting_provider_page_add">Add</string>
   <string name="setting_provider_page_add_model">Add Model</string>
   <string name="setting_provider_page_add_models_hint">Click the button below to add models</string>
