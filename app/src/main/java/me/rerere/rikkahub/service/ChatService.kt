@@ -455,6 +455,8 @@ class ChatService(
     private val folderRepository: FolderRepository,
     /** Moxw - owns the knowledge-base vector index: its background sync and its search. */
     private val memoryIndex: MemoryIndexCoordinator,
+    /** Moxw - owns the tool catalogue's vectors, so `tool_search` can rank by meaning. */
+    private val toolVectors: me.rerere.rikkahub.data.vector.ToolVectorIndex,
 ) {
     // workspace 系统提示注入 (依赖 workspaceRepository, 故在类内构造)
     private val workspaceReminderTransformer = WorkspaceReminderTransformer(workspaceRepository)
@@ -2007,12 +2009,23 @@ class ChatService(
                                 )
                             },
                         )
+                        // P3-02 — warm this catalogue's vectors in the background. The model
+                        // spends a whole round trip thinking before it calls `tool_search`, and by
+                        // then the ranking is normally ready; the search itself never waits for it
+                        // either way (see ToolVectorIndex.retrieve).
+                        toolVectors.prewarm(mcpCatalog.entries)
                         val activation = toolActivationFor(conversationId)
                         // Drop names whose server/tool disappeared since the last turn so a
                         // stale activation can never attempt to inject a schema that no longer
                         // exists (which would 400 the request).
                         activation.retain(mcpCatalog.entries.mapTo(mutableSetOf()) { it.name })
-                        addAll(buildToolCatalogTools(catalog = mcpCatalog, activation = activation))
+                        addAll(
+                            buildToolCatalogTools(
+                                catalog = mcpCatalog,
+                                activation = activation,
+                                semanticSearch = { query -> toolVectors.retrieve(query, mcpCatalog) },
+                            )
+                        )
                         activation.active().forEach { activeName ->
                             mcpCatalog.entry(activeName)?.let { entry -> add(entry.tool) }
                         }

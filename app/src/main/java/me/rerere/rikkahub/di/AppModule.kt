@@ -294,7 +294,8 @@ val appModule = module {
             toolApprovalPreferences = get(),
             workspaceRepository = get(),
             folderRepository = get(),
-            memoryIndex = get()
+            memoryIndex = get(),
+            toolVectors = get()
         )
     }
 

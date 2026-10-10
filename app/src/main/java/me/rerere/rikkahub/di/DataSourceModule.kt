@@ -120,6 +120,18 @@ val dataSourceModule = module {
         )
     }
 
+    // P3-02 - the tool catalogue's vectors, in memory only: a tool's vector is derivable from its
+    // name and description, and the catalogue changes with the MCP connections rather than with
+    // the conversation. Given the app scope for the same reason the memory index is: a catalogue
+    // is not owned by a screen, and a prewarm cancelled by a closed conversation would be a
+    // prewarm that never finishes.
+    single {
+        me.rerere.rikkahub.data.vector.ToolVectorIndex(
+            embeddings = get(),
+            scope = get<me.rerere.rikkahub.AppScope>(),
+        )
+    }
+
     // P2-06 - the expert library also lives in its own database file (see
     // AgentDefinitionDatabase for why). Unlike the usage ledger this holds USER data, so a
     // future shape change ships a real migration rather than dropping and recreating the

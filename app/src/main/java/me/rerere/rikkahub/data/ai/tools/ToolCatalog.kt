@@ -202,15 +202,28 @@ class ToolActivationState {
 fun buildToolCatalogTools(
     catalog: ToolCatalog,
     activation: ToolActivationState,
+    /**
+     * P3-02 — optional semantic ranking for `tool_search`: the catalogue's entries best first, or
+     * null when it cannot answer right now (no embedding model installed, or the catalogue's
+     * vectors are still being warmed in the background).
+     *
+     * A parameter rather than something this file reaches for, for three reasons: [ToolCatalog]
+     * stays pure and model-free, the chat path owns the decision to embed anything at all, and a
+     * caller that passes nothing — `null`, the default — gets byte-for-byte the lexical behaviour
+     * this file has always had.
+     */
+    semanticSearch: (suspend (String) -> List<ToolCatalogEntry>?)? = null,
 ): List<Tool> = listOf(
     Tool(
         name = "tool_search",
         description = """
-            Search the tool catalog by keyword and return matching tool names with short
-            summaries. Use this whenever you are unsure which tools exist. It returns
-            names and summaries ONLY — never schemas or parameters. To actually call a
-            tool, first activate it with tool_open; activation takes effect on your NEXT
-            turn, not the current one.
+            Search the tool catalog and return matching tool names with short summaries.
+            Use this whenever you are unsure which tools exist. The query is matched against
+            tool names and their descriptions, so naming a tool and describing what you want
+            to do both work, as a single word or as a sentence. It returns names and
+            summaries ONLY — never schemas or parameters. To actually call a tool, first
+            activate it with tool_open; activation takes effect on your NEXT turn, not the
+            current one.
         """.trimIndent(),
         parameters = {
             InputSchema.Obj(
@@ -225,7 +238,13 @@ fun buildToolCatalogTools(
         },
         execute = {
             val query = it.jsonObject["query"]?.jsonPrimitive?.contentOrNull.orEmpty()
-            val all = catalog.matchAll(query)
+            // P3-02 — the fused ranking when the caller could produce one, the lexical ranking
+            // otherwise. Both are the same shape of answer: every entry comes from this catalogue,
+            // so a name from either can be handed straight back to `tool_open`. An empty semantic
+            // result is "no opinion", not "no matches": a query the vector channel cannot rank is
+            // precisely the query the lexical channel must still get to answer.
+            val all: List<ToolCatalogEntry> = semanticSearch?.invoke(query)?.takeIf { it.isNotEmpty() }
+                ?: catalog.matchAll(query)
             val limited = all.take(TOOL_CATALOG_MAX_SEARCH_RESULTS)
             val outcome = ToolSearchOutcome(
                 hits = limited.map { e -> ToolSearchHit(e.name, e.summary, e.source) },
