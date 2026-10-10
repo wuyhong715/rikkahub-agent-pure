@@ -169,6 +169,37 @@ jobs:
             bun install
           fi
 
+      # Qualcomm's NPU runtime is deliberately *not* vendored in this repository: the QAIRT
+      # libraries are Qualcomm's, and republishing them from a public repo is not ours to do.
+      # Google's own litert_npu_runtime_libraries bundle has exactly the same shape — a fetch
+      # script plus their dispatch library — so we run theirs. Snapdragon variant only.
+      - name: Cache Qualcomm NPU runtime
+        if: matrix.soc == 'snapdragon'
+        uses: actions/cache@v4
+        with:
+          path: litert_npu_runtime_libraries/qualcomm_runtime_v79/src/main/jni/arm64-v8a
+          key: npu-qairt-2.47.0.260601-htp-v79
+
+      - name: Fetch Qualcomm NPU runtime libraries
+        if: matrix.soc == 'snapdragon'
+        run: |
+          set -euo pipefail
+          DEST=litert_npu_runtime_libraries/qualcomm_runtime_v79/src/main/jni/arm64-v8a
+          if [ -f "$DEST/libQnnHtpV79Skel.so" ]; then
+            echo "restored from cache"
+            ls -l "$DEST"
+            exit 0
+          fi
+          # Google's half: libLiteRtDispatch_Qualcomm.so, the NPU accelerator LiteRT dlopens.
+          curl -sSL -o /tmp/npu.zip \
+            "https://github.com/google-ai-edge/LiteRT/releases/download/v2.2.0/litert_npu_runtime_libraries.zip"
+          unzip -q /tmp/npu.zip -d /tmp/npuz
+          cp /tmp/npuz/qualcomm_runtime_v79/src/main/jni/arm64-v8a/libLiteRtDispatch_Qualcomm.so "$DEST/"
+          # Qualcomm's half: libQnnHtp.so / libQnnSystem.so / libQnnHtpV79Stub.so and the
+          # DSP-side libQnnHtpV79Skel.so.
+          bash litert_npu_runtime_libraries/fetch_qualcomm_library.sh
+          ls -l "$DEST"
+
       # Single Gradle invocation: one daemon, one configuration phase. Build the
       # shipping variant of the matrix flavor (R8 + optimized resource shrinking,
       # keep rules in src/main/keepRules) and run the JVM unit tests against that

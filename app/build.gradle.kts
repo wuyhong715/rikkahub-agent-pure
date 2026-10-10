@@ -109,6 +109,11 @@ android {
         create("snapdragon") {
             dimension = "soc"
             buildConfigField("String", "SOC_FAMILY", "\"snapdragon\"")
+            // The only flavour that links the Qualcomm NPU runtime, and that module declares
+            // minSdk 31 (LiteRT's NPU path requires API 31+). The manifest merger refuses a
+            // library whose minSdk is above the app's, so the floor has to come up for this
+            // variant. Nothing changes for the generic/pure APKs.
+            minSdk = 31
         }
         create("dimensity") {
             dimension = "soc"
@@ -278,6 +283,11 @@ dependencies {
     implementation(libs.androidx.webkit)
     implementation(libs.termux.terminal.view)
     implementation(libs.guava.listenablefuture)
+
+    // Qualcomm's QNN host libraries + the HTP v79 Hexagon skeleton. Only the snapdragon
+    // flavour links this, so the other APKs are untouched. The .so files are fetched by CI
+    // rather than committed — see the module's build.gradle.kts.
+    "snapdragonImplementation"(project(":litert_npu_runtime_libraries:qualcomm_runtime_v79"))
 
     // Compose
     implementation(libs.androidx.activity.compose)

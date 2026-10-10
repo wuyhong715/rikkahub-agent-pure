@@ -110,6 +110,19 @@ class RikkaHubApp : Application() {
         // Init QuickJS native library
         QuickJSLoader.init()
 
+        // One-shot NPU reachability probe -- see NpuProbe. File-triggered on purpose: a
+        // half-installed NPU runtime faults the native execution thread rather than throwing,
+        // so the whole exchange is a pair of files in the app's own files dir, and every step
+        // is written down before the call that can kill the process. Diagnostic only; drop it
+        // before the public release.
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            me.rerere.locallm.npu.NpuProbe.runIfRequested(
+                appFilesDir = filesDir,
+                appNativeLibDir = applicationInfo.nativeLibraryDir,
+                sdkVersion = me.rerere.locallm.BuildConfig.LITERTLM_SDK_VERSION,
+            )
+        }
+
         // delete temp files
         deleteTempFiles()
 

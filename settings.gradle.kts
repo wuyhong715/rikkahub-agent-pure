@@ -27,6 +27,12 @@ dependencyResolutionManagement {
 
 rootProject.name = "rikkahub"
 include(":app")
+
+// The Qualcomm NPU runtime for HTP v79 (Snapdragon 8 Elite). Only the `snapdragon` product
+// flavour depends on it, so the generic/pure APKs are unchanged. The libraries live under
+// src/main/jni/arm64-v8a/ and are fetched by CI, never committed — see the module's
+// build.gradle.kts.
+include(":litert_npu_runtime_libraries:qualcomm_runtime_v79")
 include(":highlight")
 include(":ai")
 include(":local-llm")
