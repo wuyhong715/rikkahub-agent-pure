@@ -23,6 +23,18 @@ fun createSkillTools(
      * content tool is not offered.
      */
     skillManager: SkillManager? = null,
+    /**
+     * P3-04 — which lazy skills this request should list, or null for "no opinion, list them all".
+     *
+     * A lambda because the host decides per *request* while this tool is built per *turn*: the
+     * listing is read by `systemPrompt`, which runs after the whole tool surface exists. Null is
+     * what a DIRECT-mode assistant gets, and it reproduces the listing behaviour that predates the
+     * catalogue exactly — every enabled lazy skill, every turn.
+     *
+     * Auto-load skills are unaffected: their bodies are inlined into the system prompt regardless,
+     * so there has never been anything to retrieve about them.
+     */
+    visibleSkillNames: (() -> Set<String>?)? = null,
 ): List<Tool> {
     val available = allSkills.filter { it.name in enabledSkills }
     if (available.isEmpty()) return emptyList()
@@ -78,17 +90,27 @@ fun createSkillTools(
                     // Lazy skills — listed for discovery; loaded on demand via `use_skill`.
                     val lazy = available.filterNot { it.autoLoad }
                     if (lazy.isNotEmpty()) {
+                        // P3-04 — null means "list everything" (DIRECT mode, unchanged); a set means
+                        // the host retrieved those for this request.
+                        val selected = visibleSkillNames?.invoke()?.let { names -> lazy.filter { it.name in names } }
                         appendLine("**Skills**")
                         appendLine("You have access to the following skills. Use the `use_skill` tool to load a skill's instructions when the user's request matches.")
-                        appendLine("<available_skills>")
-                        lazy.forEach { skill ->
-                            appendLine("  <skill>")
-                            appendLine("    <name>${skill.name}</name>")
-                            appendLine("    <description>${skill.description}</description>")
-                            appendLine("  </skill>")
+                        if (selected != null && selected.size < lazy.size) {
+                            // This listing is a selection, and saying so is the whole point: a model
+                            // that never learns other skills exist cannot ask for one.
+                            appendLine("More skills are installed than are listed here. Use the `tool_search` tool to find one by describing what you want to do, then `tool_open` to add it to this list.")
                         }
-                        append("</available_skills>")
-                        appendLine()
+                        if (selected == null || selected.isNotEmpty()) {
+                            appendLine("<available_skills>")
+                            (selected ?: lazy).forEach { skill ->
+                                appendLine("  <skill>")
+                                appendLine("    <name>${skill.name}</name>")
+                                appendLine("    <description>${skill.description}</description>")
+                                appendLine("  </skill>")
+                            }
+                            append("</available_skills>")
+                            appendLine()
+                        }
                     }
                 }
             },

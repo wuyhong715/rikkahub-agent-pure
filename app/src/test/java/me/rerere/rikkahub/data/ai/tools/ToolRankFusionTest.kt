@@ -158,6 +158,61 @@ class ToolRankFusionTest {
         )
     }
 
+    // ---- attachOfSource -------------------------------------------------------------------
+
+    @Test
+    fun `each kind of entry gets its own budget`() {
+        // The motivating case: two tools and two skills, interleaved in one ranking. A shared
+        // budget would have spent the tool slots on skills (or the reverse) purely on wording.
+        val ranked = listOf("skill_a", "tool_a", "skill_b", "tool_b", "skill_c", "tool_c")
+        val isSkill = { name: String -> name.startsWith("skill_") }
+        assertEquals(
+            listOf("tool_a", "tool_b"),
+            ToolRankFusion.attachOfSource(
+                ranked = ranked,
+                pinned = emptyList(),
+                activated = emptyList(),
+                budget = 2,
+                isOfSource = { !isSkill(it) },
+            ),
+        )
+        assertEquals(
+            listOf("skill_a", "skill_b"),
+            ToolRankFusion.attachOfSource(
+                ranked = ranked,
+                pinned = emptyList(),
+                activated = emptyList(),
+                budget = 2,
+                isOfSource = isSkill,
+            ),
+        )
+    }
+
+    @Test
+    fun `a pin of one kind does not spend the other kind's budget`() {
+        assertEquals(
+            listOf("tool_a"),
+            ToolRankFusion.attachOfSource(
+                ranked = listOf("tool_a"),
+                pinned = listOf("skill_pinned"),
+                activated = listOf("skill_opened"),
+                budget = 1,
+                isOfSource = { it.startsWith("tool_") },
+            ),
+        )
+        // ...while the kind it belongs to keeps all three, pins and activations never being capped.
+        assertEquals(
+            listOf("skill_pinned", "skill_opened", "skill_ranked"),
+            ToolRankFusion.attachOfSource(
+                ranked = listOf("skill_ranked", "tool_a"),
+                pinned = listOf("skill_pinned"),
+                activated = listOf("skill_opened"),
+                budget = 1,
+                isOfSource = { it.startsWith("skill_") },
+            ),
+        )
+    }
+
     @Test
     fun `a turn with nothing to go on attaches nothing`() {
         assertTrue(ToolRankFusion.attachedForTurn(emptyList(), emptyList(), emptyList()).isEmpty())

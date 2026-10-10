@@ -1949,15 +1949,32 @@ class ChatService(
                     addAll(createWorkspaceToolsIfReady(surfaceAssistant.workspaceId?.toString(), conversation.workspaceCwd))
                     // T-06 / (7) - cold memory, mirroring the regenerate path above.
                     addAll(createColdMemoryToolsIfConfigured(surfaceAssistant))
-                    if (surfaceAssistant.enabledSkills.isNotEmpty()) {
-                        addAll(
-                            createSkillTools(
-                                enabledSkills = surfaceAssistant.enabledSkills,
-                                allSkills = skillManager.listSkills(),
-                                skillManager = skillManager,
-                            )
+                    // P3-04 — the skill face is BUILT here and attached below the tool-surface
+                    // branch, because in progressive mode what it *lists* depends on the same
+                    // catalogue the tools do (what the user pinned, what the model opened, what this
+                    // request retrieved). `visibleSkillNames` is the only value that crosses that
+                    // boundary, and it stays null until the catalogue decides: null means "list them
+                    // all", which is exactly what DIRECT mode keeps doing.
+                    val allSkillsForSurface = if (surfaceAssistant.enabledSkills.isEmpty()) {
+                        emptyList()
+                    } else {
+                        skillManager.listSkills()
+                    }
+                    val enabledSkillList = allSkillsForSurface
+                        .filter { it.name in surfaceAssistant.enabledSkills }
+                    var visibleSkillNames: Set<String>? = null
+                    val skillTools = if (enabledSkillList.isEmpty()) {
+                        emptyList()
+                    } else {
+                        createSkillTools(
+                            enabledSkills = surfaceAssistant.enabledSkills,
+                            allSkills = allSkillsForSurface,
+                            skillManager = skillManager,
+                            // Read by `systemPrompt`, which runs after the whole surface exists.
+                            visibleSkillNames = { visibleSkillNames },
                         )
                     }
+                    val useSkillTool = skillTools.firstOrNull { it.name == "use_skill" }
                     if (surfaceAssistant.enableCompactContextTool) {
                         // T-02 / ② - model-initiated compaction. Reuses the manual compress
                         // pipeline end-to-end (see compactConversationFromTool) instead of
@@ -2020,6 +2037,23 @@ class ChatService(
                         // update path, not a user capability), and a hidden row is not the same
                         // thing as an unreachable one. Filtering it would make the app's update
                         // tool callable in DIRECT mode and silently absent here.
+                        // P3-04 — the third source. A skill is instructions rather than a schema, so
+                        // an activated skill name is never attached: it changes whether `use_skill`
+                        // lists the skill, which is the only way the model can find it. Auto-load
+                        // skills are left out because their bodies are inlined into the system
+                        // prompt anyway — there is nothing about them to retrieve.
+                        val skillEntries = useSkillTool?.let { skillTool ->
+                            enabledSkillList
+                                .filterNot { it.autoLoad }
+                                .map { skill ->
+                                    ToolCatalogEntry(
+                                        name = skill.name,
+                                        summary = skill.description,
+                                        source = ToolCatalogSource.SKILL,
+                                        tool = skillTool,
+                                    )
+                                }
+                        }.orEmpty()
                         val catalog = ToolCatalog(
                             entries = localSurface.map { tool ->
                                 ToolCatalogEntry(
@@ -2039,7 +2073,7 @@ class ChatService(
                                     source = ToolCatalogSource.MCP,
                                     tool = buildMcpTool(serverId, serverName, tool),
                                 )
-                            },
+                            } + skillEntries,
                         )
                         // P3-02 — warm this catalogue's vectors in the background. The model
                         // spends a whole round trip thinking before it calls `tool_search`, and by
@@ -2064,16 +2098,34 @@ class ChatService(
                         // can see the screen. The ordering and the caps live in
                         // ToolRankFusion.attachedForTurn; the ranking never blocks (a cold
                         // catalogue ranks lexically this turn and semantically the next).
-                        val attached = ToolRankFusion.attachedForTurn(
-                            ranked = if (lastUserText.isBlank()) {
-                                emptyList()
-                            } else {
-                                toolVectors.ranking(lastUserText, catalog)
-                            },
-                            pinned = surfaceAssistant.pinnedToolNames,
-                            activated = activation.active().toList(),
+                        val ranked = if (lastUserText.isBlank()) {
+                            emptyList()
+                        } else {
+                            toolVectors.ranking(lastUserText, catalog)
+                        }
+                        val pinned = surfaceAssistant.pinnedToolNames
+                        val opened = activation.active().toList()
+                        fun isSkill(name: String) =
+                            catalog.entry(name)?.source == ToolCatalogSource.SKILL
+
+                        // Tools and skills are budgeted apart — see DEFAULT_TURN_SKILL_BUDGET. A
+                        // skill never reaches `add` below; it only decides the `use_skill` listing.
+                        val attachedTools = ToolRankFusion.attachOfSource(
+                            ranked = ranked,
+                            pinned = pinned,
+                            activated = opened,
+                            budget = ToolRankFusion.DEFAULT_TURN_TOOL_BUDGET,
+                            isOfSource = { !isSkill(it) },
                         )
-                        attached.forEach { name ->
+                        val attachedSkills = ToolRankFusion.attachOfSource(
+                            ranked = ranked,
+                            pinned = pinned,
+                            activated = opened,
+                            budget = ToolRankFusion.DEFAULT_TURN_SKILL_BUDGET,
+                            isOfSource = { isSkill(it) },
+                        )
+                        visibleSkillNames = attachedSkills.toSet()
+                        attachedTools.forEach { name ->
                             catalog.entry(name)?.let { entry -> add(entry.tool) }
                         }
                     } else {
@@ -2081,6 +2133,9 @@ class ChatService(
                             add(buildMcpTool(serverId, serverName, tool))
                         }
                     }
+                    // P3-04 — attached here, not above, so the listing it renders can already see
+                    // what the catalogue decided. Empty in the ordinary case of no skills.
+                    addAll(skillTools)
                 }.let { me.rerere.rikkahub.subagent.SubAgentSurface.apply(conversationId, it) },
             ).onCompletion { completionCause ->
                 // 取消 Live Update 通知

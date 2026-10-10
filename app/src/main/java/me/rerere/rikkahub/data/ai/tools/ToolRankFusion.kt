@@ -50,6 +50,17 @@ object ToolRankFusion {
     const val DEFAULT_TURN_TOOL_BUDGET = 10
 
     /**
+     * How many skills one turn may be shown without asking.
+     *
+     * Separate from the tool budget on purpose. A skill and a tool answer different questions —
+     * "how should I approach this" versus "what can I do it with" — and they land in different
+     * places (the `use_skill` listing versus the tool schemas). One shared budget would let a
+     * well-described skill push out the tool the turn actually needed, which is exactly the
+     * failure the two channels exist to avoid.
+     */
+    const val DEFAULT_TURN_SKILL_BUDGET = 5
+
+    /**
      * Cosine ranking over already-normalised vectors.
      *
      * [docVectors] must be parallel to [keys]. A length mismatch returns an empty ranking rather
@@ -138,6 +149,24 @@ object ToolRankFusion {
         (name.replace('_', ' ') + " " + summary).trim().replace(WHITESPACE, " ")
 
     private val WHITESPACE = Regex("\\s+")
+
+    /**
+     * [attachedForTurn] for one kind of entry: the ranked, pinned and activated candidates are
+     * filtered to the ones [isOfSource] accepts before the policy runs, so each kind gets its own
+     * budget and neither can spend the other's.
+     */
+    fun attachOfSource(
+        ranked: List<String>,
+        pinned: List<String>,
+        activated: List<String>,
+        budget: Int,
+        isOfSource: (String) -> Boolean,
+    ): List<String> = attachedForTurn(
+        ranked = ranked.filter(isOfSource),
+        pinned = pinned.filter(isOfSource),
+        activated = activated.filter(isOfSource),
+        budget = budget,
+    )
 
     private fun dot(a: FloatArray, b: FloatArray): Float {
         if (a.size != b.size) return Float.NEGATIVE_INFINITY

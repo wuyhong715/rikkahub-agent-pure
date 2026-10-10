@@ -29,11 +29,16 @@ internal const val TOOL_CATALOG_MAX_SUMMARY_CHARS = 180
  */
 enum class ToolSurfaceMode { DIRECT, PROGRESSIVE_CATALOG }
 
-/** Where a catalogued tool comes from; used for scoring and serialized in search hits. */
-enum class ToolCatalogSource { LOCAL, MCP }
+/** Where a catalogued entry comes from; used for scoring and serialized in search hits. */
+enum class ToolCatalogSource { LOCAL, MCP, SKILL }
 
 /**
  * One catalog entry.
+ *
+ * A [ToolCatalogSource.SKILL] entry stands for a *skill*, not a tool schema: nothing is injected
+ * when such a name is activated, the skill simply becomes visible to `use_skill` (which is what the
+ * model needs in order to load it). Its [tool] is therefore never attached — see
+ * [ToolRankFusion.attachOfSource]'s use at the call site.
  *
  * [summary] is authored by the caller. This file never truncates the stored value;
  * it only enforces the 180-char cap at serialization time. [tool] is carried so the
@@ -220,7 +225,8 @@ fun buildToolCatalogTools(
             Search the tool catalog and return matching tool names with short summaries.
             Use this whenever you are unsure which tools exist. The query is matched against
             tool names and their descriptions, so naming a tool and describing what you want
-            to do both work, as a single word or as a sentence. It returns names and
+            to do both work, as a single word or as a sentence. Skills are searched too and
+            come back with the source SKILL. It returns names and
             summaries ONLY — never schemas or parameters. To actually call a tool, first
             activate it with tool_open; activation takes effect on your NEXT turn, not the
             current one.
@@ -257,9 +263,11 @@ fun buildToolCatalogTools(
     Tool(
         name = "tool_open",
         description = """
-            Activate tools by name so their schemas become callable. Names must be exact
-            matches returned by tool_search. Activation takes effect on your NEXT turn,
-            not the current one. Do not re-open a tool that is already active.
+            Activate entries by name. A tool's schema becomes callable; a skill (source
+            SKILL) becomes available to `use_skill` instead, since a skill is instructions
+            rather than a schema. Names must be exact matches returned by tool_search.
+            Activation takes effect on your NEXT turn, not the current one. Do not
+            re-open an entry that is already active.
         """.trimIndent(),
         parameters = {
             InputSchema.Obj(
