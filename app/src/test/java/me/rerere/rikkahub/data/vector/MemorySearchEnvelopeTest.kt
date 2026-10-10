@@ -16,8 +16,9 @@ import org.junit.Test
  *
  * Tested here rather than through the tool because this is the part that *steers the model*: the
  * note that says "nothing is indexed yet, use memory_index instead", the hint on the unavailable
- * path, the truncation flag. All of it reads fine in a diff and misleads a model in practice, so
- * it is asserted, not eyeballed.
+ * path (which is an instruction to install the model, not a pointer at a fallback), the truncation
+ * flag. All of it reads fine in a diff and misleads a model in practice, so it is asserted, not
+ * eyeballed.
  */
 class MemorySearchEnvelopeTest {
 
@@ -119,12 +120,19 @@ class MemorySearchEnvelopeTest {
 
     @Test
     fun `unavailable names the reason and the way out`() {
+        // "The way out" is an instruction now, not an alternative. This used to point at
+        // `memory_read`, which was right while a keyword path existed and is exactly the fallback
+        // Moxw removed: with no embedding model the search does not run at all, so the only
+        // sentence worth sending is how to install one.
         val json = Json.parseToJsonElement(
             MemorySearchEnvelope.unavailable("no embedding model is installed")
         ).jsonObject
         assertEquals("unavailable", json["error"]!!.jsonPrimitive.content)
         assertEquals("no embedding model is installed", json["detail"]!!.jsonPrimitive.content)
-        assertTrue(json["hint"]!!.jsonPrimitive.content.contains("memory_read"))
+        val hint = json["hint"]!!.jsonPrimitive.content
+        assertTrue(hint, hint.contains("embedding model"))
+        assertTrue(hint, hint.contains("install"))
+        assertFalse(hint, hint.contains("memory_read"))
     }
 
     @Test
