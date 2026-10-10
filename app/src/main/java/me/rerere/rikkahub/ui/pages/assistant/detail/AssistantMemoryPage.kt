@@ -59,6 +59,12 @@ import me.rerere.rikkahub.ui.hooks.EditStateContent
 import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.workspace.WorkspaceStorageArea
+import androidx.compose.foundation.clickable
+import androidx.compose.material3.RadioButton
+import androidx.compose.ui.platform.LocalContext
+import me.rerere.locallm.ModelInstall
+import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.vector.MemoryIndexCoordinator
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
@@ -134,6 +140,36 @@ private fun AssistantMemoryContent(
     val coldMemoryWorkspace = workspaces.find { it.id == assistant.workspaceId?.toString() }
     val workspaceRepository: WorkspaceRepository = koinInject()
     val scope = rememberCoroutineScope()
+
+    // Moxw - the knowledge-base index. The model is a global setting (one embedding model is
+    // resident at a time, so it cannot be a per-assistant choice), but it is shown here, next to
+    // the knowledge base it serves.
+    val settingsStore: SettingsStore = koinInject()
+    val settings by settingsStore.settingsFlow.collectAsStateWithLifecycle()
+    val memoryIndex: MemoryIndexCoordinator = koinInject()
+    val indexStatus by memoryIndex.status.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    var showEmbeddingModelPicker by remember { mutableStateOf(false) }
+    // Read when the picker opens rather than held in state: the list is the installed files, and
+    // the user may well install another one and come straight back.
+    val installedEmbeddingFiles = remember(showEmbeddingModelPicker) {
+        ModelInstall.localModelsDir(context)
+            .listFiles { file -> file.isFile && file.name.endsWith(".gguf", ignoreCase = true) }
+            ?.map { it.name }
+            ?.sorted()
+            .orEmpty()
+    }
+    val indexStatusText = when {
+        indexStatus.running -> stringResource(R.string.assistant_page_index_running)
+        indexStatus.lastError != null ->
+            stringResource(R.string.assistant_page_index_error, indexStatus.lastError.orEmpty())
+        indexStatus.lastReport != null -> stringResource(
+            R.string.assistant_page_index_report,
+            indexStatus.lastReport!!.documents,
+            indexStatus.lastReport!!.chunks,
+        )
+        else -> stringResource(R.string.assistant_page_index_never)
+    }
 
     if (showTimeReminderIntervalDialog) {
         val interval = timeReminderIntervalInput.toIntOrNull()?.takeIf { it > 0 }
@@ -359,6 +395,44 @@ private fun AssistantMemoryContent(
 
         CardGroup {
             item(
+                headlineContent = { Text(stringResource(R.string.assistant_page_embedding_model)) },
+                supportingContent = {
+                    Text(
+                        text = settings.embeddingModelFile.ifEmpty {
+                            stringResource(R.string.assistant_page_embedding_model_auto)
+                        }
+                    )
+                },
+                trailingContent = {
+                    Icon(
+                        imageVector = HugeIcons.ArrowRight01,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                },
+                onClick = { showEmbeddingModelPicker = true },
+            )
+            item(
+                headlineContent = { Text(stringResource(R.string.assistant_page_index_rebuild)) },
+                supportingContent = { Text(indexStatusText) },
+                trailingContent = {
+                    TextButton(
+                        onClick = {
+                            // Zero interval: an explicit rebuild means now, not "unless one ran
+                            // in the last five minutes".
+                            memoryIndex.requestSync(assistant, minIntervalMs = 0L)
+                        },
+                        enabled = !indexStatus.running && assistant.coldMemoryEnabled &&
+                            assistant.workspaceId != null,
+                    ) {
+                        Text(stringResource(R.string.assistant_page_index_rebuild_action))
+                    }
+                },
+            )
+        }
+
+        CardGroup {
+            item(
                 headlineContent = { Text(stringResource(R.string.assistant_page_time_reminder)) },
                 supportingContent = {
                     Text(
@@ -440,6 +514,53 @@ private fun AssistantMemoryContent(
                 onUpdateAssistant(assistant.copy(coldMemoryDir = selected))
             },
             onDismiss = { showColdMemoryDirPicker = false },
+        )
+    }
+
+    if (showEmbeddingModelPicker) {
+        AlertDialog(
+            onDismissRequest = { showEmbeddingModelPicker = false },
+            title = { Text(stringResource(R.string.assistant_page_embedding_model)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = stringResource(R.string.assistant_page_embedding_model_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    // "" is the automatic choice; the rest are the GGUF files already on disk.
+                    listOf("").plus(installedEmbeddingFiles).forEach { candidate ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    scope.launch {
+                                        settingsStore.update { it.copy(embeddingModelFile = candidate) }
+                                    }
+                                    showEmbeddingModelPicker = false
+                                }
+                                .padding(vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            RadioButton(
+                                selected = settings.embeddingModelFile == candidate,
+                                onClick = null,
+                            )
+                            Text(
+                                text = candidate.ifEmpty {
+                                    stringResource(R.string.assistant_page_embedding_model_auto)
+                                },
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showEmbeddingModelPicker = false }) {
+                    Text(stringResource(R.string.confirm))
+                }
+            },
         )
     }
 

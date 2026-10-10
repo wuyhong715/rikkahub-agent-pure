@@ -2536,6 +2536,15 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_page_cold_memory_no_workspace_desc">请先在“基础设定”页绑定一个工作区。冷记忆存放在工作区的某个文件夹内。</string>
   <string name="assistant_page_cold_memory_dir">知识库文件夹</string>
   <string name="assistant_page_cold_memory_dir_unset">未选择</string>
+  <string name="assistant_page_embedding_model">向量模型</string>
+  <string name="assistant_page_embedding_model_desc">按“语义”检索知识库。同一时刻只加载一个模型；装上推荐的那份即可，装有多份时可在此指定。</string>
+  <string name="assistant_page_embedding_model_auto">自动（推荐）</string>
+  <string name="assistant_page_index_rebuild">知识库索引</string>
+  <string name="assistant_page_index_rebuild_action">重建</string>
+  <string name="assistant_page_index_running">正在建立索引…</string>
+  <string name="assistant_page_index_error">失败：%1$s</string>
+  <string name="assistant_page_index_report">已索引 %1$d 篇文档、%2$d 个片段</string>
+  <string name="assistant_page_index_never">尚未建立索引</string>
   <string name="assistant_page_tool_retry">重试偶发的工具失败</string>
   <string name="assistant_page_tool_retry_desc">当只读工具（网页抓取、文件列举、搜索）因一次性网络或超时错误失败时，以较短的指数退避再重试最多两次，然后把失败上报给模型。只有每次调用都是纯读取的工具才会重试——任何会写入、发送或执行命令的操作绝不重试，因此重试永远不会重复产生副作用。默认关闭。</string>
   <!-- Statistics: overview section header -->
