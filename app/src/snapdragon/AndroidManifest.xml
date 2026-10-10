@@ -5,8 +5,9 @@
       The HTP stub library reaches the Hexagon DSP through Qualcomm's FastRPC transport,
       and that transport is a *vendor* library living in /vendor/lib64. The file is world
       readable and it is named in /vendor/etc/public.libraries.txt, and neither of those is
-      enough on its own: since Android 12 a vendor public library only lands in an app's
-      linker namespace if the app asks for it by name here.
+      enough on its own: a vendor native library is not accessible by default to an app that
+      targets Android 12 or higher, and only enters its linker namespace when the app names
+      it here.
 
       What the failure looks like without this is genuinely misleading, because the library
       is right there on disk:
@@ -19,9 +20,13 @@
       so QNN reports a missing stub, and then a missing skeleton, when the one thing
       actually missing is a namespace entry. required="false" throughout: this flavour still
       has to install on a device that has none of them.
+
+      These belong under <application>, not <manifest>; AAPT rejects the latter outright.
     -->
-    <uses-native-library android:name="libcdsprpc.so" android:required="false" />
-    <uses-native-library android:name="libadsprpc.so" android:required="false" />
-    <uses-native-library android:name="libsdsprpc.so" android:required="false" />
+    <application>
+        <uses-native-library android:name="libcdsprpc.so" android:required="false" />
+        <uses-native-library android:name="libadsprpc.so" android:required="false" />
+        <uses-native-library android:name="libsdsprpc.so" android:required="false" />
+    </application>
 
 </manifest>
