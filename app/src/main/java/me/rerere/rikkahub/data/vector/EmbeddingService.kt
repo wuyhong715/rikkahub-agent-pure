@@ -4,6 +4,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import me.rerere.llamacpp.LlamaCppEmbedder
 import me.rerere.llamacpp.LlamaCppEmbeddingCatalog
+import me.rerere.llamacpp.LlamaCppEmbeddingEntry
 import java.io.File
 
 /**
@@ -26,10 +27,23 @@ class EmbeddingService(
     private val configuredFileName: suspend () -> String?,
     private val embedder: LlamaCppEmbedder = LlamaCppEmbedder(),
     private val curatedOrder: List<String> = LlamaCppEmbeddingCatalog.ENTRIES.map { it.file },
+    /** Prefix lookup, injectable so a test can exercise the behaviour without the catalogue. */
+    private val entryFor: (String) -> LlamaCppEmbeddingEntry? = LlamaCppEmbeddingCatalog::entryFor,
 ) {
 
-    /** The loaded model: what it is, and how wide its vectors are. */
-    data class ActiveModel(val fileName: String, val dim: Int) {
+    /**
+     * The loaded model: what it is, and how wide its vectors are.
+     *
+     * The task prefixes ride along because they are a property of the *loaded file*, and a caller
+     * that embeds a document without knowing them would store a vector from the wrong side of the
+     * model's contrastive pair - silently, since nothing about that fails.
+     */
+    data class ActiveModel(
+        val fileName: String,
+        val dim: Int,
+        val queryPrefix: String = "",
+        val documentPrefix: String = "",
+    ) {
         /** What goes into `vector_chunks.model_id`. */
         val modelId: String get() = EmbeddingModelRules.modelIdOf(fileName)
     }
@@ -59,27 +73,49 @@ class EmbeddingService(
         val file = File(modelsDir(), fileName)
         if (!file.isFile) return@withLock null
         val info = embedder.load(file.absolutePath)
-        val loaded = ActiveModel(fileName = fileName, dim = info.dim)
+        val entry = entryFor(fileName)
+        val loaded = ActiveModel(
+            fileName = fileName,
+            dim = info.dim,
+            queryPrefix = entry?.queryPrefix.orEmpty(),
+            documentPrefix = entry?.documentPrefix.orEmpty(),
+        )
         active = loaded
         loaded
     }
 
     /**
-     * Embeds [texts] in order. Throws when no model is available - callers that can live without
-     * embeddings check [ensureLoaded] first and skip instead.
+     * Embeds the *documents* that get indexed - memory notes, library files, past turns, tool
+     * entries - in order, with the model's document-side task prefix applied.
+     *
+     * Throws when no model is available; callers that can live without embeddings check
+     * [ensureLoaded] first and skip instead.
      */
-    suspend fun embed(texts: List<String>): List<FloatArray> {
+    suspend fun embedDocuments(texts: List<String>): List<FloatArray> {
         val model = ensureLoaded() ?: error("no embedding model is installed")
-        return texts.map { text ->
-            val vector = embedder.embedNormalized(text)
-            require(vector.size == model.dim) {
-                "the model returned ${vector.size} values, expected ${model.dim}"
-            }
-            vector
-        }
+        return texts.map { text -> embedWith(model, model.documentPrefix + text) }
     }
 
-    suspend fun embedOne(text: String): FloatArray = embed(listOf(text)).first()
+    /**
+     * Embeds one *query* with the model's query-side task prefix applied.
+     *
+     * A separate door from [embedDocuments] on purpose. Most embedding models are asymmetric, and
+     * several of the curated entries are: searching a query embedded the way the documents were is
+     * a mistake that returns plausible results rather than an error, so the two cases are told
+     * apart by the type system rather than by a comment.
+     */
+    suspend fun embedQuery(text: String): FloatArray {
+        val model = ensureLoaded() ?: error("no embedding model is installed")
+        return embedWith(model, model.queryPrefix + text)
+    }
+
+    private suspend fun embedWith(model: ActiveModel, text: String): FloatArray {
+        val vector = embedder.embedNormalized(text)
+        require(vector.size == model.dim) {
+            "the model returned ${vector.size} values, expected ${model.dim}"
+        }
+        return vector
+    }
 
     /**
      * Frees the model. Called when the index has just been rebuilt - holding a few hundred

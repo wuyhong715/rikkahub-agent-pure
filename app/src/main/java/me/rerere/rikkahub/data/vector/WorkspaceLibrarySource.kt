@@ -83,7 +83,7 @@ class WorkspaceLibrarySource(
                 continue
             }
             val written = store.apply(source, doc.path, plan, model.modelId, nowMs) { texts ->
-                embeddings.embed(texts)
+                embeddings.embedDocuments(texts)
             }
             plan as SyncPlan.Replace
             chunks += written
@@ -131,7 +131,7 @@ class WorkspaceLibrarySource(
         val source = sourceOf(workspaceId, dir)
         val model = embeddings.ensureLoaded()
             ?: return LibrarySearchOutcome(available = false)
-        val queryVector = embeddings.embedOne(query)
+        val queryVector = embeddings.embedQuery(query)
         val result = store.search(source, model.modelId, queryVector, limit, relativeFloor)
         val models = store.modelIdsOf(source)
         return LibrarySearchOutcome(

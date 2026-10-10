@@ -2,6 +2,7 @@ package me.rerere.llamacpp
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -27,6 +28,9 @@ class LlamaCppEmbeddingCatalogTest {
             // repo -> (file, bytes)
             "ggml-org/embeddinggemma-2-GGUF" to ("embeddinggemma-2-Q8_0.gguf" to 309_855_456L),
             "unsloth/embeddinggemma-2-GGUF" to ("embeddinggemma-2-UD-Q4_K_XL.gguf" to 175_673_856L),
+            "Qwen/Qwen3-Embedding-0.6B-GGUF" to ("Qwen3-Embedding-0.6B-Q8_0.gguf" to 639_150_592L),
+            "mradermacher/Qwen3-Embedding-0.6B-GGUF" to
+                ("Qwen3-Embedding-0.6B.Q4_K_M.gguf" to 396_475_040L),
         )
 
         LlamaCppEmbeddingCatalog.ENTRIES.forEach { entry ->
@@ -67,6 +71,23 @@ class LlamaCppEmbeddingCatalogTest {
     }
 
     @Test
+    fun `every entry declares the context window the picker shows`() {
+        LlamaCppEmbeddingCatalog.ENTRIES.forEach { entry ->
+            assertTrue(
+                "${entry.displayName} has a non-positive context window",
+                entry.contextTokens > 0,
+            )
+            assertTrue("${entry.displayName} has a blank context label", entry.contextLabel.isNotBlank())
+        }
+    }
+
+    @Test
+    fun `a round context window is labelled in thousands`() {
+        assertEquals("32K", LlamaCppEmbeddingCatalog.entryFor("Qwen3-Embedding-0.6B-Q8_0.gguf")!!.contextLabel)
+        assertEquals("8K", LlamaCppEmbeddingCatalog.entryFor("embeddinggemma-2-Q8_0.gguf")!!.contextLabel)
+    }
+
+    @Test
     fun `display names are unique`() {
         val names = LlamaCppEmbeddingCatalog.ENTRIES.map { it.displayName }
         assertEquals(names.size, names.toSet().size)
@@ -103,5 +124,43 @@ class LlamaCppEmbeddingCatalogTest {
         )
         assertEquals("ggml-org/embeddinggemma-2-GGUF", recommended.repo)
         assertEquals("embeddinggemma-2-Q8_0.gguf", recommended.file)
+    }
+
+    @Test
+    fun `a curated file name resolves back to its entry`() {
+        LlamaCppEmbeddingCatalog.ENTRIES.forEach { entry ->
+            assertEquals(entry, LlamaCppEmbeddingCatalog.entryFor(entry.file))
+        }
+    }
+
+    @Test
+    fun `a file we did not curate has no entry`() {
+        // The picker lists whatever GGUF is on disk, so this is the common case for a model the
+        // user copied in by hand - and the one where inventing a prefix would be a guess.
+        assertNull(LlamaCppEmbeddingCatalog.entryFor("someone-elses-model.gguf"))
+        assertNull(LlamaCppEmbeddingCatalog.entryFor("/tmp/path/Qwen3-Embedding-0.6B-Q8_0.gguf"))
+    }
+
+    @Test
+    fun `the asymmetric models declare their query instruction`() {
+        // These two are the whole reason LlamaCppEmbeddingEntry grew prefix fields: both were
+        // trained to see a retrieval instruction on the query and a bare passage on the other
+        // side, and dropping it costs ranking quality without failing anything.
+        val qwen = LlamaCppEmbeddingCatalog.entryFor("Qwen3-Embedding-0.6B-Q8_0.gguf")!!
+        assertTrue(qwen.queryPrefix.startsWith("Instruct:"))
+        assertTrue(qwen.queryPrefix.endsWith("Query: "))
+        assertEquals("", qwen.documentPrefix)
+
+    }
+
+    @Test
+    fun `the symmetric models declare no prefix`() {
+        // EmbeddingGemma 2 embeds a passage and a query the same way; a prefix here would be a
+        // change to the vector space, not a correction of one.
+        listOf("embeddinggemma-2-Q8_0.gguf", "embeddinggemma-2-UD-Q4_K_XL.gguf").forEach { file ->
+            val entry = LlamaCppEmbeddingCatalog.entryFor(file)!!
+            assertEquals("", entry.queryPrefix)
+            assertEquals("", entry.documentPrefix)
+        }
     }
 }

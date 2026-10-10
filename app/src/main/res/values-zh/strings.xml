@@ -2546,7 +2546,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_page_embedding_suggested">可下载的模型</string>
   <string name="assistant_page_embedding_download">下载</string>
   <string name="assistant_page_embedding_downloading">下载中 %1$d%%</string>
-  <string name="assistant_page_embedding_size_mb">%1$d MB · %2$d 维</string>
+  <string name="assistant_page_embedding_size_mb">%1$d MB · %2$d 维 · %3$s 上下文</string>
   <string name="assistant_page_index_rebuild">知识库索引</string>
   <string name="assistant_page_library">文件库</string>
   <string name="assistant_page_library_desc">对工作区里的某个目录做语义检索：代码、笔记和文档（PDF、Word、PPT、EPUB）。后台建立索引，模型会得到一个 library_search 工具，按内容而不是按文件名去找。</string>

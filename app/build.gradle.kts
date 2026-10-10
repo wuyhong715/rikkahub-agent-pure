@@ -422,6 +422,11 @@ dependencies {
 
     // tests
     testImplementation(libs.junit)
+    // Real org.json impl, for the same reason :llama-cpp has it: the stub android.jar throws
+    // "not mocked" on every JSONObject call, and the embedding embedder parses the native
+    // model facts with org.json. Without this, any test that drives LlamaCppEmbedder through
+    // its real code path fails on the first JSONObject - which is a test of nothing.
+    testImplementation(libs.json)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
