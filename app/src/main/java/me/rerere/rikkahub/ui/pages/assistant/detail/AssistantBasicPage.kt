@@ -47,6 +47,7 @@ import me.rerere.ai.provider.ModelType
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.vector.EmbeddingReadiness
 import me.rerere.rikkahub.subagent.SubAgentDefaults
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
 import me.rerere.rikkahub.ui.components.ai.ReasoningButton
@@ -61,9 +62,7 @@ import androidx.compose.ui.platform.LocalContext
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.vector.EmbeddingModelFiles
-import me.rerere.rikkahub.data.vector.EmbeddingModelRules
 import me.rerere.rikkahub.ui.context.LocalNavController
-import me.rerere.llamacpp.LlamaCppEmbeddingCatalog
 import me.rerere.rikkahub.utils.toFixed
 import org.koin.compose.koinInject
 import org.koin.androidx.compose.koinViewModel
@@ -130,12 +129,10 @@ internal fun AssistantBasicContent(
     val context = LocalContext.current
     val settingsStore: SettingsStore = koinInject()
     val settings by settingsStore.settingsFlow.collectAsStateWithLifecycle()
-    val embeddingReady = remember(settings.embeddingModelFile) {
-        EmbeddingModelRules.pick(
-            configured = settings.embeddingModelFile.takeIf { it.isNotBlank() },
-            installed = EmbeddingModelFiles.installedFiles(context),
-            curatedOrder = LlamaCppEmbeddingCatalog.ENTRIES.map { it.file },
-        ) != null
+    // One resolver for every screen that asks this question, so a settings row can never claim
+    // semantic search is ready while the embedder itself refuses to run.
+    val embeddingReady = remember(settings.embeddingModelFile, settings.embeddingBackend, settings.embeddingCloudModel) {
+        EmbeddingReadiness.isReady(settings, EmbeddingModelFiles.installedFiles(context))
     }
     val navController = LocalNavController.current
 

@@ -9,13 +9,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import me.rerere.llamacpp.LlamaCppEmbeddingCatalog
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.vector.EmbeddingModelFiles
-import me.rerere.rikkahub.data.vector.EmbeddingModelRules
+import me.rerere.rikkahub.data.vector.EmbeddingReadiness
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.hooks.rememberSharedPreferenceBoolean
 
@@ -49,12 +48,10 @@ fun EmbeddingModelGate(setting: Settings) {
     // Resolved through the same rules the embedder itself uses, so this notice cannot disagree
     // with the feature it is about: a configured file that was deleted, or a curated model
     // installed under its repository name, land the same way here as they do at embedding time.
-    val installed = remember(setting.embeddingModelFile) {
-        EmbeddingModelRules.pick(
-            configured = setting.embeddingModelFile.takeIf { it.isNotBlank() },
-            installed = EmbeddingModelFiles.installedFiles(context),
-            curatedOrder = LlamaCppEmbeddingCatalog.ENTRIES.map { it.file },
-        ) != null
+    // One resolver for every screen that asks this question, so a settings row can never claim
+    // semantic search is ready while the embedder itself refuses to run.
+    val installed = remember(setting.embeddingModelFile, setting.embeddingBackend, setting.embeddingCloudModel) {
+        EmbeddingReadiness.isReady(setting, EmbeddingModelFiles.installedFiles(context))
     }
 
     if (installed || acknowledged) return

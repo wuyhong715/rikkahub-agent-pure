@@ -20,6 +20,13 @@ import java.io.File
  * `local-models/llamacpp`, so installing the recommended GGUF is all it takes. See
  * [EmbeddingModelRules.pick] for how an explicit setting and that fallback interact.
  *
+ * There are two backends behind this door. The local one is the default and came first: a GGUF
+ * file, resident, nothing leaving the device. The cloud one - off unless the user turns it on and
+ * picks a model - replaces it wholesale rather than supplementing it, because every row of the
+ * index stores *which* model produced it ([ActiveModel.modelId]) and mixing two models' vectors in
+ * one index is the one mistake that would keep returning plausible answers. Switching between the
+ * two therefore invalidates the index by construction, and the search layer already says so.
+ *
  * Whoever embeds something has to size it for the *loaded* model's window
  * ([ActiveModel.contextTokens]), not for a number written down here: the models on offer do not
  * agree on one, and the runtime refuses - rather than silently truncates - a text that does not
@@ -34,6 +41,16 @@ class EmbeddingService(
     private val curatedOrder: List<String> = LlamaCppEmbeddingCatalog.ENTRIES.map { it.file },
     /** Prefix lookup, injectable so a test can exercise the behaviour without the catalogue. */
     private val entryFor: (String) -> LlamaCppEmbeddingEntry? = LlamaCppEmbeddingCatalog::entryFor,
+    /**
+     * The cloud model to embed with, when the user chose one this build can call.
+     *
+     * Asked on every load rather than captured once, so turning the cloud backend on takes effect
+     * on the next round of indexing instead of the next launch. Null means local: that is what an
+     * untouched install answers, and what a cloud selection that cannot be used falls back to.
+     */
+    private val cloudChoice: suspend () -> CloudEmbeddingCandidate? = { null },
+    /** The transport a cloud model is called through. Unused while [cloudChoice] answers null. */
+    private val cloud: CloudEmbeddingCaller? = null,
 ) {
 
     /**
@@ -53,9 +70,20 @@ class EmbeddingService(
         val contextTokens: Int,
         val queryPrefix: String = "",
         val documentPrefix: String = "",
+        /**
+         * The cloud model behind this, or null when it is the local file.
+         *
+         * [dim] is 0 when this is set: the width is the provider's business and is only known once
+         * a response has come back, so nothing sizes anything by it. The identity in [modelId] is
+         * what keeps two models' vectors apart, and that is known before the first call.
+         */
+        val cloud: CloudEmbeddingCandidate? = null,
     ) {
         /** What goes into `vector_chunks.model_id`. */
         val modelId: String get() = EmbeddingModelRules.modelIdOf(fileName)
+
+        /** True when the vectors are computed off the device, from text that is sent to do it. */
+        val isCloud: Boolean get() = cloud != null
     }
 
     private val lock = Mutex()
@@ -72,6 +100,20 @@ class EmbeddingService(
      */
     suspend fun ensureLoaded(): ActiveModel? = lock.withLock {
         active?.let { return@withLock it }
+
+        // The cloud choice is checked first and answers without a request: which model to use is a
+        // setting, and a "load" that had to reach the network would make every round of background
+        // indexing wait on one.
+        cloudChoice()?.let { candidate ->
+            val loaded = ActiveModel(
+                fileName = CloudEmbeddingRules.indexModelId(candidate),
+                dim = 0,
+                contextTokens = CloudEmbeddingRules.contextTokens(candidate),
+                cloud = candidate,
+            )
+            active = loaded
+            return@withLock loaded
+        }
 
         val installed = modelsDir().listFiles()?.filter { it.isFile }?.map { it.name }.orEmpty()
         val fileName = EmbeddingModelRules.pick(
@@ -108,6 +150,7 @@ class EmbeddingService(
      */
     suspend fun embedDocuments(texts: List<String>): List<FloatArray> {
         val model = ensureLoaded() ?: error("no embedding model is installed")
+        if (model.isCloud) return embedCloud(model, texts)
         return texts.map { text -> embedWith(model, model.documentPrefix + text) }
     }
 
@@ -121,6 +164,7 @@ class EmbeddingService(
      */
     suspend fun embedQuery(text: String): FloatArray {
         val model = ensureLoaded() ?: error("no embedding model is installed")
+        if (model.isCloud) return embedCloud(model, listOf(text)).single()
         return embedWith(model, model.queryPrefix + text)
     }
 
@@ -133,13 +177,37 @@ class EmbeddingService(
     }
 
     /**
+     * Embeds through the provider, in batches, in order.
+     *
+     * No prefixes: this service's two doors exist because most *local* embedding models are
+     * asymmetric and need to be told which side of the pair they are on. A provider's embedding
+     * endpoint takes the text as it is - sending it an instruction it does not expect would be a
+     * silent quality problem rather than an error.
+     *
+     * The order of the answer is the one thing a batching loop can get wrong, and it is the one
+     * thing nothing downstream could detect: [CloudEmbeddingCaller] answers in the order of the
+     * batch it was given, and the batches are concatenated in order.
+     */
+    private suspend fun embedCloud(model: ActiveModel, texts: List<String>): List<FloatArray> {
+        val candidate = model.cloud ?: error("no cloud model is active")
+        val caller = cloud ?: error("no cloud embedding client is wired up")
+        // The batching and the order it preserves are [CloudEmbeddingRules.embedInBatches], which
+        // is pure and therefore tested; what is left here is naming the model for the error and
+        // handing the request to the transport.
+        return CloudEmbeddingRules.embedInBatches(texts) { batch -> caller.embed(candidate, batch) }
+    }
+
+    /**
      * Frees the model. Called when the index has just been rebuilt - holding a few hundred
      * megabytes of idle weights through a phone's whole idle period is exactly the kind of thing
      * that makes a background feature feel expensive.
      */
     suspend fun release() = lock.withLock {
-        if (active != null) {
-            embedder.unload()
+        val current = active
+        if (current != null) {
+            // Nothing is held for a cloud model: what it costs is the request, not a resident copy
+            // of any weights.
+            if (!current.isCloud) embedder.unload()
             active = null
         }
     }

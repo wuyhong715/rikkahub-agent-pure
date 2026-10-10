@@ -57,6 +57,7 @@ import me.rerere.rikkahub.data.model.QuickMessage
 import me.rerere.rikkahub.data.model.Tag
 import me.rerere.rikkahub.data.sync.BackupItem
 import me.rerere.rikkahub.data.sync.s3.S3Config
+import me.rerere.rikkahub.data.vector.CloudEmbeddingRules
 import me.rerere.rikkahub.subagent.SubAgentDefaults
 import me.rerere.rikkahub.ui.theme.CustomTheme
 import me.rerere.rikkahub.ui.theme.PresetThemes
@@ -203,6 +204,8 @@ class SettingsStore(
          * enough to turn semantic search on. See EmbeddingModelRules.
          */
         val EMBEDDING_MODEL_FILE = stringPreferencesKey("embedding_model_file")
+        val EMBEDDING_BACKEND = stringPreferencesKey("embedding_backend")
+        val EMBEDDING_CLOUD_MODEL = stringPreferencesKey("embedding_cloud_model")
         val COMPRESS_MODEL = stringPreferencesKey("compress_model")
         val COMPRESS_PROMPT = stringPreferencesKey("compress_prompt")
         val ENABLE_AUTO_COMPACTION = booleanPreferencesKey("enable_auto_compaction")
@@ -328,6 +331,8 @@ class SettingsStore(
                 preferences[OCR_MODEL] = settings.ocrModelId.toString()
                 preferences[OCR_PROMPT] = settings.ocrPrompt
                 preferences[EMBEDDING_MODEL_FILE] = settings.embeddingModelFile
+                preferences[EMBEDDING_BACKEND] = settings.embeddingBackend
+                preferences[EMBEDDING_CLOUD_MODEL] = settings.embeddingCloudModel
                 preferences[COMPRESS_MODEL] = settings.compressModelId.toString()
                 preferences[COMPRESS_PROMPT] = settings.compressPrompt
                 preferences[ENABLE_AUTO_COMPACTION] = settings.enableAutoCompaction
@@ -445,6 +450,8 @@ class SettingsStore(
                 ocrModelId = preferences[OCR_MODEL]?.let { runCatching { Uuid.parse(it) }.getOrNull() } ?: Uuid.random(),
                 ocrPrompt = preferences[OCR_PROMPT] ?: DEFAULT_OCR_PROMPT,
                 embeddingModelFile = preferences[EMBEDDING_MODEL_FILE] ?: "",
+                embeddingBackend = preferences[EMBEDDING_BACKEND] ?: CloudEmbeddingRules.BACKEND_LOCAL,
+                embeddingCloudModel = preferences[EMBEDDING_CLOUD_MODEL] ?: "",
                 compressModelId = preferences[COMPRESS_MODEL]?.let { runCatching { Uuid.parse(it) }.getOrNull() } ?: DEFAULT_AUTO_MODEL_ID,
                 compressPrompt = preferences[COMPRESS_PROMPT] ?: DEFAULT_COMPRESS_PROMPT,
                 assistantId = preferences[SELECT_ASSISTANT]?.let { runCatching { Uuid.parse(it) }.getOrNull() }
@@ -1076,6 +1083,24 @@ data class Settings(
      * Appended last on purpose: a new field may never shift the position of an existing one.
      */
     val embeddingModelFile: String = "",
+    /**
+     * Which embedding backend runs: [CloudEmbeddingRules.BACKEND_LOCAL] or
+     * [CloudEmbeddingRules.BACKEND_CLOUD].
+     *
+     * A string rather than an enum because that is what is on disk, and an unrecognised value has
+     * to mean something: every comparison goes through [CloudEmbeddingRules.isCloud], so anything
+     * that is not exactly "cloud" runs the local model - the behaviour of every install that
+     * predates this field.
+     */
+    val embeddingBackend: String = CloudEmbeddingRules.BACKEND_LOCAL,
+    /**
+     * The `Model.id` of the cloud embedding model, when [embeddingBackend] is cloud.
+     *
+     * Stored as the model's own id rather than its name so that renaming it in the provider screen
+     * does not silently unset the choice, and resolved against the live provider list so that a
+     * model that has been deleted resolves to nothing rather than to whatever else is around.
+     */
+    val embeddingCloudModel: String = "",
 ) {
     companion object {
         // 构造一个用于初始化的settings, 但它不能用于保存，防止使用初始值存储

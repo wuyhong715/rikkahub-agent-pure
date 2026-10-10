@@ -120,6 +120,11 @@
   <string name="assistant_page_embedding_download">Download</string>
   <string name="assistant_page_embedding_downloading">Downloading %1$d%%</string>
   <string name="assistant_page_embedding_size_mb">%1$d MB · %2$d-dim · %3$s context</string>
+  <string name="assistant_page_embedding_source_local">Local model</string>
+  <string name="assistant_page_embedding_source_cloud">Cloud model</string>
+  <string name="assistant_page_embedding_cloud_notice">Indexed text is sent to the provider to be turned into vectors.</string>
+  <string name="assistant_page_embedding_cloud_none">No model is marked as an embedding model yet. Mark one under Settings → Providers → a model → Type.</string>
+  <string name="assistant_page_embedding_cloud_unsupported">%1$s is not supported yet — only OpenAI-compatible providers can be called this way.</string>
   <string name="assistant_page_index_rebuild">Knowledge base index</string>
   <string name="assistant_page_library">File library</string>
   <string name="assistant_page_library_desc">Search a directory inside this workspace by meaning: code, notes, documents (PDF, Word, PowerPoint, EPUB) and images (screenshots and photos, read by on-device text recognition). It is indexed in the background and the model gets a library_search tool that reads their contents, not just their names.</string>
