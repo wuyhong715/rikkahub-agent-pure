@@ -19,6 +19,11 @@ import java.io.File
  * in [LlamaCppEmbeddingCatalog] are what the ordinary local-model page writes into
  * `local-models/llamacpp`, so installing the recommended GGUF is all it takes. See
  * [EmbeddingModelRules.pick] for how an explicit setting and that fallback interact.
+ *
+ * Whoever embeds something has to size it for the *loaded* model's window
+ * ([ActiveModel.contextTokens]), not for a number written down here: the models on offer do not
+ * agree on one, and the runtime refuses - rather than silently truncates - a text that does not
+ * fit. See [ChunkSpec.fitting].
  */
 class EmbeddingService(
     /** Where installed GGUF files live; a lambda so tests never touch the filesystem. */
@@ -32,15 +37,20 @@ class EmbeddingService(
 ) {
 
     /**
-     * The loaded model: what it is, and how wide its vectors are.
+     * The loaded model: what it is, how wide its vectors are, and how many tokens it can take.
      *
      * The task prefixes ride along because they are a property of the *loaded file*, and a caller
      * that embeds a document without knowing them would store a vector from the wrong side of the
      * model's contrastive pair - silently, since nothing about that fails.
+     *
+     * [contextTokens] is the model's own window, and it is what a caller must size its inputs by:
+     * the runtime refuses a longer text, and the models people actually install do not agree on a
+     * window (8K here, 32K there, 512 for a small BERT).
      */
     data class ActiveModel(
         val fileName: String,
         val dim: Int,
+        val contextTokens: Int,
         val queryPrefix: String = "",
         val documentPrefix: String = "",
     ) {
@@ -77,6 +87,11 @@ class EmbeddingService(
         val loaded = ActiveModel(
             fileName = fileName,
             dim = info.dim,
+            // The model's own window, not the one we asked the context for: a small BERT is
+            // trained on 512 tokens and the runtime clamps to that, so sizing inputs by anything
+            // larger is what would make the next call fail.
+            contextTokens = info.nCtxTrain.takeIf { it > 0 }
+                ?: LlamaCppEmbedder.DEFAULT_CONTEXT_TOKENS,
             queryPrefix = entry?.queryPrefix.orEmpty(),
             documentPrefix = entry?.documentPrefix.orEmpty(),
         )

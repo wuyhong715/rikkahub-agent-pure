@@ -31,6 +31,8 @@ class LlamaCppEmbeddingCatalogTest {
             "Qwen/Qwen3-Embedding-0.6B-GGUF" to ("Qwen3-Embedding-0.6B-Q8_0.gguf" to 639_150_592L),
             "mradermacher/Qwen3-Embedding-0.6B-GGUF" to
                 ("Qwen3-Embedding-0.6B.Q4_K_M.gguf" to 396_475_040L),
+            "CompendiumLabs/bge-small-zh-v1.5-gguf" to
+                ("bge-small-zh-v1.5-q8_0.gguf" to 26_472_640L),
         )
 
         LlamaCppEmbeddingCatalog.ENTRIES.forEach { entry ->
@@ -85,6 +87,8 @@ class LlamaCppEmbeddingCatalogTest {
     fun `a round context window is labelled in thousands`() {
         assertEquals("32K", LlamaCppEmbeddingCatalog.entryFor("Qwen3-Embedding-0.6B-Q8_0.gguf")!!.contextLabel)
         assertEquals("8K", LlamaCppEmbeddingCatalog.entryFor("embeddinggemma-2-Q8_0.gguf")!!.contextLabel)
+        // 512 is not a round thousand, and rounding it to "1K" would overstate it.
+        assertEquals("512", LlamaCppEmbeddingCatalog.entryFor("bge-small-zh-v1.5-q8_0.gguf")!!.contextLabel)
     }
 
     @Test
@@ -143,14 +147,17 @@ class LlamaCppEmbeddingCatalogTest {
 
     @Test
     fun `the asymmetric models declare their query instruction`() {
-        // These two are the whole reason LlamaCppEmbeddingEntry grew prefix fields: both were
-        // trained to see a retrieval instruction on the query and a bare passage on the other
-        // side, and dropping it costs ranking quality without failing anything.
+        // The whole reason LlamaCppEmbeddingEntry grew prefix fields: these were trained to see a
+        // retrieval instruction on the query and a bare passage on the other side, and dropping it
+        // costs ranking quality without failing anything.
         val qwen = LlamaCppEmbeddingCatalog.entryFor("Qwen3-Embedding-0.6B-Q8_0.gguf")!!
         assertTrue(qwen.queryPrefix.startsWith("Instruct:"))
         assertTrue(qwen.queryPrefix.endsWith("Query: "))
         assertEquals("", qwen.documentPrefix)
 
+        val bgeZh = LlamaCppEmbeddingCatalog.entryFor("bge-small-zh-v1.5-q8_0.gguf")!!
+        assertTrue(bgeZh.queryPrefix.isNotBlank())
+        assertEquals("", bgeZh.documentPrefix)
     }
 
     @Test

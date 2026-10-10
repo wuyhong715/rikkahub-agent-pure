@@ -172,4 +172,56 @@ class TextChunkerTest {
         assertTrue(chunks[0].text.contains("def parse"))
         assertTrue(chunks[0].text.contains("return text.split"))
     }
+
+    // --- the model's window -------------------------------------------------
+
+    @Test
+    fun `a model with a big enough window keeps the default budget`() {
+        // The change has to be a no-op for the models that were already there, or every existing
+        // index is invalidated by an update that was supposed to add a model.
+        assertEquals(ChunkSpec(), ChunkSpec().fitting(8192))
+        assertEquals(ChunkSpec(), ChunkSpec().fitting(32_768))
+        assertEquals(1200, ChunkSpec().fitting(32_768).maxChars)
+    }
+
+    @Test
+    fun `an unknown window keeps the default rather than guessing`() {
+        assertEquals(ChunkSpec(), ChunkSpec().fitting(0))
+        assertEquals(ChunkSpec(), ChunkSpec().fitting(-1))
+    }
+
+    @Test
+    fun `a small window shrinks the budget and the overlap together`() {
+        // 512 tokens is bge-small-zh-v1.5. Half of it in characters, because a character of
+        // Chinese can be a token.
+        val fitted = ChunkSpec().fitting(512)
+        assertEquals(256, fitted.maxChars)
+        assertEquals(42, fitted.overlapChars)
+        assertTrue(fitted.overlapChars < fitted.maxChars)
+    }
+
+    @Test
+    fun `fitting never grows a budget someone set smaller`() {
+        val small = ChunkSpec(maxChars = 100, overlapChars = 10)
+        assertEquals(100, small.fitting(8192).maxChars)
+        assertEquals(100, small.fitting(0).maxChars)
+    }
+
+    @Test
+    fun `chunks fit the window they were sized for`() {
+        // The invariant that matters downstream: every chunk is inside the budget, because the
+        // runtime refuses a text that is not, and a refused chunk is a document that never gets
+        // indexed. Four hundred short paragraphs is a note of the length that used to produce a
+        // chunk no 512-token model could take.
+        val text = (1..400).joinToString("\n\n") { "第 $it 段：向量检索把文档切成小块再嵌入，这是第 $it 段的内容。" }
+        val spec = ChunkSpec(mode = ChunkingMode.PLAIN, headingBreadcrumb = false).fitting(512)
+        val chunks = TextChunker.chunk(text, spec)
+
+        assertTrue("expected more than one chunk", chunks.size > 1)
+        chunks.forEach { chunk ->
+            assertTrue("chunk of ${chunk.text.length} chars exceeds the budget", chunk.text.length <= spec.maxChars)
+        }
+        // Nothing was dropped: the packing is a partition, not a truncation.
+        assertTrue(chunks.any { it.text.contains("第 400 段") })
+    }
 }

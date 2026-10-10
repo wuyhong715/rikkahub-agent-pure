@@ -72,7 +72,7 @@ class WorkspaceLibrarySource(
         var embedded = 0
 
         for (doc in docs) {
-            val fresh = TextChunker.chunk(doc.text, ChunkSpec(mode = doc.chunkMode))
+            val fresh = TextChunker.chunk(doc.text, ChunkSpec(mode = doc.chunkMode).fitting(model.contextTokens))
             if (fresh.isEmpty()) {
                 skipped++
                 continue

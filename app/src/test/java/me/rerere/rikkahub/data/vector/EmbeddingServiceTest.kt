@@ -123,6 +123,9 @@ class EmbeddingServiceTest {
         assertEquals(ASYMMETRIC_FILE, model.fileName)
         assertEquals(ASYMMETRIC_FILE, model.modelId)
         assertEquals(DIM, model.dim)
+        // The window comes from the model, not from the request: what a caller has to size its
+        // inputs by is what the runtime actually created.
+        assertEquals(8192, model.contextTokens)
     }
 
     private companion object {
