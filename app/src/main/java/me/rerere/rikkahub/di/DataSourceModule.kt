@@ -144,11 +144,20 @@ val dataSourceModule = module {
         )
     }
     single {
+        val appContext: Context = get()
+        val settingsStore: SettingsStore = get()
         me.rerere.rikkahub.data.vector.LibraryIndexCoordinator(
             scope = get<me.rerere.rikkahub.AppScope>(),
             embeddings = get(),
             source = get(),
             workspaceRepository = get(),
+            // Describing an image is a request to somebody else's server, so it goes through a
+            // class that owns the user's permission for it, the model choice and the remembering;
+            // the coordinator only decides when a picture is worth asking about.
+            visionSummary = me.rerere.rikkahub.data.ai.LibraryImageVision(
+                settingsStore = settingsStore,
+                cache = me.rerere.rikkahub.data.vector.ImageSummaryCache(appContext),
+            )::describe,
         )
     }
 

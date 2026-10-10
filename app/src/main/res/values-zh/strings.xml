@@ -1252,6 +1252,8 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_model_page_prompt_translation">翻译</string>
   <string name="setting_model_page_prompt_title">标题生成</string>
   <string name="setting_model_page_prompt_suggestion">聊天回复建议</string>
+  <string name="setting_model_page_prompt_library_image">图片描述（文件库）</string>
+  <string name="setting_model_page_library_image_prompt_desc">图片会附在这段提示词上；请让它描述得便于以后搜索。</string>
   <string name="setting_model_page_prompt_ocr">OCR识别</string>
   <string name="setting_model_page_prompt_compress">上下文压缩</string>
   <string name="setting_display_page_bubble_opacity_title">气泡不透明度</string>
@@ -2555,6 +2557,11 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_page_index_rebuild">知识库索引</string>
   <string name="assistant_page_library">文件库</string>
   <string name="assistant_page_library_desc">对工作区里的某个目录做语义检索：代码、笔记、文档（PDF、Word、PPT、EPUB）和图片（截图、带文字的照片，由端侧文字识别读出）。后台建立索引，模型会得到一个 library_search 工具，按内容而不是按文件名去找。</string>
+  <string name="assistant_page_library_image_summary">用视觉模型描述图片</string>
+  <string name="assistant_page_library_image_summary_on">文件库里的图片会发送到 %1$s 生成描述。</string>
+  <string name="assistant_page_library_image_summary_off">关闭中。开启后，文件库里的每张图片会发送到 %1$s 一次，以便按画面内容被搜到。</string>
+  <string name="assistant_page_library_image_summary_no_model">先选一个能看图的模型：设置 → 模型 → OCR 模型。</string>
+  <string name="assistant_page_library_image_summary_not_vision">%1$s 没有「图片」输入模态，请先在它的模态里勾上。</string>
   <string name="assistant_page_library_dir">文件库目录</string>
   <string name="assistant_page_library_no_workspace">未绑定工作区</string>
   <string name="assistant_page_library_no_workspace_desc">这个助手还没绑定工作区。文件库在工作区里面——先绑定工作区，再选目录。</string>

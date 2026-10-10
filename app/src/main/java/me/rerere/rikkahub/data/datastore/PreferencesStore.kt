@@ -35,6 +35,7 @@ import me.rerere.ai.provider.ProviderSetting
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.ai.AssistantResolver
 import me.rerere.rikkahub.data.ai.mcp.McpServerConfig
+import me.rerere.rikkahub.data.ai.prompts.DEFAULT_LIBRARY_IMAGE_PROMPT
 import me.rerere.rikkahub.data.gemini.DENIED_MODEL_IDS
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_COMPRESS_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_OCR_PROMPT
@@ -206,6 +207,8 @@ class SettingsStore(
         val EMBEDDING_MODEL_FILE = stringPreferencesKey("embedding_model_file")
         val EMBEDDING_BACKEND = stringPreferencesKey("embedding_backend")
         val EMBEDDING_CLOUD_MODEL = stringPreferencesKey("embedding_cloud_model")
+        val LIBRARY_IMAGE_SUMMARY = booleanPreferencesKey("library_image_summary")
+        val LIBRARY_IMAGE_PROMPT = stringPreferencesKey("library_image_prompt")
         val COMPRESS_MODEL = stringPreferencesKey("compress_model")
         val COMPRESS_PROMPT = stringPreferencesKey("compress_prompt")
         val ENABLE_AUTO_COMPACTION = booleanPreferencesKey("enable_auto_compaction")
@@ -333,6 +336,8 @@ class SettingsStore(
                 preferences[EMBEDDING_MODEL_FILE] = settings.embeddingModelFile
                 preferences[EMBEDDING_BACKEND] = settings.embeddingBackend
                 preferences[EMBEDDING_CLOUD_MODEL] = settings.embeddingCloudModel
+                preferences[LIBRARY_IMAGE_SUMMARY] = settings.libraryImageSummary
+                preferences[LIBRARY_IMAGE_PROMPT] = settings.libraryImagePrompt
                 preferences[COMPRESS_MODEL] = settings.compressModelId.toString()
                 preferences[COMPRESS_PROMPT] = settings.compressPrompt
                 preferences[ENABLE_AUTO_COMPACTION] = settings.enableAutoCompaction
@@ -452,6 +457,8 @@ class SettingsStore(
                 embeddingModelFile = preferences[EMBEDDING_MODEL_FILE] ?: "",
                 embeddingBackend = preferences[EMBEDDING_BACKEND] ?: CloudEmbeddingRules.BACKEND_LOCAL,
                 embeddingCloudModel = preferences[EMBEDDING_CLOUD_MODEL] ?: "",
+                libraryImageSummary = preferences[LIBRARY_IMAGE_SUMMARY] ?: false,
+                libraryImagePrompt = preferences[LIBRARY_IMAGE_PROMPT] ?: DEFAULT_LIBRARY_IMAGE_PROMPT,
                 compressModelId = preferences[COMPRESS_MODEL]?.let { runCatching { Uuid.parse(it) }.getOrNull() } ?: DEFAULT_AUTO_MODEL_ID,
                 compressPrompt = preferences[COMPRESS_PROMPT] ?: DEFAULT_COMPRESS_PROMPT,
                 assistantId = preferences[SELECT_ASSISTANT]?.let { runCatching { Uuid.parse(it) }.getOrNull() }
@@ -1101,6 +1108,24 @@ data class Settings(
      * model that has been deleted resolves to nothing rather than to whatever else is around.
      */
     val embeddingCloudModel: String = "",
+    /**
+     * Whether the file library may ask a vision model what its images show.
+     *
+     * Off by default, and a switch of its own rather than "a vision model is configured": the same
+     * model is already set up on many installs for chat attachments, and turning the library on
+     * must not quietly start uploading the pictures it walks past. On, every image of the library
+     * is sent to that model's provider once - the answer is remembered, so an unchanged file is
+     * never sent twice.
+     */
+    val libraryImageSummary: Boolean = false,
+    /**
+     * The question the library asks about an image, when [libraryImageSummary] is on.
+     *
+     * Its own prompt rather than [ocrPrompt]: that one exists to hand a chat model the text of a
+     * picture the user just sent, and this one asks for something that can be *found* later. Two
+     * callers, two questions, and the cache is keyed by the question as well as the model.
+     */
+    val libraryImagePrompt: String = DEFAULT_LIBRARY_IMAGE_PROMPT,
 ) {
     companion object {
         // 构造一个用于初始化的settings, 但它不能用于保存，防止使用初始值存储

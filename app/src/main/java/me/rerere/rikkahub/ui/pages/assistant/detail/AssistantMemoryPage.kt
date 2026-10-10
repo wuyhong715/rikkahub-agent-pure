@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.pages.assistant.detail
 
+import me.rerere.ai.provider.Modality
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowRight01
 import me.rerere.hugeicons.stroke.PencilEdit01
@@ -47,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEach
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantMemory
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
@@ -489,6 +491,53 @@ private fun AssistantMemoryContent(
                             )
                         },
                         onClick = { showLibraryDirPicker = true },
+                    )
+                    val visionModel = settings.findModelById(settings.ocrModelId)
+                    val visionCanSee =
+                        visionModel?.inputModalities?.contains(Modality.IMAGE) == true
+                    item(
+                        headlineContent = {
+                            Text(stringResource(R.string.assistant_page_library_image_summary))
+                        },
+                        supportingContent = {
+                            val name = visionModel?.displayName?.ifBlank { visionModel.modelId }.orEmpty()
+                            Text(
+                                when {
+                                    visionModel == null -> stringResource(
+                                        R.string.assistant_page_library_image_summary_no_model
+                                    )
+
+                                    !visionCanSee -> stringResource(
+                                        R.string.assistant_page_library_image_summary_not_vision,
+                                        name,
+                                    )
+
+                                    settings.libraryImageSummary -> stringResource(
+                                        R.string.assistant_page_library_image_summary_on,
+                                        name,
+                                    )
+
+                                    else -> stringResource(
+                                        R.string.assistant_page_library_image_summary_off,
+                                        name,
+                                    )
+                                }
+                            )
+                        },
+                        trailingContent = {
+                            Switch(
+                                checked = settings.libraryImageSummary && visionCanSee,
+                                enabled = visionCanSee,
+                                onCheckedChange = { on ->
+                                    scope.launch {
+                                        settingsStore.update { it.copy(libraryImageSummary = on) }
+                                    }
+                                    // Turned on, the pictures already in the library are worth
+                                    // describing now rather than in five minutes.
+                                    libraryIndex.requestSync(assistant, minIntervalMs = 0L)
+                                },
+                            )
+                        },
                     )
                     item(
                         headlineContent = { Text(stringResource(R.string.assistant_page_library_index)) },
