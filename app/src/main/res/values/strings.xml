@@ -116,6 +116,10 @@
   <string name="assistant_page_embedding_model">Embedding model</string>
   <string name="assistant_page_embedding_model_desc">Searches the knowledge base by meaning. One model is loaded at a time; installing the recommended file is enough, but a specific one can be pinned here when several are installed.</string>
   <string name="assistant_page_embedding_model_auto">Automatic (recommended)</string>
+  <string name="assistant_page_embedding_suggested">Available to download</string>
+  <string name="assistant_page_embedding_download">Download</string>
+  <string name="assistant_page_embedding_downloading">Downloading %1$d%%</string>
+  <string name="assistant_page_embedding_size_mb">%1$d MB · %2$d-dim</string>
   <string name="assistant_page_index_rebuild">Knowledge base index</string>
   <string name="assistant_page_index_rebuild_action">Rebuild</string>
   <string name="assistant_page_index_running">Indexing…</string>

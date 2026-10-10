@@ -92,7 +92,11 @@ val dataSourceModule = module {
         val appContext: Context = get()
         val settings: SettingsStore = get()
         me.rerere.rikkahub.data.vector.EmbeddingService(
-            modelsDir = { me.rerere.locallm.ModelInstall.localModelsDir(appContext) },
+            // The llama.cpp directory, not `local-models/` itself: downloads and imports write
+            // to `local-models/llamacpp/`, so listing the root found only the two subdirectories
+            // and no model was ever seen. EmbeddingModelFiles is the one place this is spelled
+            // out, and its test pins it to ModelInstall.targetFile's directory.
+            modelsDir = { me.rerere.rikkahub.data.vector.EmbeddingModelFiles.dir(appContext) },
             configuredFileName = {
                 settings.settingsFlow.value.embeddingModelFile.takeIf { it.isNotBlank() }
             },

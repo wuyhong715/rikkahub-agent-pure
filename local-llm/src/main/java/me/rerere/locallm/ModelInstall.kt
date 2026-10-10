@@ -81,12 +81,24 @@ object ModelInstall {
         return withoutQuery.substringAfterLast('/')
     }
 
-    fun targetFile(baseDir: File, runtime: LocalRuntime, fileName: String): File {
+    fun targetFile(baseDir: File, runtime: LocalRuntime, fileName: String): File =
+        File(runtimeDir(baseDir, runtime), fileName)
+
+    /**
+     * The directory one runtime's files live in: `local-models/<runtime>/`.
+     *
+     * The single place that knows this. Every writer used to spell the subdirectory out itself,
+     * and the embedding lookup did not - it listed `local-models/` itself, which contains only
+     * the runtime directories and therefore never a `.gguf`. A reader and a writer that compute
+     * the same path separately will eventually disagree; this is the one they now share, and
+     * [me.rerere.rikkahub.data.vector.EmbeddingModelFiles] is the reader's side of it.
+     */
+    fun runtimeDir(baseDir: File, runtime: LocalRuntime): File {
         val sub = when (runtime) {
             LocalRuntime.LiteRT -> "litert"
             LocalRuntime.LlamaCpp -> "llamacpp"
         }
-        return File(File(baseDir, sub), fileName)
+        return File(baseDir, sub).apply { mkdirs() }
     }
 
     fun localModelsDir(context: Context): File =

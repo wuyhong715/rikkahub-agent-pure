@@ -2539,6 +2539,10 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_page_embedding_model">向量模型</string>
   <string name="assistant_page_embedding_model_desc">按“语义”检索知识库。同一时刻只加载一个模型；装上推荐的那份即可，装有多份时可在此指定。</string>
   <string name="assistant_page_embedding_model_auto">自动（推荐）</string>
+  <string name="assistant_page_embedding_suggested">可下载的模型</string>
+  <string name="assistant_page_embedding_download">下载</string>
+  <string name="assistant_page_embedding_downloading">下载中 %1$d%%</string>
+  <string name="assistant_page_embedding_size_mb">%1$d MB · %2$d 维</string>
   <string name="assistant_page_index_rebuild">知识库索引</string>
   <string name="assistant_page_index_rebuild_action">重建</string>
   <string name="assistant_page_index_running">正在建立索引…</string>

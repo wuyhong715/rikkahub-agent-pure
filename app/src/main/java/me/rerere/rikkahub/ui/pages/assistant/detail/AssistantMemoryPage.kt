@@ -60,9 +60,9 @@ import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.workspace.WorkspaceStorageArea
 import androidx.compose.foundation.clickable
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.RadioButton
 import androidx.compose.ui.platform.LocalContext
-import me.rerere.locallm.ModelInstall
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.vector.MemoryIndexCoordinator
 import org.koin.androidx.compose.koinViewModel
@@ -150,15 +150,10 @@ private fun AssistantMemoryContent(
     val indexStatus by memoryIndex.status.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var showEmbeddingModelPicker by remember { mutableStateOf(false) }
-    // Read when the picker opens rather than held in state: the list is the installed files, and
-    // the user may well install another one and come straight back.
-    val installedEmbeddingFiles = remember(showEmbeddingModelPicker) {
-        ModelInstall.localModelsDir(context)
-            .listFiles { file -> file.isFile && file.name.endsWith(".gguf", ignoreCase = true) }
-            ?.map { it.name }
-            ?.sorted()
-            .orEmpty()
-    }
+    val embeddingVm: EmbeddingModelViewModel = koinViewModel()
+    val embeddingInstalled by embeddingVm.installed.collectAsStateWithLifecycle()
+    val embeddingDownload by embeddingVm.download.collectAsStateWithLifecycle()
+    val embeddingError by embeddingVm.error.collectAsStateWithLifecycle()
     val indexStatusText = when {
         indexStatus.running -> stringResource(R.string.assistant_page_index_running)
         indexStatus.lastError != null ->
@@ -410,7 +405,10 @@ private fun AssistantMemoryContent(
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 },
-                onClick = { showEmbeddingModelPicker = true },
+                onClick = {
+                    embeddingVm.refresh()
+                    showEmbeddingModelPicker = true
+                },
             )
             item(
                 headlineContent = { Text(stringResource(R.string.assistant_page_index_rebuild)) },
@@ -522,37 +520,103 @@ private fun AssistantMemoryContent(
             onDismissRequest = { showEmbeddingModelPicker = false },
             title = { Text(stringResource(R.string.assistant_page_embedding_model)) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
                     Text(
                         text = stringResource(R.string.assistant_page_embedding_model_desc),
                         style = MaterialTheme.typography.bodySmall,
                     )
-                    // "" is the automatic choice; the rest are the GGUF files already on disk.
-                    listOf("").plus(installedEmbeddingFiles).forEach { candidate ->
-                        Row(
+                    EmbeddingChoiceRow(
+                        label = stringResource(R.string.assistant_page_embedding_model_auto),
+                        selected = settings.embeddingModelFile.isEmpty(),
+                        onClick = {
+                            scope.launch { settingsStore.update { it.copy(embeddingModelFile = "") } }
+                            showEmbeddingModelPicker = false
+                        },
+                    )
+                    embeddingInstalled.forEach { fileName ->
+                        EmbeddingChoiceRow(
+                            label = fileName,
+                            selected = settings.embeddingModelFile == fileName,
+                            onClick = {
+                                scope.launch { settingsStore.update { it.copy(embeddingModelFile = fileName) } }
+                                showEmbeddingModelPicker = false
+                            },
+                        )
+                    }
+
+                    // The curated models, for a fresh install: pasting a HuggingFace URL into the
+                    // local-model page works, but it asks the user to know one.
+                    val downloadable = embeddingVm.downloadable
+                    if (downloadable.isNotEmpty()) {
+                        Text(
+                            text = stringResource(R.string.assistant_page_embedding_suggested),
+                            style = MaterialTheme.typography.labelMedium,
+                            modifier = Modifier.padding(top = 10.dp),
+                        )
+                        downloadable.forEach { entry ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = entry.displayName,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                    )
+                                    Text(
+                                        text = stringResource(
+                                            R.string.assistant_page_embedding_size_mb,
+                                            (entry.sizeBytes / 1_000_000L).toInt(),
+                                            entry.dim,
+                                        ),
+                                        style = MaterialTheme.typography.bodySmall,
+                                    )
+                                }
+                                TextButton(
+                                    onClick = { embeddingVm.download(entry) },
+                                    enabled = embeddingDownload == null,
+                                ) {
+                                    Text(stringResource(R.string.assistant_page_embedding_download))
+                                }
+                            }
+                        }
+                    }
+
+                    embeddingDownload?.let { inFlight ->
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable {
-                                    scope.launch {
-                                        settingsStore.update { it.copy(embeddingModelFile = candidate) }
-                                    }
-                                    showEmbeddingModelPicker = false
-                                }
-                                .padding(vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                .padding(top = 10.dp),
                         ) {
-                            RadioButton(
-                                selected = settings.embeddingModelFile == candidate,
-                                onClick = null,
-                            )
                             Text(
-                                text = candidate.ifEmpty {
-                                    stringResource(R.string.assistant_page_embedding_model_auto)
-                                },
-                                style = MaterialTheme.typography.bodyMedium,
+                                text = stringResource(
+                                    R.string.assistant_page_embedding_downloading,
+                                    inFlight.percent,
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
                             )
+                            LinearProgressIndicator(
+                                progress = { inFlight.percent / 100f },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            TextButton(onClick = { embeddingVm.cancel() }) {
+                                Text(stringResource(R.string.cancel))
+                            }
                         }
+                    }
+
+                    embeddingError?.let { message ->
+                        Text(
+                            text = message,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(top = 10.dp),
+                        )
                     }
                 }
             },
@@ -582,6 +646,25 @@ private fun AssistantMemoryContent(
             )
         }
     )
+}
+
+@Composable
+private fun EmbeddingChoiceRow(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        RadioButton(selected = selected, onClick = null)
+        Text(text = label, style = MaterialTheme.typography.bodyMedium)
+    }
 }
 
 @Composable

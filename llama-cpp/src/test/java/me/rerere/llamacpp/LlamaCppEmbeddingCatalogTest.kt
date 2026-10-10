@@ -1,6 +1,7 @@
 package me.rerere.llamacpp
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -10,6 +11,32 @@ import org.junit.Test
  * picker entry that lies about the model it installs.
  */
 class LlamaCppEmbeddingCatalogTest {
+
+    /**
+     * The exact repository, file name and byte size of every curated entry.
+     *
+     * Read off the HuggingFace API on 2026-10-10, and locked here because nothing else in the
+     * build would notice a wrong one: a mistyped repo id or file name is not a compile error and
+     * not a failed unit test, it is a 404 on the user's first download - after they have already
+     * waited for it. Update these numbers and the entry together, against the live API, or not at
+     * all.
+     */
+    @Test
+    fun `the curated files are the ones the live repositories serve`() {
+        val verified = mapOf(
+            // repo -> (file, bytes)
+            "ggml-org/embeddinggemma-2-GGUF" to ("embeddinggemma-2-Q8_0.gguf" to 309_855_456L),
+            "unsloth/embeddinggemma-2-GGUF" to ("embeddinggemma-2-UD-Q4_K_XL.gguf" to 175_673_856L),
+        )
+
+        LlamaCppEmbeddingCatalog.ENTRIES.forEach { entry ->
+            val expected = verified[entry.repo]
+            assertNotNull("unverified repository in the catalog: ${entry.repo}", expected)
+            assertEquals(expected!!.first, entry.file)
+            assertEquals(expected.second, entry.sizeBytes)
+        }
+        assertEquals(verified.keys, LlamaCppEmbeddingCatalog.ENTRIES.map { it.repo }.toSet())
+    }
 
     @Test
     fun `every entry points at a gguf file`() {
