@@ -176,7 +176,15 @@ class LiteRtVisionUnavailableException(
  * A single [mutex] serialises all access. The mutex is held for the full duration of each
  * inference, so [LoadedModel.processed] is only ever touched by one coroutine at a time.
  */
-class LiteRtRuntime(private val context: Context) {
+class LiteRtRuntime(
+    private val context: Context,
+    /**
+     * SOC_FAMILY of the installed flavour. Gates whether this build may ever answer "QNN":
+     * see [me.rerere.locallm.npu.NpuRuntimePlan]. Defaults to "generic" so a caller that
+     * forgets it under-promises instead of reaching for a vendor runtime.
+     */
+    private val socFamily: String = "generic",
+) {
 
     private val mutex = Mutex()
     private var loaded: LoadedModel? = null
@@ -451,7 +459,7 @@ class LiteRtRuntime(private val context: Context) {
         val requestedAccel = if (forceCpu) "CPU"
         else sessionFallbackAccelerator
             ?: preferredAccel
-            ?: AcceleratorProbe.probeLiteRt(context)
+            ?: AcceleratorProbe.probeLiteRt(context, socFamily = socFamily)
         // A prior run on this accelerator took the process down mid-inference. There is no
         // safe way to retry it, so stay on CPU until the SDK version changes.
         val accel = if (crashedPreviously(modelPath, requestedAccel)) {
