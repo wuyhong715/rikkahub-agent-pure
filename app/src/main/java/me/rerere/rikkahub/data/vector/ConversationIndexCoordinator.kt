@@ -281,6 +281,8 @@ class ConversationIndexCoordinator(
             ConversationSearchResult(
                 conversationId = hit.conversationId,
                 messageId = hit.messageId,
+                nodeId = nodeIdOf(conversation, hit.messageId),
+                assistantId = conversation?.assistantId?.toString().orEmpty(),
                 title = conversation?.title?.takeIf { it.isNotBlank() } ?: "Untitled",
                 date = dateOf(conversation),
                 score = hit.score,
@@ -299,6 +301,18 @@ class ConversationIndexCoordinator(
     private fun dateOf(conversation: Conversation?): String {
         val millis = conversation?.updateAt?.toEpochMilli() ?: return ""
         return Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).toLocalDate().toString()
+    }
+
+    /**
+     * The node a hit's message lives in, or empty when it cannot be located.
+     *
+     * The index keys a message by id while the chat page navigates by node, and neither is
+     * derivable from the other without the conversation — which this is the one place to already
+     * have open. A message that has since been edited out of its node simply yields no target.
+     */
+    private fun nodeIdOf(conversation: Conversation?, messageId: String): String {
+        val parsed = runCatching { Uuid.parse(messageId) }.getOrNull() ?: return ""
+        return conversation?.getMessageNodeByMessageId(parsed)?.id?.toString().orEmpty()
     }
 
     companion object {

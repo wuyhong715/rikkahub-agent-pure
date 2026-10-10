@@ -2,7 +2,6 @@ package me.rerere.rikkahub.ui.pages.search
 
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Refresh01
-import me.rerere.hugeicons.stroke.Sorting01
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,12 +23,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -45,24 +41,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
 import me.rerere.rikkahub.R
-import me.rerere.rikkahub.data.db.fts.MessageSearchResult
-import me.rerere.rikkahub.data.db.fts.MessageSearchSort
+import me.rerere.rikkahub.data.vector.ConversationSearchResult
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.navigateToChatPage
-import me.rerere.rikkahub.utils.plus
-import me.rerere.rikkahub.utils.toLocalDateTime
 import org.koin.androidx.compose.koinViewModel
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 import kotlin.uuid.Uuid
 
 @Composable
@@ -105,10 +93,6 @@ fun SearchPage(vm: SearchVM = koinViewModel()) {
                 navigationIcon = { BackButton() },
                 title = { Text(stringResource(R.string.search_page_title)) },
                 actions = {
-                    SortMenuButton(
-                        current = vm.sortOrder,
-                        onSortChange = { vm.onSortChange(it) },
-                    )
                     IconButton(
                         onClick = { showRebuildDialog = true },
                         enabled = !vm.isRebuilding,
@@ -185,13 +169,8 @@ fun SearchPage(vm: SearchVM = koinViewModel()) {
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
                         ) {
-                            val (current, total) = vm.rebuildProgress
                             Text(
-                                text = if (total > 0) stringResource(
-                                    R.string.search_page_rebuilding,
-                                    current,
-                                    total
-                                ) else stringResource(R.string.search_page_rebuilding_simple),
+                                text = stringResource(R.string.search_page_rebuilding_simple),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -204,6 +183,21 @@ fun SearchPage(vm: SearchVM = koinViewModel()) {
                         ) {
                             Text(
                                 text = stringResource(R.string.search_page_hint),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    vm.needsEmbeddingModel -> {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 32.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = stringResource(R.string.search_page_needs_model),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -236,7 +230,11 @@ fun SearchPage(vm: SearchVM = koinViewModel()) {
                                         navigateToChatPage(
                                             navController,
                                             chatId = Uuid.parse(result.conversationId),
-                                            nodeId = Uuid.parse(result.nodeId),
+                                            // Empty when the message no longer sits in any
+                                            // node: open the conversation instead of refusing
+                                            // the tap.
+                                            nodeId = runCatching { Uuid.parse(result.nodeId) }
+                                                .getOrNull(),
                                         )
                                     }
                                 )
@@ -250,85 +248,14 @@ fun SearchPage(vm: SearchVM = koinViewModel()) {
 }
 
 @Composable
-private fun SortMenuButton(
-    current: MessageSearchSort,
-    onSortChange: (MessageSearchSort) -> Unit,
-) {
-    var expanded by remember { mutableStateOf(false) }
-    Box {
-        IconButton(onClick = { expanded = true }) {
-            Icon(
-                HugeIcons.Sorting01,
-                contentDescription = stringResource(R.string.search_page_sort)
-            )
-        }
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-        ) {
-            MessageSearchSort.entries.forEach { sort ->
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            stringResource(
-                                when (sort) {
-                                    MessageSearchSort.RELEVANCE -> R.string.search_page_sort_relevance
-                                    MessageSearchSort.NEWEST_FIRST -> R.string.search_page_sort_newest
-                                    MessageSearchSort.OLDEST_FIRST -> R.string.search_page_sort_oldest
-                                }
-                            )
-                        )
-                    },
-                    leadingIcon = {
-                        RadioButton(
-                            selected = sort == current,
-                            onClick = null,
-                        )
-                    },
-                    onClick = {
-                        expanded = false
-                        onSortChange(sort)
-                    },
-                )
-            }
-        }
-    }
-}
-
-@Composable
 private fun SearchResultItem(
-    result: MessageSearchResult,
+    result: ConversationSearchResult,
     onClick: () -> Unit,
 ) {
-    val highlightColor = MaterialTheme.colorScheme.tertiaryContainer
     val untitled = stringResource(R.string.search_page_untitled)
-    val snippetText = buildAnnotatedString {
-        val snippet = result.snippet
-        var index = 0
-        while (index < snippet.length) {
-            val start = snippet.indexOf('[', index)
-            if (start == -1) {
-                append(snippet.substring(index))
-                break
-            }
-            if (start > index) {
-                append(snippet.substring(index, start))
-            }
-            val end = snippet.indexOf(']', start + 1)
-            if (end == -1) {
-                append(snippet.substring(start))
-                break
-            }
-            val matched = snippet.substring(start + 1, end)
-            withStyle(SpanStyle(background = highlightColor)) {
-                append(matched)
-            }
-            index = end + 1
-        }
-    }
-    val formattedTime = remember(result.updateAt) {
-        result.updateAt.toLocalDateTime()
-    }
+    // No highlighting: no word matched. The passage *is* the answer here, and marking up
+    // substrings of it would be inventing evidence for a match that was never made.
+    val passage = remember(result.text) { result.text.trim().take(SEARCH_SNIPPET_CHARS) }
 
     Surface(
         onClick = onClick,
@@ -347,15 +274,21 @@ private fun SearchResultItem(
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Text(
-                text = snippetText,
+                text = passage,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Text(
-                text = formattedTime,
+                text = result.date,
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
 }
+
+/**
+ * How much of a hit's message a result shows. A message in the index can be ten thousand
+ * characters long, and a list of twenty of those is not a list.
+ */
+private const val SEARCH_SNIPPET_CHARS = 400

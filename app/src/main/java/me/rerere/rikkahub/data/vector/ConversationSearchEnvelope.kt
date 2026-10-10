@@ -24,6 +24,20 @@ data class ConversationSearchHit(
 data class ConversationSearchResult(
     val conversationId: String,
     val messageId: String,
+    /**
+     * The node holding [messageId], so a caller can open the conversation *at* this message. Empty
+     * when the message cannot be located — the search page then opens the conversation without a
+     * target rather than failing the tap.
+     */
+    val nodeId: String,
+    /**
+     * The assistant that owns the conversation, for the search page's scope filter.
+     *
+     * Resolved here rather than stored in the index for the same reason as the title: the index is
+     * deliberately not per-assistant (a message belongs to a conversation, and the conversation is
+     * what knows), so filtering by assistant is a lookup, not an index key.
+     */
+    val assistantId: String,
     val title: String,
     val date: String,
     val score: Float,
@@ -50,9 +64,10 @@ data class ConversationSearchOutcome(
 /**
  * The JSON `conversation_search` answers with.
  *
- * A sibling of the other envelopes rather than a shared shape, because the fallback differs: the
- * library points at `find_files`, cold memory at `memory_index`, and history has nothing to fall
- * back on - which is why its "unavailable" text has to explain how to fix it instead.
+ * A sibling of the other envelopes rather than a shared shape, because the payloads differ: history
+ * answers with conversations and messages, cold memory with files. What "unavailable" means does
+ * not differ any more - none of the three has a keyword path behind it, so all three say the same
+ * thing: install the model.
  */
 object ConversationSearchEnvelope {
 
