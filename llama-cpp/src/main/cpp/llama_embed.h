@@ -41,7 +41,9 @@ struct EmbedModelFacts {
     bool has_encoder = false;
     bool has_decoder = false;
 
-    /// Context length the model was trained on, for a friendlier "this text is too long".
+    /// Context length the model was trained on. It is both the friendlier "this text is too long"
+    /// number the caller reports and the ceiling the engine clamps its own context to, because a
+    /// position past it is not an error llama.cpp can be caught returning (see the constructor).
     int32_t n_ctx_train = 0;
 };
 
@@ -80,6 +82,21 @@ public:
         }
         if (n_ctx_ == 0) {
             throw std::runtime_error("embedding context size must be positive");
+        }
+
+        // Never build a context larger than the model was trained for.
+        //
+        // The window is not a preference. A BERT with a 512-token window has 512 position
+        // embeddings, and running it at position 600 does not trip a check that can be caught:
+        // ggml asserts inside ggml_get_rows and the process dies, taking the whole app with it.
+        // Clamping here makes an over-long text fall through to the token-count refusal below,
+        // which is an error the caller can report instead of a crash it cannot.
+        //
+        // It only ever lowers the number, so a model whose window is larger than the requested
+        // context (which is all of them except the small ones) behaves exactly as before.
+        const int32_t trained = llama_model_n_ctx_train(model_);
+        if (trained > 0 && static_cast<uint32_t>(trained) < n_ctx_) {
+            n_ctx_ = static_cast<uint32_t>(trained);
         }
 
         llama_context_params params = llama_context_default_params();

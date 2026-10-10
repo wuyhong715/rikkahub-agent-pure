@@ -159,6 +159,28 @@ object LlamaCppEmbeddingCatalog {
             queryPrefix = "Instruct: Given a web search query, retrieve relevant passages that answer the query\nQuery: ",
             tags = listOf("multilingual", "long-context", "chinese", "small"),
         ),
+        LlamaCppEmbeddingEntry(
+            displayName = "bge-small-zh-v1.5",
+            // The tiny one: 26 MB, Chinese-first, and the only entry that is comfortable on a
+            // device that cannot spare a gigabyte. Punches far above its weight on Chinese notes.
+            //
+            // Its trained window is 512 tokens, which is why this entry could not ship before the
+            // chunk budget became model-aware: a BERT run past its position embeddings does not
+            // report anything, it aborts the process. Chunks are sized from the window now
+            // (ChunkSpec.fitting), so a note indexed with this model is cut into ~256-character
+            // pieces instead of ~1200.
+            repo = "CompendiumLabs/bge-small-zh-v1.5-gguf",
+            file = "bge-small-zh-v1.5-q8_0.gguf",
+            sizeBytes = 26_472_640L,
+            dim = 512,
+            pooling = "cls",
+            minMemGb = 2,
+            contextTokens = 512,
+            // BGE's Chinese models want a retrieval instruction on the query and nothing on the
+            // passage. It is the upstream recommendation, not a guess.
+            queryPrefix = "为这个句子生成表示以用于检索相关文章：",
+            tags = listOf("chinese", "small"),
+        ),
     )
 
     /**

@@ -22,12 +22,12 @@ data class ChunkSpec(
      * bounded heading path, not content, and folding it into the ceiling would make the budget
      * depend on how deeply a chunk happens to be nested.
      */
-    val maxChars: Int = 1200,
+    val maxChars: Int = MAX_CHARS,
     /**
      * Characters of the previous chunk repeated at the head of the next one, so a sentence that
      * straddles a boundary is still wholly present in at least one chunk.
      */
-    val overlapChars: Int = 200,
+    val overlapChars: Int = OVERLAP_CHARS,
     val mode: ChunkingMode = ChunkingMode.PLAIN,
     /**
      * Prefix each chunk with the Markdown heading path it sits under (`Deploy > Release`).
@@ -39,6 +39,51 @@ data class ChunkSpec(
     init {
         require(maxChars > 0) { "maxChars must be positive" }
         require(overlapChars >= 0 && overlapChars < maxChars) { "overlapChars must be in [0, maxChars)" }
+    }
+
+    /**
+     * The same chunking, sized for a model whose window is [contextTokens] tokens.
+     *
+     * The budget has to come from the model, because models do not agree on a window and the
+     * runtime refuses a text that does not fit rather than truncating it. The defaults above were
+     * chosen when the only model was an 8K one; a 512-token model needs chunks roughly five times
+     * smaller, and the alternative to giving it them is that its documents do not index.
+     *
+     * Never enlarges the budget: a model with a window big enough for [maxChars] chunks exactly
+     * as it did before, so this is a no-op for every model that was already there.
+     */
+    fun fitting(contextTokens: Int): ChunkSpec {
+        val budget = maxCharsFor(contextTokens)
+        if (budget >= maxChars) return this
+        // Kept proportional rather than fixed: 200 characters of overlap is a sixth of the
+        // default budget, and a fixed overlap against a 256-character budget would be almost
+        // the whole chunk.
+        return copy(maxChars = budget, overlapChars = budget * overlapChars / maxChars)
+    }
+
+    companion object {
+        /** The budget the app has always used: comfortable for an 8K-window model. */
+        const val MAX_CHARS = 1200
+        const val OVERLAP_CHARS = 200
+
+        /**
+         * Characters assumed to fit in one token, in the worst case.
+         *
+         * Two, not four: chunking here is deliberately tokenizer-free, so the assumption has to
+         * hold for the densest script the app is used in - a CJK character is one token and a
+         * rare one can be several, while an English character is a quarter of a token. Half the
+         * window in characters is therefore the largest budget that is still safe everywhere,
+         * and the cost of being conservative is only that small-window models get smaller chunks.
+         */
+        private const val MIN_CHARS_PER_TOKEN = 2
+
+        /**
+         * The character budget for a model whose window is [contextTokens] tokens, capped at
+         * [MAX_CHARS]. A window we were not told about keeps the default rather than guessing.
+         */
+        fun maxCharsFor(contextTokens: Int): Int =
+            if (contextTokens <= 0) MAX_CHARS
+            else minOf(MAX_CHARS, contextTokens / MIN_CHARS_PER_TOKEN).coerceAtLeast(1)
     }
 }
 

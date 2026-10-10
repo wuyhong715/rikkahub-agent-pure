@@ -179,6 +179,11 @@ class LlamaCppEmbedder(private val native: LlamaCppEmbedNative = RealLlamaCppEmb
          * here, never a whole file, so this is headroom over the chunk size rather than a
          * statement about the model's own context length - which the GGUF reports as
          * `n_ctx_train` and which can be far larger (EmbeddingGemma 2 declares 262 144).
+         *
+         * It is a *request*, not a guarantee: the native engine clamps the context it creates to
+         * the model's trained window, so a model that only knows 512 tokens gets 512. The window
+         * that actually applies is reported back as [LlamaCppEmbedInfo.nCtxTrain], and inputs must
+         * be sized by that.
          */
         const val DEFAULT_CONTEXT_TOKENS: Int = 2048
 

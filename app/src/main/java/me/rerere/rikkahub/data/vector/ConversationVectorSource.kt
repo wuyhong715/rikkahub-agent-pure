@@ -6,6 +6,8 @@ package me.rerere.rikkahub.data.vector
  * One document per message, keyed `<conversationId>|<messageId>`. The keyword index this replaces
  * (an FTS5 table) made the same choice, for the same reason: history search answers "where did we
  * say this", and an answer that names a conversation but not the message is only half an answer.
+ * A message may still be *several chunks* - it can be long, and no model's window is - so the
+ * document key is the message while the chunks are the message's paragraphs.
  *
  * Unlike the other sources this one is global rather than scoped: history search was never
  * per-assistant, and a user looking for what they discussed before does not care which assistant
@@ -65,16 +67,13 @@ class ConversationVectorSource(
         var embedded = 0
 
         for (doc in docs) {
-            // No chunker here: one message is one document, and a message long enough to need
-            // splitting has already been capped. Splitting it further would put a boundary in the
-            // middle of a sentence for no gain - a message is 1-3 chunks as it is.
-            val fresh = listOf(
-                TextChunk(
-                    index = 0,
-                    text = doc.text,
-                    contentHash = ContentHash.of(doc.text),
-                )
-            )
+            // One *document* per message - the doc key stays the message, so a hit still resolves
+            // to something a person can open. One *chunk* per message is not enough, though: a
+            // message may be up to MAX_MESSAGE_CHARS long, which is several times what any
+            // model's window holds, and the runtime refuses a text that does not fit rather than
+            // truncating it. The spec is sized against the loaded model, and [search] collapses a
+            // message's chunks back to its best one.
+            val fresh = TextChunker.chunk(doc.text, MESSAGE_SPEC.fitting(model.contextTokens))
             val plan = store.plan(SOURCE, doc.docKey, fresh)
             if (IndexSyncRules.isNoOp(plan)) {
                 unchanged++
@@ -122,20 +121,34 @@ class ConversationVectorSource(
         val model = embeddings.ensureLoaded()
             ?: return ConversationSearchOutcome(available = false)
         val queryVector = embeddings.embedQuery(query)
-        val result = store.search(SOURCE, model.modelId, queryVector, limit, relativeFloor)
+        // More candidates than the caller asked for: a message is several chunks, and collapsing
+        // them afterwards would otherwise quietly return fewer messages than were requested.
+        val result = store.search(
+            source = SOURCE,
+            modelId = model.modelId,
+            query = queryVector,
+            limit = limit * CHUNK_HEADROOM,
+            relativeFloor = relativeFloor,
+        )
         val models = store.modelIdsOf(SOURCE)
         return ConversationSearchOutcome(
             available = true,
-            hits = result.asHits().mapNotNull { chunk ->
-                val conversationId = ConversationSearchRules.conversationIdOf(chunk.docKey)
-                    ?: return@mapNotNull null
-                ConversationSearchHit(
-                    conversationId = conversationId,
-                    messageId = chunk.docKey.substringAfter('|'),
-                    score = chunk.score,
-                    text = chunk.text,
-                )
-            },
+            hits = result.asHits()
+                // A hit is meant to be a message, so only the best-scoring chunk of each message
+                // is kept. The list arrives sorted by score, so the first chunk of a key is its
+                // best one.
+                .distinctBy { it.docKey }
+                .take(limit)
+                .mapNotNull { chunk ->
+                    val conversationId = ConversationSearchRules.conversationIdOf(chunk.docKey)
+                        ?: return@mapNotNull null
+                    ConversationSearchHit(
+                        conversationId = conversationId,
+                        messageId = chunk.docKey.substringAfter('|'),
+                        score = chunk.score,
+                        text = chunk.text,
+                    )
+                },
             indexedMessages = store.docKeys(SOURCE).size,
             stale = models.any { it != model.modelId },
         )
@@ -149,5 +162,14 @@ class ConversationVectorSource(
 
     companion object {
         const val SOURCE = ConversationSearchRules.SOURCE
+
+        /**
+         * Messages are prose, not documents: paragraph boundaries only, and no Markdown
+         * breadcrumb, because a message that opens with `#` is not a heading.
+         */
+        private val MESSAGE_SPEC = ChunkSpec(mode = ChunkingMode.PLAIN, headingBreadcrumb = false)
+
+        /** How many chunks per message the search path assumes when sizing its candidate pool. */
+        private const val CHUNK_HEADROOM = 4
     }
 }

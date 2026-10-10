@@ -17,6 +17,12 @@ package me.rerere.rikkahub.data.vector
 class MemoryVectorSource(
     private val store: VectorIndexStore,
     private val embeddings: EmbeddingService,
+    /**
+     * How documents are cut up, before the model's own window has a say. What actually gets
+     * chunked is [ChunkSpec.fitting] of this against the loaded model - a note indexed with a
+     * 512-token model needs smaller chunks than the same note indexed with a 32K one, and the
+     * index is keyed by model, so the two can never be mixed up.
+     */
     private val chunkSpec: ChunkSpec = ChunkSpec(mode = ChunkingMode.MARKDOWN),
 ) {
 
@@ -82,7 +88,7 @@ class MemoryVectorSource(
                 skipped++
                 continue
             }
-            val fresh = TextChunker.chunk(doc.text, chunkSpec)
+            val fresh = TextChunker.chunk(doc.text, chunkSpec.fitting(model.contextTokens))
             if (fresh.isEmpty()) {
                 skipped++
                 continue
