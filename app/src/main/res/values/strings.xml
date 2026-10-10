@@ -128,6 +128,11 @@
   <string name="assistant_page_index_rebuild">Knowledge base index</string>
   <string name="assistant_page_library">File library</string>
   <string name="assistant_page_library_desc">Search a directory inside this workspace by meaning: code, notes, documents (PDF, Word, PowerPoint, EPUB) and images (screenshots and photos, read by on-device text recognition). It is indexed in the background and the model gets a library_search tool that reads their contents, not just their names.</string>
+  <string name="assistant_page_library_image_summary">Describe images with a model</string>
+  <string name="assistant_page_library_image_summary_on">Images in this library are sent to %1$s to be described.</string>
+  <string name="assistant_page_library_image_summary_off">Off. Turning this on sends each image of this library to %1$s once, so that it can be found by what it shows.</string>
+  <string name="assistant_page_library_image_summary_no_model">Choose a vision model first \u2014 Settings \u2192 Models \u2192 OCR model.</string>
+  <string name="assistant_page_library_image_summary_not_vision">%1$s has no image input \u2014 tick \u201cImage\u201d under its input modalities.</string>
   <string name="assistant_page_library_dir">Library directory</string>
   <string name="assistant_page_library_no_workspace">No workspace</string>
   <string name="assistant_page_library_no_workspace_desc">This assistant is not bound to a workspace yet. The library lives inside one — bind a workspace first, then pick a directory.</string>
@@ -1349,6 +1354,8 @@
   <string name="setting_model_page_prompt_translation">Translation</string>
   <string name="setting_model_page_prompt_title">Title Generation</string>
   <string name="setting_model_page_prompt_suggestion">Chat Reply Suggestions</string>
+  <string name="setting_model_page_prompt_library_image">Image description (file library)</string>
+  <string name="setting_model_page_library_image_prompt_desc">The image is attached to this prompt; ask for something that can be found later.</string>
   <string name="setting_model_page_prompt_ocr">OCR Recognition</string>
   <string name="setting_model_page_prompt_compress">Context Compression</string>
   <string name="setting_display_page_bubble_opacity_title">Bubble Opacity</string>

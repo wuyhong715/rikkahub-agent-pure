@@ -46,6 +46,15 @@ class LibraryIndexCoordinator(
      * its own, so the wiring in `DataSourceModule` does not have to know about the recognizer.
      */
     private val imageText: ImageTextExtractor = ImageTextExtractor(),
+    /**
+     * What a vision model says an image shows, or null when the library is not allowed to ask one.
+     *
+     * A function rather than a dependency of its own, so that this class never has to know about
+     * providers, prompts or caches: it decides *when* a picture is worth describing, and the
+     * implementation decides whether and how to ask.
+     */
+    private val visionSummary: suspend (path: String, sizeBytes: Long, file: File) -> String? =
+        { _, _, _ -> null },
 ) {
 
     /** What the settings screen shows, and what a log line is written from. */
@@ -329,11 +338,13 @@ class LibraryIndexCoordinator(
                         relative,
                     )
                     val recognised = withContext(Dispatchers.IO) { imageText.extract(file) }
-                    // An image with no text in it would otherwise never enter the index, and a file
-                    // the index has never seen is one that every later round reads first - so a
-                    // photograph of a wall would be recognised again every five minutes, forever.
-                    // Its name is the one thing it can be searched by, so that is what gets indexed.
-                    recognised.ifBlank { WorkspaceLibraryRules.placeholderForImage(candidate.name) }
+                    // The second opinion, when the user turned it on: what the picture *is*, which
+                    // is what a search for it usually has in mind and what recognition alone cannot
+                    // produce. Both halves are indexed as one passage, and when neither produced
+                    // anything the file's own name is - an image the index never records is one the
+                    // next round reads first, and now that it can be described, uploads first.
+                    val described = visionSummary(candidate.path, candidate.sizeBytes, file)
+                    ImageSummaryRules.compose(recognised, described, candidate.name)
                 }
 
                 else -> workspaceRepository.readText(workspaceId, relative)

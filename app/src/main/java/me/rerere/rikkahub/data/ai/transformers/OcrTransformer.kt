@@ -168,4 +168,55 @@ object OcrTransformer : InputMessageTransformer, KoinComponent {
         if (it is kotlinx.coroutines.CancellationException) throw it
         "[ERROR, OCR failed: $it]"
     }
+
+    /**
+     * What the vision model says about one image, or null when it could not be asked or did not
+     * answer.
+     *
+     * A second door onto the same machinery, for a caller that is not a conversation: the file
+     * library asks the same model about the same kind of image while it indexes. What it must never
+     * do is keep the *failure* - [performOcr] answers failures with strings that explain themselves
+     * to a chat model, and one of those sentences in the index would be a picture which appears to
+     * have "could not be read" written on it, stated as fact and unfindable as anything else.
+     *
+     * [prompt] is a parameter rather than read from the settings here because the two callers ask
+     * different questions - "extract the text in this" against "describe this so it can be found" -
+     * and because the caller owns the remembering: this method makes no promise about how often it
+     * is called, and the library's cache is sized for a library (see `ImageSummaryCache`) while the
+     * one below is sized for a conversation.
+     */
+    suspend fun describe(part: UIMessagePart.Image, prompt: String): String? = runCatching {
+        val settings = get<SettingsStore>().settingsFlow.value
+        val model = settings.findModelById(settings.ocrModelId)
+            ?: throw IllegalStateException("no vision model is configured")
+        val providerSetting = model.findProvider(settings.providers)
+            ?: throw IllegalStateException("the vision model's provider is gone")
+
+        val provider = get<ProviderManager>().getProviderByType(providerSetting)
+        val result = withTimeoutOrNull(OCR_TIMEOUT_MS) {
+            provider.generateText(
+                providerSetting = providerSetting,
+                messages = listOf(
+                    UIMessage.system(prompt),
+                    UIMessage(
+                        role = MessageRole.USER,
+                        parts = listOf(UIMessagePart.Image(part.url))
+                    )
+                ),
+                params = TextGenerationParams(
+                    model = model,
+                    customHeaders = model.customHeaders,
+                    customBody = model.customBodies,
+                ),
+            )
+        } ?: throw IllegalStateException("the vision model did not answer within ${OCR_TIMEOUT_MS}ms")
+
+        result.message.toText().trim().ifEmpty {
+            throw IllegalStateException("the vision model answered with nothing")
+        }
+    }.getOrElse {
+        if (it is kotlinx.coroutines.CancellationException) throw it
+        Log.w(TAG, "describe failed for ${part.url}: ${it.message}")
+        null
+    }
 }
