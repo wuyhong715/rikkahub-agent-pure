@@ -178,7 +178,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: litert_npu_runtime_libraries/qualcomm_runtime_v79/src/main/jni/arm64-v8a
-          key: npu-qairt-2.47.0.260601-htp-v79-jit
+          key: npu-qairt-2.49.0.260730-htp-v79-jit
 
       - name: Fetch Qualcomm NPU runtime libraries
         if: matrix.soc == 'snapdragon'
@@ -201,7 +201,8 @@ jobs:
           cp /tmp/npuz/qualcomm_runtime_v79/src/main/jni/arm64-v8a/libLiteRtDispatch_Qualcomm.so "$DEST/"
           cp /tmp/npuz/qualcomm_runtime_v79/src/main/jni/arm64-v8a/libLiteRtCompilerPlugin_Qualcomm.so "$DEST/"
           # Qualcomm's half: the four runtime libraries, the DSP-side skeleton, and the
-          # compiler libraries that only the jit path needs.
+          # compiler libraries that only the jit path needs. Pinned to the QAIRT release
+          # the model itself was built with, see the vendored script.
           bash litert_npu_runtime_libraries/fetch_qualcomm_library.sh
           ls -l "$DEST"
 

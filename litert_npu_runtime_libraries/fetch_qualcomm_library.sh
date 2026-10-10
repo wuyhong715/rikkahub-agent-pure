@@ -9,8 +9,8 @@ cleanup() {
 trap cleanup EXIT
 
 # LINT.IfChange(fetch_qairt_sdk_version)
-QAIRT_URL='https://softwarecenter.qualcomm.com/api/download/software/sdks/Qualcomm_AI_Runtime_Community/All/2.47.0.260601/v2.47.0.260601.zip'
-QAIRT_CONTENT_DIR='qairt/2.47.0.260601'
+QAIRT_URL='https://softwarecenter.qualcomm.com/api/download/software/sdks/Qualcomm_AI_Runtime_Community/All/2.49.0.260730/v2.49.0.260730.zip'
+QAIRT_CONTENT_DIR='qairt/2.49.0.260730'
 # LINT.ThenChange(
 #     ./fetch_qualcomm_library.sh:fetch_qairt_sdk_version,
 #     ../../../opensource_only/third_party/qairt/workspace.bzl:bazel_qairt_sdk_version,
