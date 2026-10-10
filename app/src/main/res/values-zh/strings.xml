@@ -2547,6 +2547,11 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_page_embedding_download">下载</string>
   <string name="assistant_page_embedding_downloading">下载中 %1$d%%</string>
   <string name="assistant_page_embedding_size_mb">%1$d MB · %2$d 维 · %3$s 上下文</string>
+  <string name="assistant_page_embedding_source_local">本地模型</string>
+  <string name="assistant_page_embedding_source_cloud">云端模型</string>
+  <string name="assistant_page_embedding_cloud_notice">索引内容会发送到该服务商来生成向量。</string>
+  <string name="assistant_page_embedding_cloud_none">还没有标记为「嵌入模型」的模型。到 设置 → 服务商 → 某个模型 → 类型 里标记一个。</string>
+  <string name="assistant_page_embedding_cloud_unsupported">%1$s 暂不支持——目前只能调用 OpenAI 兼容的服务商。</string>
   <string name="assistant_page_index_rebuild">知识库索引</string>
   <string name="assistant_page_library">文件库</string>
   <string name="assistant_page_library_desc">对工作区里的某个目录做语义检索：代码、笔记、文档（PDF、Word、PPT、EPUB）和图片（截图、带文字的照片，由端侧文字识别读出）。后台建立索引，模型会得到一个 library_search 工具，按内容而不是按文件名去找。</string>

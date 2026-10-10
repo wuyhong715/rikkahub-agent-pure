@@ -51,6 +51,9 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantMemory
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
+import me.rerere.rikkahub.data.vector.CloudEmbeddingModels
+import me.rerere.rikkahub.data.vector.CloudEmbeddingRules
+import me.rerere.rikkahub.data.vector.EmbeddingReadiness
 import me.rerere.rikkahub.ui.components.ai.WorkspaceCwdPickerSheet
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
@@ -577,7 +580,7 @@ private fun AssistantMemoryContent(
                 headlineContent = { Text(stringResource(R.string.assistant_page_embedding_model)) },
                 supportingContent = {
                     Text(
-                        text = settings.embeddingModelFile.ifEmpty {
+                        text = EmbeddingReadiness.label(settings).ifEmpty {
                             stringResource(R.string.assistant_page_embedding_model_auto)
                         }
                     )
@@ -748,6 +751,8 @@ private fun AssistantMemoryContent(
         )
     }
 
+    val cloudSelected = CloudEmbeddingRules.isCloud(settings.embeddingBackend)
+
     if (showEmbeddingModelPicker) {
         AlertDialog(
             onDismissRequest = { showEmbeddingModelPicker = false },
@@ -757,106 +762,170 @@ private fun AssistantMemoryContent(
                     modifier = Modifier.verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
-                    Text(
-                        text = stringResource(R.string.assistant_page_embedding_model_desc),
-                        style = MaterialTheme.typography.bodySmall,
-                    )
                     EmbeddingChoiceRow(
-                        label = stringResource(R.string.assistant_page_embedding_model_auto),
-                        selected = settings.embeddingModelFile.isEmpty(),
+                        label = stringResource(R.string.assistant_page_embedding_source_local),
+                        selected = !cloudSelected,
                         onClick = {
-                            scope.launch { settingsStore.update { it.copy(embeddingModelFile = "") } }
+                            scope.launch {
+                                settingsStore.update {
+                                    it.copy(embeddingBackend = CloudEmbeddingRules.BACKEND_LOCAL)
+                                }
+                            }
                             memoryIndex.requestSync(assistant, minIntervalMs = 0L)
-                            showEmbeddingModelPicker = false
                         },
                     )
-                    embeddingInstalled.forEach { fileName ->
+                    EmbeddingChoiceRow(
+                        label = stringResource(R.string.assistant_page_embedding_source_cloud),
+                        selected = cloudSelected,
+                        onClick = {
+                            scope.launch {
+                                settingsStore.update {
+                                    it.copy(embeddingBackend = CloudEmbeddingRules.BACKEND_CLOUD)
+                                }
+                            }
+                            memoryIndex.requestSync(assistant, minIntervalMs = 0L)
+                        },
+                    )
+                    if (cloudSelected) {
+                        Text(
+                            text = stringResource(R.string.assistant_page_embedding_cloud_notice),
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                        val cloudCandidates = remember(settings.providers) {
+                            CloudEmbeddingModels.candidates(settings.providers)
+                        }
+                        if (cloudCandidates.isEmpty()) {
+                            Text(
+                                text = stringResource(R.string.assistant_page_embedding_cloud_none),
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(top = 8.dp),
+                            )
+                        }
+                        cloudCandidates.forEach { candidate ->
+                            EmbeddingChoiceRow(
+                                label = if (candidate.supported) {
+                                    candidate.displayName
+                                } else {
+                                    stringResource(
+                                        R.string.assistant_page_embedding_cloud_unsupported,
+                                        candidate.providerName,
+                                    )
+                                },
+                                selected = settings.embeddingCloudModel == candidate.modelUuid,
+                                onClick = {
+                                    scope.launch {
+                                        settingsStore.update {
+                                            it.copy(embeddingCloudModel = candidate.modelUuid)
+                                        }
+                                    }
+                                    memoryIndex.requestSync(assistant, minIntervalMs = 0L)
+                                    showEmbeddingModelPicker = false
+                                },
+                            )
+                        }
+                    } else {
+                        Text(
+                            text = stringResource(R.string.assistant_page_embedding_model_desc),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
                         EmbeddingChoiceRow(
-                            label = fileName,
-                            selected = settings.embeddingModelFile == fileName,
+                            label = stringResource(R.string.assistant_page_embedding_model_auto),
+                            selected = settings.embeddingModelFile.isEmpty(),
                             onClick = {
-                                scope.launch { settingsStore.update { it.copy(embeddingModelFile = fileName) } }
+                                scope.launch { settingsStore.update { it.copy(embeddingModelFile = "") } }
                                 memoryIndex.requestSync(assistant, minIntervalMs = 0L)
                                 showEmbeddingModelPicker = false
                             },
                         )
-                    }
+                        embeddingInstalled.forEach { fileName ->
+                            EmbeddingChoiceRow(
+                                label = fileName,
+                                selected = settings.embeddingModelFile == fileName,
+                                onClick = {
+                                    scope.launch { settingsStore.update { it.copy(embeddingModelFile = fileName) } }
+                                    memoryIndex.requestSync(assistant, minIntervalMs = 0L)
+                                    showEmbeddingModelPicker = false
+                                },
+                            )
+                        }
 
-                    // The curated models, for a fresh install: pasting a HuggingFace URL into the
-                    // local-model page works, but it asks the user to know one.
-                    val downloadable = embeddingVm.downloadable
-                    if (downloadable.isNotEmpty()) {
-                        Text(
-                            text = stringResource(R.string.assistant_page_embedding_suggested),
-                            style = MaterialTheme.typography.labelMedium,
-                            modifier = Modifier.padding(top = 10.dp),
-                        )
-                        downloadable.forEach { entry ->
-                            Row(
+                        // The curated models, for a fresh install: pasting a HuggingFace URL into the
+                        // local-model page works, but it asks the user to know one.
+                        val downloadable = embeddingVm.downloadable
+                        if (downloadable.isNotEmpty()) {
+                            Text(
+                                text = stringResource(R.string.assistant_page_embedding_suggested),
+                                style = MaterialTheme.typography.labelMedium,
+                                modifier = Modifier.padding(top = 10.dp),
+                            )
+                            downloadable.forEach { entry ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = entry.displayName,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                        )
+                                        Text(
+                                            text = stringResource(
+                                                R.string.assistant_page_embedding_size_mb,
+                                                (entry.sizeBytes / 1_000_000L).toInt(),
+                                                entry.dim,
+                                                entry.contextLabel,
+                                            ),
+                                            style = MaterialTheme.typography.bodySmall,
+                                        )
+                                    }
+                                    TextButton(
+                                        onClick = {
+                                            embeddingVm.download(entry) {
+                                                memoryIndex.requestSync(assistant, minIntervalMs = 0L)
+                                            }
+                                        },
+                                        enabled = embeddingDownload == null,
+                                    ) {
+                                        Text(stringResource(R.string.assistant_page_embedding_download))
+                                    }
+                                }
+                            }
+                        }
+
+                        embeddingDownload?.let { inFlight ->
+                            Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
+                                    .padding(top = 10.dp),
                             ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = entry.displayName,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                    )
-                                    Text(
-                                        text = stringResource(
-                                            R.string.assistant_page_embedding_size_mb,
-                                            (entry.sizeBytes / 1_000_000L).toInt(),
-                                            entry.dim,
-                                            entry.contextLabel,
-                                        ),
-                                        style = MaterialTheme.typography.bodySmall,
-                                    )
-                                }
-                                TextButton(
-                                    onClick = {
-                                        embeddingVm.download(entry) {
-                                            memoryIndex.requestSync(assistant, minIntervalMs = 0L)
-                                        }
-                                    },
-                                    enabled = embeddingDownload == null,
-                                ) {
-                                    Text(stringResource(R.string.assistant_page_embedding_download))
+                                Text(
+                                    text = stringResource(
+                                        R.string.assistant_page_embedding_downloading,
+                                        inFlight.percent,
+                                    ),
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                                LinearProgressIndicator(
+                                    progress = { inFlight.percent / 100f },
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                TextButton(onClick = { embeddingVm.cancel() }) {
+                                    Text(stringResource(R.string.cancel))
                                 }
                             }
                         }
-                    }
 
-                    embeddingDownload?.let { inFlight ->
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 10.dp),
-                        ) {
+                        embeddingError?.let { message ->
                             Text(
-                                text = stringResource(
-                                    R.string.assistant_page_embedding_downloading,
-                                    inFlight.percent,
-                                ),
+                                text = message,
                                 style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.padding(top = 10.dp),
                             )
-                            LinearProgressIndicator(
-                                progress = { inFlight.percent / 100f },
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                            TextButton(onClick = { embeddingVm.cancel() }) {
-                                Text(stringResource(R.string.cancel))
-                            }
                         }
-                    }
-
-                    embeddingError?.let { message ->
-                        Text(
-                            text = message,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.padding(top = 10.dp),
-                        )
                     }
                 }
             },

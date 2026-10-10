@@ -100,6 +100,20 @@ val dataSourceModule = module {
             configuredFileName = {
                 settings.settingsFlow.value.embeddingModelFile.takeIf { it.isNotBlank() }
             },
+            // The cloud backend is decided per call rather than captured, so a model picked in the
+            // settings screen is in effect on the next round of indexing instead of the next
+            // launch. Null - what the backend answers while it is local, or while the chosen model
+            // cannot be called - leaves the local file in charge, which is the behaviour this had
+            // before a cloud backend existed.
+            cloudChoice = {
+                me.rerere.rikkahub.data.vector.EmbeddingReadiness.cloudModel(
+                    settings.settingsFlow.value,
+                )
+            },
+            cloud = me.rerere.rikkahub.data.vector.CloudEmbeddingClient(
+                client = get(),
+                providers = { settings.settingsFlow.value.providers },
+            ),
         )
     }
     single {

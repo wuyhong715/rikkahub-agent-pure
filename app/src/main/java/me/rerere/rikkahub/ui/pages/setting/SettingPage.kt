@@ -77,14 +77,13 @@ import me.rerere.hugeicons.stroke.Tick01
 import me.rerere.hugeicons.stroke.Tiktok
 import me.rerere.hugeicons.stroke.View
 import me.rerere.hugeicons.stroke.Wrench01
-import me.rerere.llamacpp.LlamaCppEmbeddingCatalog
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.isNotConfigured
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.vector.EmbeddingModelFiles
-import me.rerere.rikkahub.data.vector.EmbeddingModelRules
+import me.rerere.rikkahub.data.vector.EmbeddingReadiness
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.icons.DiscordIcon
@@ -127,12 +126,10 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
     // Moxw — resolved through the same rules the embedder itself uses, so this row cannot disagree
     // with the feature it points at. A configured file that was deleted reads the same here as it
     // does at embedding time.
-    val embeddingReady = remember(settings.embeddingModelFile) {
-        EmbeddingModelRules.pick(
-            configured = settings.embeddingModelFile.takeIf { it.isNotBlank() },
-            installed = EmbeddingModelFiles.installedFiles(context),
-            curatedOrder = LlamaCppEmbeddingCatalog.ENTRIES.map { it.file },
-        ) != null
+    // One resolver for every screen that asks this question, so a settings row can never claim
+    // semantic search is ready while the embedder itself refuses to run.
+    val embeddingReady = remember(settings.embeddingModelFile, settings.embeddingBackend, settings.embeddingCloudModel) {
+        EmbeddingReadiness.isReady(settings, EmbeddingModelFiles.installedFiles(context))
     }
 
     Scaffold(
@@ -253,7 +250,7 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         supportingContent = {
                             Text(
                                 if (embeddingReady) {
-                                    settings.embeddingModelFile.ifBlank {
+                                    EmbeddingReadiness.label(settings).ifBlank {
                                         stringResource(R.string.setting_page_embedding_model_ready_auto)
                                     }
                                 } else {
