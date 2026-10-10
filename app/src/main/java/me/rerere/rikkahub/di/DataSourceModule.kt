@@ -120,6 +120,24 @@ val dataSourceModule = module {
         )
     }
 
+    // P4-01 — the file library: the same store, a different source. Given the app scope for the
+    // same reason the memory index is: a round over a large directory must outlive the screen that
+    // triggered it.
+    single {
+        me.rerere.rikkahub.data.vector.WorkspaceLibrarySource(
+            store = get(),
+            embeddings = get(),
+        )
+    }
+    single {
+        me.rerere.rikkahub.data.vector.LibraryIndexCoordinator(
+            scope = get<me.rerere.rikkahub.AppScope>(),
+            embeddings = get(),
+            source = get(),
+            workspaceRepository = get(),
+        )
+    }
+
     // P3-02 - the tool catalogue's vectors, in memory only: a tool's vector is derivable from its
     // name and description, and the catalogue changes with the MCP connections rather than with
     // the conversation. Given the app scope for the same reason the memory index is: a catalogue

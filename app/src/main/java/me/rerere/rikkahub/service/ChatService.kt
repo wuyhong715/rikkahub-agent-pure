@@ -101,6 +101,7 @@ import me.rerere.rikkahub.data.ai.tools.CompactionToolResult
 import me.rerere.rikkahub.data.ai.tools.buildCompactionTools
 import me.rerere.rikkahub.data.ai.tools.createWorkspaceTools
 import me.rerere.rikkahub.data.ai.tools.buildColdMemoryTools
+import me.rerere.rikkahub.data.ai.tools.buildLibrarySearchTool
 import me.rerere.rikkahub.data.ai.tools.buildMemorySearchTool
 import me.rerere.rikkahub.data.ai.tools.ColdMemoryDoc
 import me.rerere.rikkahub.data.ai.tools.ColdMemoryRules
@@ -459,6 +460,7 @@ class ChatService(
     private val memoryIndex: MemoryIndexCoordinator,
     /** Moxw - owns the tool catalogue's vectors, so `tool_search` can rank by meaning. */
     private val toolVectors: me.rerere.rikkahub.data.vector.ToolVectorIndex,
+    private val libraryIndex: me.rerere.rikkahub.data.vector.LibraryIndexCoordinator,
 ) {
     // workspace 系统提示注入 (依赖 workspaceRepository, 故在类内构造)
     private val workspaceReminderTransformer = WorkspaceReminderTransformer(workspaceRepository)
@@ -876,7 +878,13 @@ class ChatService(
             // failures are logged there and never reach this call.
             runCatching {
                 AssistantResolver.byId(settingsStore.settingsFlow.value, conversation.assistantId)
-            }.getOrNull()?.let { assistant -> memoryIndex.requestSync(assistant) }
+            }.getOrNull()?.let { assistant ->
+                memoryIndex.requestSync(assistant)
+                // P4 — the file library, on the same trigger and the same debounce. A round reads
+                // only what its budget allows, so the first pass over a large library is one
+                // background round rather than a stall, and the next conversation continues it.
+                libraryIndex.requestSync(assistant)
+            }
         } else {
             // A send can race this asynchronous initialization for a brand-new conversation.
             // Once the session already contains a user message, never replace it with the
@@ -1611,6 +1619,9 @@ class ChatService(
         // T-06 / (7) - cold memory (Markdown knowledge base). Same on both build paths so a
         // regenerate sees the surface the first pass had. Off unless enabled AND configured.
         addAll(createColdMemoryToolsIfConfigured(surfaceAssistant))
+        // P4 — the file library's search, on both build paths so a regenerate sees the surface the
+        // first pass had. Off unless enabled AND configured.
+        addAll(createLibraryToolsIfConfigured(surfaceAssistant))
         if (surfaceAssistant.enabledSkills.isNotEmpty()) {
             addAll(
                 createSkillTools(
@@ -1949,6 +1960,9 @@ class ChatService(
                     addAll(createWorkspaceToolsIfReady(surfaceAssistant.workspaceId?.toString(), conversation.workspaceCwd))
                     // T-06 / (7) - cold memory, mirroring the regenerate path above.
                     addAll(createColdMemoryToolsIfConfigured(surfaceAssistant))
+        // P4 — the file library's search, on both build paths so a regenerate sees the surface the
+        // first pass had. Off unless enabled AND configured.
+        addAll(createLibraryToolsIfConfigured(surfaceAssistant))
                     // P3-04 — the skill face is BUILT here and attached below the tool-surface
                     // branch, because in progressive mode what it *lists* depends on the same
                     // catalogue the tools do (what the user pinned, what the model opened, what this
@@ -2435,6 +2449,30 @@ class ChatService(
             search = { query, limit -> memoryIndex.search(dir, query, limit) },
         )
         return tools
+    }
+
+    /**
+     * Moxw P4 - the file library. Built only when the assistant turned it on AND bound a
+     * workspace; otherwise this returns an empty list and the tool surface is byte-for-byte what
+     * it was before P4.
+     *
+     * Registration does not depend on an embedding model being installed, for the same reason
+     * `memory_search` does not: the tool reports that state itself, and a model that has been told
+     * "semantic search is off, use find_files" behaves better than one that never saw the tool.
+     *
+     * The directory is read through WorkspaceRepository, like cold memory and unlike the
+     * `workspace_*` family: the library keeps working when the rootfs was never installed.
+     */
+    private suspend fun createLibraryToolsIfConfigured(assistant: Assistant): List<Tool> {
+        val dirLabel = libraryIndex.dirLabelOf(assistant) ?: return emptyList()
+        val workspaceId = assistant.workspaceId?.toString() ?: return emptyList()
+        if (workspaceRepository.getById(workspaceId) == null) return emptyList()
+        return listOf(
+            buildLibrarySearchTool(
+                dirLabel = dirLabel,
+                search = { query, limit -> libraryIndex.search(assistant, query, limit) },
+            )
+        )
     }
 
     /**

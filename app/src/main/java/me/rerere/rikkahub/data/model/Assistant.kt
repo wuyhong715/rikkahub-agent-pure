@@ -164,6 +164,18 @@ data class Assistant(
     // Appended last on purpose: a new field may never shift the position of an existing one.
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val pinnedToolNames: List<String> = emptyList(),
+    // Moxw P4 — the file library. Off until asked for, like cold memory: indexing a directory
+    // costs a model call per chunk, and a feature that spends that without being asked is one
+    // users turn off. @EncodeDefault(NEVER) keeps an assistant that never used it byte-identical
+    // in the store, which is also why both fields can be appended here safely.
+    // Appended last on purpose: a new field may never shift the position of an existing one.
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val libraryEnabled: Boolean = false,
+    // Blank means the conventional `library/` directory, so turning the switch on does something
+    // useful instead of nothing. `/workspace` itself is allowed: the round budget is what makes
+    // pointing it at a whole workspace survivable.
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val libraryDir: String = "",
 )
 
 @Serializable

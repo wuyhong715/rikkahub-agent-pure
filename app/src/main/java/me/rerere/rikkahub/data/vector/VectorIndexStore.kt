@@ -141,6 +141,17 @@ class VectorIndexStore(
         dao.modelIdsOfSource(source)
     }
 
+    /**
+     * Sources whose key begins with [prefix], exactly.
+     *
+     * The DAO's LIKE may over-report (see there); the exact filter is applied here so callers can
+     * treat the result as precise. Used to drop a source that has moved - a library pointed at a
+     * different directory leaves no trace behind.
+     */
+    suspend fun sourcesWithPrefix(prefix: String): List<String> = withContext(Dispatchers.IO) {
+        dao.sourcesWithPrefix(prefix).filter { it.startsWith(prefix) }
+    }
+
     companion object {
         /** Enough context for a model to act on, small enough not to crowd out the conversation. */
         const val DEFAULT_LIMIT = 8

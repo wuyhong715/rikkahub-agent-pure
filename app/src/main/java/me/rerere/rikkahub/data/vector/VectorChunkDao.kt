@@ -36,4 +36,15 @@ interface VectorChunkDao {
 
     @Query("SELECT DISTINCT model_id FROM vector_chunks WHERE source = :source")
     suspend fun modelIdsOfSource(source: String): List<String>
+
+    /**
+     * Every source whose key begins with [prefix].
+     *
+     * LIKE, not equality, and the caller still filters with `startsWith`: `_` is a single-character
+     * wildcard here and directory names are allowed to contain one, so this may over-report. That
+     * is the safe direction - over-reporting costs one comparison, under-reporting would leave
+     * rows behind - and it keeps the exact matching in Kotlin, where it is testable.
+     */
+    @Query("SELECT DISTINCT source FROM vector_chunks WHERE source LIKE :prefix || '%'")
+    suspend fun sourcesWithPrefix(prefix: String): List<String>
 }

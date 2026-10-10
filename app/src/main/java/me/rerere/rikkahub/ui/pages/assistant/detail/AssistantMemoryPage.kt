@@ -65,6 +65,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.ui.platform.LocalContext
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.ai.tools.ToolSurfaceMode
+import me.rerere.rikkahub.data.vector.LibraryIndexCoordinator
 import me.rerere.rikkahub.data.vector.MemoryIndexCoordinator
 import me.rerere.rikkahub.data.vector.ToolVectorIndex
 import org.koin.androidx.compose.koinViewModel
@@ -140,6 +141,8 @@ private fun AssistantMemoryContent(
     // workspace AND cold memory is on — the sheet browses that workspace's files area.
     var showColdMemoryDirPicker by remember(assistant.id) { mutableStateOf(false) }
     val coldMemoryWorkspace = workspaces.find { it.id == assistant.workspaceId?.toString() }
+    var showLibraryDirPicker by remember(assistant.id) { mutableStateOf(false) }
+    val libraryWorkspace = workspaces.find { it.id == assistant.workspaceId?.toString() }
     val workspaceRepository: WorkspaceRepository = koinInject()
     val scope = rememberCoroutineScope()
 
@@ -150,6 +153,10 @@ private fun AssistantMemoryContent(
     val settings by settingsStore.settingsFlow.collectAsStateWithLifecycle()
     val memoryIndex: MemoryIndexCoordinator = koinInject()
     val indexStatus by memoryIndex.status.collectAsStateWithLifecycle()
+    // P4 — the file library's index, shown the same way: a state a person can read and a rebuild
+    // they can ask for, rather than an index that silently does or does not exist.
+    val libraryIndex: LibraryIndexCoordinator = koinInject()
+    val libraryIndexStatus by libraryIndex.status.collectAsStateWithLifecycle()
     // P3-03 — the tool catalogue's vectors. Same treatment as the knowledge-base index above: a
     // row the user can read the state of and ask for again, rather than an index that silently
     // does or does not exist.
@@ -403,6 +410,119 @@ private fun AssistantMemoryContent(
             }
         }
 
+        // Moxw P4 — the file library. Sits next to cold memory because it is the same kind of
+        // thing: a directory the user points at, indexed in the background, searched by meaning.
+        // What differs is what it will read, and that is why the directory is picked explicitly
+        // rather than assumed - a workspace can hold anything.
+        CardGroup {
+            item(
+                headlineContent = { Text(stringResource(R.string.assistant_page_library)) },
+                supportingContent = { Text(stringResource(R.string.assistant_page_library_desc)) },
+                trailingContent = {
+                    Switch(
+                        checked = assistant.libraryEnabled,
+                        onCheckedChange = { enabled ->
+                            // Seeded and created exactly like cold memory, for the same reason: a
+                            // picker that can only select an existing folder would leave the
+                            // feature impossible to switch on.
+                            val workspace = libraryWorkspace
+                            val seed = enabled && assistant.libraryDir.isBlank() && workspace != null
+                            val updated = if (seed) {
+                                assistant.copy(
+                                    libraryEnabled = true,
+                                    libraryDir = DEFAULT_LIBRARY_DIR_ABSOLUTE,
+                                )
+                            } else {
+                                assistant.copy(libraryEnabled = enabled)
+                            }
+                            onUpdateAssistant(updated)
+                            if (seed && workspace != null) {
+                                scope.launch {
+                                    runCatching {
+                                        workspaceRepository.createDirectory(
+                                            workspace.id,
+                                            WorkspaceStorageArea.FILES,
+                                            DEFAULT_LIBRARY_DIR_RELATIVE,
+                                        )
+                                    }
+                                }
+                            }
+                            // Same as cold memory: switching it on is the moment to build, not some
+                            // later conversation.
+                            libraryIndex.requestSync(updated, minIntervalMs = 0L)
+                        }
+                    )
+                }
+            )
+            if (assistant.libraryEnabled) {
+                if (libraryWorkspace == null) {
+                    item(
+                        headlineContent = {
+                            Text(stringResource(R.string.assistant_page_library_no_workspace))
+                        },
+                        supportingContent = {
+                            Text(stringResource(R.string.assistant_page_library_no_workspace_desc))
+                        },
+                    )
+                } else {
+                    item(
+                        headlineContent = { Text(stringResource(R.string.assistant_page_library_dir)) },
+                        supportingContent = {
+                            Text(
+                                text = assistant.libraryDir.ifBlank {
+                                    DEFAULT_LIBRARY_DIR_ABSOLUTE
+                                }
+                            )
+                        },
+                        trailingContent = {
+                            Icon(
+                                imageVector = HugeIcons.ArrowRight01,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        },
+                        onClick = { showLibraryDirPicker = true },
+                    )
+                    item(
+                        headlineContent = { Text(stringResource(R.string.assistant_page_library_index)) },
+                        supportingContent = {
+                            val report = libraryIndexStatus.lastReport
+                            Text(
+                                when {
+                                    libraryIndexStatus.running -> stringResource(
+                                        R.string.assistant_page_index_running
+                                    )
+
+                                    libraryIndexStatus.lastError != null -> stringResource(
+                                        R.string.assistant_page_index_error,
+                                        libraryIndexStatus.lastError.orEmpty(),
+                                    )
+
+                                    report != null -> stringResource(
+                                        R.string.assistant_page_library_index_report,
+                                        report.indexedTotal,
+                                        report.candidates,
+                                        report.deferred,
+                                    )
+
+                                    else -> stringResource(R.string.assistant_page_library_index_idle)
+                                }
+                            )
+                        },
+                        trailingContent = {
+                            TextButton(
+                                onClick = { libraryIndex.requestSync(assistant, minIntervalMs = 0L) },
+                                enabled = !libraryIndexStatus.running &&
+                                    assistant.libraryEnabled && libraryWorkspace != null,
+                            ) {
+                                Text(stringResource(R.string.assistant_page_index_rebuild_action))
+                            }
+                        },
+                    )
+                }
+            }
+        }
+
         CardGroup {
             item(
                 headlineContent = { Text(stringResource(R.string.assistant_page_embedding_model)) },
@@ -561,6 +681,21 @@ private fun AssistantMemoryContent(
                 memoryIndex.requestSync(updated, minIntervalMs = 0L)
             },
             onDismiss = { showColdMemoryDirPicker = false },
+        )
+    }
+
+    if (showLibraryDirPicker && libraryWorkspace != null) {
+        WorkspaceCwdPickerSheet(
+            workspaceId = libraryWorkspace.id,
+            currentCwd = assistant.libraryDir.ifBlank { DEFAULT_LIBRARY_DIR_ABSOLUTE },
+            onSelectCwd = { selected ->
+                val updated = assistant.copy(libraryDir = selected)
+                onUpdateAssistant(updated)
+                // Where the files are is part of what the index is of: a different directory has
+                // never been indexed, so this is a first build rather than a refresh.
+                libraryIndex.requestSync(updated, minIntervalMs = 0L)
+            },
+            onDismiss = { showLibraryDirPicker = false },
         )
     }
 
@@ -772,5 +907,10 @@ private fun MemoryItem(
  * `<workspace>/memory` inside the files area — the same form the picker writes
  * ("/workspace/memory") and the relative form the repository methods take ("memory").
  */
+// Must stay in step with WorkspaceLibraryRules.DEFAULT_DIR: this one seeds the field, that one
+// resolves a blank field, and the two disagreeing would send the index somewhere the UI never
+// showed.
+private const val DEFAULT_LIBRARY_DIR_ABSOLUTE = "/workspace/library"
+private const val DEFAULT_LIBRARY_DIR_RELATIVE = "library"
 private const val DEFAULT_COLD_MEMORY_DIR_ABSOLUTE = "/workspace/memory"
 private const val DEFAULT_COLD_MEMORY_DIR_RELATIVE = "memory"
