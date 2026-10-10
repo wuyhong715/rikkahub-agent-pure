@@ -330,6 +330,10 @@ dependencies {
     // quickie (qrcode scanner)
     implementation(libs.quickie.bundled)
     implementation(libs.barcode.scanning)
+    // ML Kit's bundled Chinese/Latin text recognizer: reads the text out of the images in the file
+    // library. Bundled rather than the play-services variant, because the library has to work on
+    // the first run without downloading a model.
+    implementation(libs.text.recognition.chinese)
     implementation(libs.androidx.camera.core)
 
     // Room

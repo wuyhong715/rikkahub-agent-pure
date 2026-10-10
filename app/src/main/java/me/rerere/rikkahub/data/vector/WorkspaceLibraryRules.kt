@@ -13,8 +13,12 @@ package me.rerere.rikkahub.data.vector
  * index touches is one whose text we can actually read, and it makes "why is this file missing"
  * answerable by looking at one set. A deny-list would have to enumerate binaries, and would get
  * the next one wrong.
+ *
+ * Images are the one kind whose text is not *in* the file: it is read out of them by on-device text
+ * recognition, so a screenshot of a stack trace is searchable by the words in it. That is also why
+ * they carry numbers of their own - see [ESTIMATED_CHARS_PER_IMAGE] and [MAX_IMAGES_PER_ROUND].
  */
-enum class LibraryFileKind { TEXT, CODE, DOCUMENT }
+enum class LibraryFileKind { TEXT, CODE, DOCUMENT, IMAGE }
 
 /** Which `:document` parser reads a file, if any. Kept here so the mapping is testable. */
 enum class LibraryDocumentParser { PDF, DOCX, PPTX, EPUB }
@@ -36,6 +40,14 @@ object WorkspaceLibraryRules {
     const val MAX_DOCUMENT_CHARS = 400_000
 
     /**
+     * An image is capped by bytes because decoding one costs memory rather than time, and by the
+     * characters its recognised text may keep - a screenshot of a full log legitimately runs to
+     * thousands of characters, while a photograph of a wall produces none at all.
+     */
+    const val MAX_IMAGE_FILE_BYTES = 15_000_000L
+    const val MAX_IMAGE_CHARS = 40_000
+
+    /**
      * One round's budget. This is the number that keeps a phone from embedding for an hour: at
      * roughly 4k characters per chunk, [MAX_CHARS_PER_ROUND] is a few hundred model calls, which
      * is minutes rather than tens of minutes, and [MAX_FILES_PER_ROUND] bounds the directory
@@ -44,7 +56,38 @@ object WorkspaceLibraryRules {
     const val MAX_CHARS_PER_ROUND = 1_500_000
     const val MAX_FILES_PER_ROUND = 400
 
+    /**
+     * What an image is charged against the round budget, whatever it weighs on disk.
+     *
+     * This is not a prediction of how much text will come out - that is bounded by [MAX_IMAGE_CHARS].
+     * It is a floor on the estimate, and it exists because the alternative is wrong in a way that
+     * never finishes: a library can hold a folder of 4 MB photographs, and charging those at their
+     * byte count - the way text is charged - spends most of a round's budget on the first one. The
+     * real cost of an image is a decode plus a recognition pass, and neither grows with the file
+     * size, so neither should what it is charged.
+     */
+    const val ESTIMATED_CHARS_PER_IMAGE = 1_200
+
+    /**
+     * How many images one round may recognise.
+     *
+     * Recognition costs on the order of a tenth of a second per image, where a text file costs
+     * milliseconds, so [MAX_FILES_PER_ROUND] alone would let a round of 400 photographs run for a
+     * minute in the background. Images are also the kind most likely to be numerous and least
+     * likely to have changed, which makes bounding them per round and letting the next round carry
+     * on the cheap way to stay responsive. A deferred image keeps its place like any other file, so
+     * a library of a thousand screenshots converges, only more slowly.
+     */
+    const val MAX_IMAGES_PER_ROUND = 40
+
     private val DECLARED_DOCUMENT = setOf("pdf", "docx", "pptx", "epub")
+
+    /**
+     * Formats the recognizer can read and `BitmapFactory` can decode on the oldest supported API.
+     * Deliberately no video and no audio: those need a model of their own, and what is worth
+     * searching in them is the speech, which has its own pipeline already.
+     */
+    private val DECLARED_IMAGE = setOf("png", "jpg", "jpeg", "webp", "bmp", "gif", "heic", "heif")
 
     private val DECLARED_TEXT = setOf(
         "md", "markdown", "txt", "text", "rst", "org", "adoc",
@@ -91,6 +134,7 @@ object WorkspaceLibraryRules {
         if (extension.isNotEmpty()) {
             return when (extension) {
                 in DECLARED_DOCUMENT -> LibraryFileKind.DOCUMENT
+                in DECLARED_IMAGE -> LibraryFileKind.IMAGE
                 in DECLARED_CODE -> LibraryFileKind.CODE
                 in DECLARED_TEXT -> LibraryFileKind.TEXT
                 else -> null
@@ -127,6 +171,8 @@ object WorkspaceLibraryRules {
         LibraryFileKind.CODE -> ChunkingMode.CODE
         LibraryFileKind.TEXT -> if (isMarkdown(name)) ChunkingMode.MARKDOWN else ChunkingMode.PLAIN
         LibraryFileKind.DOCUMENT -> ChunkingMode.PLAIN
+        // Recognised text arrives as lines: no markup, and no structure worth trusting.
+        LibraryFileKind.IMAGE -> ChunkingMode.PLAIN
     }
 
     fun isIgnoredDirectory(name: String): Boolean =
@@ -142,11 +188,13 @@ object WorkspaceLibraryRules {
 
     fun sizeCapOf(kind: LibraryFileKind): Long = when (kind) {
         LibraryFileKind.DOCUMENT -> MAX_DOCUMENT_FILE_BYTES
+        LibraryFileKind.IMAGE -> MAX_IMAGE_FILE_BYTES
         else -> MAX_TEXT_FILE_BYTES
     }
 
     fun charCapOf(kind: LibraryFileKind): Int = when (kind) {
         LibraryFileKind.DOCUMENT -> MAX_DOCUMENT_CHARS
+        LibraryFileKind.IMAGE -> MAX_IMAGE_CHARS
         else -> MAX_TEXT_CHARS
     }
 
@@ -163,6 +211,8 @@ object WorkspaceLibraryRules {
     fun estimatedChars(kind: LibraryFileKind, sizeBytes: Long): Int = when (kind) {
         LibraryFileKind.DOCUMENT ->
             (sizeBytes / 4).coerceAtMost(MAX_DOCUMENT_CHARS.toLong()).toInt()
+        // Independent of the file size on purpose: see [ESTIMATED_CHARS_PER_IMAGE].
+        LibraryFileKind.IMAGE -> ESTIMATED_CHARS_PER_IMAGE
         else ->
             sizeBytes.coerceAtMost(MAX_TEXT_CHARS.toLong()).toInt()
     }
@@ -210,6 +260,7 @@ object WorkspaceLibraryRules {
         indexed: Set<String>,
         budgetChars: Int = MAX_CHARS_PER_ROUND,
         maxFiles: Int = MAX_FILES_PER_ROUND,
+        maxImages: Int = MAX_IMAGES_PER_ROUND,
     ): Round {
         val planned = RoundBudget.plan(
             items = candidates,
@@ -221,6 +272,45 @@ object WorkspaceLibraryRules {
             budgetChars = budgetChars,
             maxItems = maxFiles,
         )
-        return Round(take = planned.take, deferred = planned.deferred, tooBig = planned.tooBig)
+        // The image cap is applied after the shared planner rather than inside it: the planner is
+        // generic over what a document is, and this rule is about one kind of file. Dropping from
+        // the tail keeps the order the planner chose - never read first, then by path - so the
+        // images a round postpones are the ones it would have reached last, and the next round
+        // carries on where this one stopped instead of starting over.
+        val take = capImages(planned.take, maxImages)
+        return Round(
+            take = take,
+            deferred = planned.deferred + (planned.take.size - take.size),
+            tooBig = planned.tooBig,
+        )
     }
+
+    /**
+     * Keeps the first [maxImages] images of a plan, whatever else is in it.
+     *
+     * Files that are not images are never dropped by this cap: a round that filled up on
+     * photographs must still index the notes beside them.
+     */
+    private fun capImages(take: List<Candidate>, maxImages: Int): List<Candidate> {
+        val limit = maxImages.coerceAtLeast(0)
+        if (take.count { it.kind == LibraryFileKind.IMAGE } <= limit) return take
+        var kept = 0
+        return take.filter { candidate ->
+            if (candidate.kind != LibraryFileKind.IMAGE) return@filter true
+            kept++
+            kept <= limit
+        }
+    }
+
+    /**
+     * What an image with no recognisable text is indexed as.
+     *
+     * A file whose text comes out empty is skipped, and a skipped file is one the next round tries
+     * again - for a photograph of a wall, forever. Indexing its name instead costs one row and
+     * makes the file findable by name, which is the only handle it has.
+     */
+    fun placeholderForImage(name: String): String = "$IMAGE_PLACEHOLDER_PREFIX$name"
+
+    /** Marks a row that stands for an image itself rather than for text read out of one. */
+    const val IMAGE_PLACEHOLDER_PREFIX = "Image: "
 }
