@@ -847,6 +847,16 @@
   <string name="setting_model_page_translate_model">翻译模型</string>
   <string name="setting_model_page_translate_model_desc">用于翻译功能的模型</string>
   <string name="setting_model_page_translate_prompt_vars">变量: 原始文本: {source_text}, 目标语言: {target_lang}</string>
+  <string name="setting_page_group_appearance">外观与交互</string>
+  <string name="setting_page_group_models">模型与 AI</string>
+  <string name="setting_page_group_assistant">助手与自动化</string>
+  <string name="setting_page_group_device">设备与权限</string>
+  <string name="setting_page_group_connections">连接与集成</string>
+  <string name="setting_page_group_data">数据</string>
+  <string name="setting_page_group_about">关于与诊断</string>
+  <string name="setting_page_embedding_model">本地向量模型</string>
+  <string name="setting_page_embedding_model_missing">未安装 — 记忆与全部搜索工具都不可用。点此安装。</string>
+  <string name="setting_page_embedding_model_ready_auto">已安装（自动选择）</string>
   <string name="setting_page_about">关于</string>
   <string name="setting_page_about_desc">关于本APP</string>
   <string name="setting_page_assistant">助手</string>
@@ -917,7 +927,7 @@
   <string name="setting_page_share">分享</string>
   <string name="setting_page_share_desc">分享本APP给朋友</string>
   <string name="setting_page_share_text">RikkaHub Agent · Pure - 开源安卓AI助手\n\n项目地址: https://github.com/wuyhong715/rikkahub-agent-pure/releases/latest</string>
-  <string name="setting_page_theme_setting">主题</string>
+  <string name="setting_page_theme_setting">自定义主题</string>
   <string name="setting_page_theme_setting_desc">自定义应用配色方案</string>
   <string name="setting_theme_page_preset_themes">预设主题</string>
   <string name="setting_theme_page_custom_themes">自定义主题</string>
@@ -1229,9 +1239,9 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_page_preferences_desc">主题、通知、界面和常规设置</string>
   <string name="setting_page_preferences_theme">主题</string>
   <string name="setting_page_preferences_theme_desc">动态配色、主题、AMOLED深色模式</string>
-  <string name="setting_page_preferences_notification">通知</string>
+  <string name="setting_page_preferences_notification">通知提醒</string>
   <string name="setting_page_preferences_notification_desc">更新提醒、消息生成通知</string>
-  <string name="setting_page_preferences_general">常规</string>
+  <string name="setting_page_preferences_general">交互行为</string>
   <string name="setting_page_preferences_general_desc">交互行为、滚动、输入设置</string>
   <string name="setting_page_preferences_ui">界面偏好设置</string>
   <string name="setting_page_preferences_ui_desc">消息显示、字体、代码块</string>
@@ -1576,7 +1586,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_page_doctor_report_copied">诊断报告已复制到剪贴板。</string>
   <string name="setting_page_doctor_run_again">重新运行</string>
   <string name="setting_page_doctor_running">正在运行…</string>
-  <string name="setting_page_notifications">通知</string>
+  <string name="setting_page_notifications">通知访问</string>
   <string name="setting_page_notifications_action_ago_hours">%1$d 小时前</string>
   <string name="setting_page_notifications_action_ago_minutes">%1$d 分钟前</string>
   <string name="setting_page_notifications_action_ago_seconds">%1$d 秒前</string>
