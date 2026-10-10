@@ -112,42 +112,55 @@ class ToolRankFusionTest {
         assertEquals(listOf("right-width", "wrong-width"), ranked)
     }
 
-    // ---- selectForTurn --------------------------------------------------------------------
+    // ---- attachedForTurn ------------------------------------------------------------------
 
     @Test
-    fun `turn selection puts pins first, then retrieval, without duplicates`() {
-        val selected = ToolRankFusion.selectForTurn(
-            fused = listOf("read_window_tree", "tap", "scroll"),
+    fun `a turn gets its pins, then its activations, then the guesses`() {
+        val attached = ToolRankFusion.attachedForTurn(
+            ranked = listOf("read_window_tree", "tap", "scroll"),
             pinned = listOf("memory_read", "read_window_tree"),
+            activated = listOf("clipboard_tool"),
             budget = 4,
         )
-        assertEquals(listOf("memory_read", "read_window_tree", "tap", "scroll"), selected)
-    }
-
-    @Test
-    fun `turn selection counts pins against the budget`() {
-        val selected = ToolRankFusion.selectForTurn(
-            fused = listOf("a", "b", "c"),
-            pinned = listOf("p1", "p2", "p3"),
-            budget = 4,
-        )
-        // Three pins already spent three of the four slots; only one retrieved tool fits.
-        assertEquals(listOf("p1", "p2", "p3", "a"), selected)
-    }
-
-    @Test
-    fun `a zero budget still honours pins`() {
-        // "Do not guess for me" is about the automatic half, not about stripping the tools the
-        // user asked for by name.
+        // `read_window_tree` is both pinned and retrieved: it keeps its pin position instead of
+        // appearing twice, and it does not spend one of the four guesses.
         assertEquals(
-            listOf("pinned"),
-            ToolRankFusion.selectForTurn(fused = listOf("a"), pinned = listOf("pinned"), budget = 0),
+            listOf("memory_read", "read_window_tree", "clipboard_tool", "tap", "scroll"),
+            attached,
         )
     }
 
     @Test
-    fun `turn selection of nothing is nothing`() {
-        assertTrue(ToolRankFusion.selectForTurn(emptyList(), emptyList()).isEmpty())
+    fun `the budget caps the guesses and nothing else`() {
+        val attached = ToolRankFusion.attachedForTurn(
+            ranked = listOf("a", "b", "c", "d"),
+            pinned = listOf("p1", "p2", "p3"),
+            activated = listOf("opened"),
+            budget = 2,
+        )
+        // Four names are on the surface that no budget was consulted about — the user asked for
+        // three of them and the model for the fourth. Only the two guesses were capped.
+        assertEquals(listOf("p1", "p2", "p3", "opened", "a", "b"), attached)
+    }
+
+    @Test
+    fun `a zero budget still honours pins and activations`() {
+        // "Do not guess for me" is about the automatic half, not about stripping the tools the
+        // user asked for by name or the model opened on purpose.
+        assertEquals(
+            listOf("pinned", "opened"),
+            ToolRankFusion.attachedForTurn(
+                ranked = listOf("a"),
+                pinned = listOf("pinned"),
+                activated = listOf("opened"),
+                budget = 0,
+            ),
+        )
+    }
+
+    @Test
+    fun `a turn with nothing to go on attaches nothing`() {
+        assertTrue(ToolRankFusion.attachedForTurn(emptyList(), emptyList(), emptyList()).isEmpty())
     }
 
     // ---- embedText ------------------------------------------------------------------------

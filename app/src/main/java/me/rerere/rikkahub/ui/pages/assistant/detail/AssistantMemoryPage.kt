@@ -64,7 +64,9 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.RadioButton
 import androidx.compose.ui.platform.LocalContext
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.ai.tools.ToolSurfaceMode
 import me.rerere.rikkahub.data.vector.MemoryIndexCoordinator
+import me.rerere.rikkahub.data.vector.ToolVectorIndex
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
@@ -148,6 +150,11 @@ private fun AssistantMemoryContent(
     val settings by settingsStore.settingsFlow.collectAsStateWithLifecycle()
     val memoryIndex: MemoryIndexCoordinator = koinInject()
     val indexStatus by memoryIndex.status.collectAsStateWithLifecycle()
+    // P3-03 — the tool catalogue's vectors. Same treatment as the knowledge-base index above: a
+    // row the user can read the state of and ask for again, rather than an index that silently
+    // does or does not exist.
+    val toolVectors: ToolVectorIndex = koinInject()
+    val toolIndexStatus by toolVectors.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var showEmbeddingModelPicker by remember { mutableStateOf(false) }
     val embeddingVm: EmbeddingModelViewModel = koinViewModel()
@@ -435,6 +442,36 @@ private fun AssistantMemoryContent(
                     }
                 },
             )
+            // Only meaningful in the mode that uses it: in DIRECT mode every schema is attached
+            // anyway and there is nothing for this index to rank.
+            if (assistant.toolSurfaceMode == ToolSurfaceMode.PROGRESSIVE_CATALOG) {
+                item(
+                    headlineContent = { Text(stringResource(R.string.assistant_page_tool_index_title)) },
+                    supportingContent = {
+                        Text(
+                            text = when {
+                                toolIndexStatus.total == 0 ->
+                                    stringResource(R.string.assistant_page_tool_index_never)
+                                !toolIndexStatus.hasVector ->
+                                    stringResource(R.string.assistant_page_tool_index_off)
+                                else -> stringResource(
+                                    R.string.assistant_page_tool_index_ready,
+                                    toolIndexStatus.cached,
+                                    toolIndexStatus.total,
+                                )
+                            },
+                        )
+                    },
+                    trailingContent = {
+                        TextButton(
+                            onClick = { scope.launch { toolVectors.rebuild() } },
+                            enabled = toolIndexStatus.total > 0,
+                        ) {
+                            Text(stringResource(R.string.assistant_page_index_rebuild_action))
+                        }
+                    },
+                )
+            }
         }
 
         CardGroup {

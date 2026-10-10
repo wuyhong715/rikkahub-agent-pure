@@ -126,6 +126,13 @@
   <string name="assistant_page_index_error">Failed: %1$s</string>
   <string name="assistant_page_index_report">%1$d document(s), %2$d passage(s) indexed</string>
   <string name="assistant_page_index_never">Not indexed yet — open a chat, or tap Rebuild</string>
+  <string name="assistant_page_tool_index_title">Tool index</string>
+  <string name="assistant_page_tool_index_ready">%1$d of %2$d tool entries embedded</string>
+  <string name="assistant_page_tool_index_never">Not built yet — the next chat builds it</string>
+  <string name="assistant_page_tool_index_off">No embedding model yet — tools are matched by keyword</string>
+  <string name="assistant_page_local_tools_pin">Pin</string>
+  <string name="assistant_page_local_tools_pinned">Pinned</string>
+  <string name="assistant_page_local_tools_pin_desc">In progressive mode a tool is attached only when the current request retrieves it. Pin the tools you always want available — the screen automation ones, for example.</string>
   <string name="assistant_page_tool_surface_mode">Progressive MCP tool catalog</string>
   <string name="assistant_page_tool_surface_mode_desc">Replaces the MCP tools in each request with a tool_search / tool_open pair, so only the schemas the model opens are sent. Cuts the first-turn tool tokens, but the tool list changes between turns, which can cost prompt-cache hits. Local tools are never catalogued. Off by default.</string>
   <string name="assistant_page_subagent_context_refs">Sub-agent context references</string>

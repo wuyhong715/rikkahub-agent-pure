@@ -88,6 +88,8 @@ import me.rerere.rikkahub.data.ai.tools.ToolActivationState
 import me.rerere.rikkahub.data.ai.tools.ToolCatalog
 import me.rerere.rikkahub.data.ai.tools.ToolCatalogEntry
 import me.rerere.rikkahub.data.ai.tools.ToolCatalogSource
+import me.rerere.rikkahub.data.ai.tools.ToolRankFusion
+import me.rerere.rikkahub.data.ai.tools.LocalToolPalette
 import me.rerere.rikkahub.data.ai.tools.ToolSurfaceMode
 import me.rerere.rikkahub.data.ai.tools.buildToolCatalogTools
 import me.rerere.rikkahub.data.ai.tools.ChatToolFactory
@@ -1779,6 +1781,15 @@ class ChatService(
             } else {
                 compactedMessageView!!.messages
             }
+            // P3-03 — what the user actually asked for. It decides which tools this turn is
+            // handed without the model having to go looking for them, which is the difference
+            // between progressive tool mode being usable and being one round trip away from every
+            // tool. The last user message, not the last message: after a tool call the newest
+            // message is a result, and the intent still lives in the request it answered.
+            val lastUserText = messagesForGeneration
+                .lastOrNull { it.role == MessageRole.USER }
+                ?.toText()
+                .orEmpty()
             generationLoop.generateText(
                 settings = settings,
                 model = model,
@@ -1914,20 +1925,27 @@ class ChatService(
                     // recursion guard, workflow_create authoring-id) who is calling.
                     // isHeadless is read from HeadlessConversations — true iff this is a
                     // cron / sub-agent / workflow / external-automation flow.
-                    addAll(
-                        ToolSurfaceResolver.resolve(
-                            localTools = localTools,
+                    val localSurface = ToolSurfaceResolver.resolve(
+                        localTools = localTools,
+                        assistant = surfaceAssistant,
+                        context = ToolSurfaceResolver.chatContext(
                             assistant = surfaceAssistant,
-                            context = ToolSurfaceResolver.chatContext(
-                                assistant = surfaceAssistant,
-                                conversationId = conversationId,
-                                model = model,
-                                isHeadless = me.rerere.rikkahub.data.ai.tools.HeadlessConversations
-                                    .isHeadless(conversationId),
-                                appPlaybook = coldMemoryPlaybookReader(surfaceAssistant),
-                            ),
-                        )
+                            conversationId = conversationId,
+                            model = model,
+                            isHeadless = me.rerere.rikkahub.data.ai.tools.HeadlessConversations
+                                .isHeadless(conversationId),
+                            appPlaybook = coldMemoryPlaybookReader(surfaceAssistant),
+                        ),
                     )
+                    // P3-03 — progressive mode turns this face from "attached wholesale" into the
+                    // bulk of the catalogue. Resolved once, here: the same tools, either attached
+                    // or offered through `tool_search`, so nothing can be activated that the
+                    // assistant's own tool options did not already allow.
+                    val progressiveSurface =
+                        surfaceAssistant.toolSurfaceMode == ToolSurfaceMode.PROGRESSIVE_CATALOG
+                    if (!progressiveSurface) {
+                        addAll(localSurface)
+                    }
                     addAll(createWorkspaceToolsIfReady(surfaceAssistant.workspaceId?.toString(), conversation.workspaceCwd))
                     // T-06 / (7) - cold memory, mirroring the regenerate path above.
                     addAll(createColdMemoryToolsIfConfigured(surfaceAssistant))
@@ -1988,15 +2006,29 @@ class ChatService(
                             return
                         }
                     }
-                    if (surfaceAssistant.toolSurfaceMode == ToolSurfaceMode.PROGRESSIVE_CATALOG) {
-                        // T-03 / (1) - progressive tool exposure. MCP schemas are the expensive
-                        // part of the surface (one entry per remote tool, all of them opaque to
-                        // us), so in this mode they are replaced by a two-tool discovery pair.
-                        // Local/workspace/skill tools stay directly attached: they are the ones
-                        // the model needs on nearly every turn, and keeping them stable is also
-                        // what keeps the prompt prefix cacheable.
-                        val mcpCatalog = ToolCatalog(
-                            entries = allMcpTools.map { (serverId, serverName, tool) ->
+                    if (progressiveSurface) {
+                        // T-03 / (1) + P3-03 - progressive tool exposure over ONE catalogue: this
+                        // assistant's local tools (deliberately not attached above) plus every MCP
+                        // tool. MCP schemas are the expensive part of a surface — one entry per
+                        // remote tool, all of them opaque to us — and a large local option list is
+                        // not far behind, so both are replaced by the discovery pair plus whatever
+                        // the turn actually needs. Workspace, skill and cold-memory tools stay
+                        // directly attached: they are few, they are conditional already, and they
+                        // are the ones a turn almost always needs.
+                        // LocalTools.HIDDEN_TOOL_NAMES is deliberately NOT applied here: it hides
+                        // a tool from the per-tool list UI (check_app_updates is the app's own
+                        // update path, not a user capability), and a hidden row is not the same
+                        // thing as an unreachable one. Filtering it would make the app's update
+                        // tool callable in DIRECT mode and silently absent here.
+                        val catalog = ToolCatalog(
+                            entries = localSurface.map { tool ->
+                                ToolCatalogEntry(
+                                    name = tool.name,
+                                    summary = LocalToolPalette.summarize(tool),
+                                    source = ToolCatalogSource.LOCAL,
+                                    tool = tool,
+                                )
+                            } + allMcpTools.map { (serverId, serverName, tool) ->
                                 ToolCatalogEntry(
                                     name = me.rerere.rikkahub.data.ai.mcp.buildMcpToolName(
                                         serverId = serverId,
@@ -2013,21 +2045,36 @@ class ChatService(
                         // spends a whole round trip thinking before it calls `tool_search`, and by
                         // then the ranking is normally ready; the search itself never waits for it
                         // either way (see ToolVectorIndex.retrieve).
-                        toolVectors.prewarm(mcpCatalog.entries)
+                        toolVectors.prewarm(catalog.entries)
                         val activation = toolActivationFor(conversationId)
                         // Drop names whose server/tool disappeared since the last turn so a
                         // stale activation can never attempt to inject a schema that no longer
                         // exists (which would 400 the request).
-                        activation.retain(mcpCatalog.entries.mapTo(mutableSetOf()) { it.name })
+                        activation.retain(catalog.entries.mapTo(mutableSetOf()) { it.name })
                         addAll(
                             buildToolCatalogTools(
-                                catalog = mcpCatalog,
+                                catalog = catalog,
                                 activation = activation,
-                                semanticSearch = { query -> toolVectors.retrieve(query, mcpCatalog) },
+                                semanticSearch = { query -> toolVectors.retrieve(query, catalog) },
                             )
                         )
-                        activation.active().forEach { activeName ->
-                            mcpCatalog.entry(activeName)?.let { entry -> add(entry.tool) }
+                        // P3-03 - what this turn gets without asking: what the user pinned, what
+                        // the model opened on purpose, and what the user's own words retrieved.
+                        // Screen automation must not have to discover `take_screenshot` before it
+                        // can see the screen. The ordering and the caps live in
+                        // ToolRankFusion.attachedForTurn; the ranking never blocks (a cold
+                        // catalogue ranks lexically this turn and semantically the next).
+                        val attached = ToolRankFusion.attachedForTurn(
+                            ranked = if (lastUserText.isBlank()) {
+                                emptyList()
+                            } else {
+                                toolVectors.ranking(lastUserText, catalog)
+                            },
+                            pinned = surfaceAssistant.pinnedToolNames,
+                            activated = activation.active().toList(),
+                        )
+                        attached.forEach { name ->
+                            catalog.entry(name)?.let { entry -> add(entry.tool) }
                         }
                     } else {
                         allMcpTools.forEach { (serverId, serverName, tool) ->

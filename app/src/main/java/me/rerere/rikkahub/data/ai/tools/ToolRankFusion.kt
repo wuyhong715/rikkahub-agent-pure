@@ -93,29 +93,33 @@ object ToolRankFusion {
     }
 
     /**
-     * The tools a turn is handed before it speaks: the user's pinned tools first — in the order
-     * they were pinned, because that ordering is a deliberate statement — then the fused ranking,
-     * capped at [budget].
+     * The names a turn's tool surface is built from: pinned and explicitly activated first — in
+     * the order they were given, because that ordering is a deliberate statement — then the
+     * retrieved ranking, of which at most [budget] are taken.
      *
-     * A pinned tool also consumes budget. It is on the surface, so counting it is the honest
-     * accounting, and it keeps the cap meaning "this many schemas" rather than "this many, plus
-     * whatever the user pinned".
+     * The budget caps the *guess*, and only the guess. A pinned tool is the user saying "always
+     * have this one ready", and one the model opened is the model saying the same thing; dropping
+     * either to stay under a number would break exactly the promise it makes. So the surface can
+     * legitimately exceed [budget] — that is what the pins are for.
+     *
+     * A name that is already pinned or activated does not consume the guess budget when it also
+     * appears in [ranked]: it was going to be there anyway.
      */
-    fun selectForTurn(
-        fused: List<String>,
+    fun attachedForTurn(
+        ranked: List<String>,
         pinned: List<String>,
+        activated: List<String>,
         budget: Int = DEFAULT_TURN_TOOL_BUDGET,
     ): List<String> {
-        val selected = LinkedHashSet<String>()
-        if (budget > 0) {
-            pinned.forEach { if (selected.size < budget) selected += it }
-            fused.forEach { if (selected.size < budget) selected += it }
-        } else {
-            // A budget of zero still honours pins: "do not guess for me" is a request about the
-            // automatic part, not a request to strip the tools the user asked for by name.
-            selected += pinned
+        val ordered = LinkedHashSet<String>()
+        pinned.forEach { ordered += it }
+        activated.forEach { ordered += it }
+        var guessed = 0
+        for (name in ranked) {
+            if (guessed >= budget) break
+            if (ordered.add(name)) guessed++
         }
-        return selected.toList()
+        return ordered.toList()
     }
 
     /**

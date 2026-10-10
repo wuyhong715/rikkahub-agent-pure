@@ -3,10 +3,14 @@ package me.rerere.rikkahub.data.vector
 import android.util.Log
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import me.rerere.rikkahub.data.ai.tools.ToolCatalog
+import me.rerere.rikkahub.data.ai.tools.matchAll
 import me.rerere.rikkahub.data.ai.tools.ToolCatalogEntry
 import me.rerere.rikkahub.data.ai.tools.ToolRankFusion
 
@@ -37,9 +41,15 @@ class ToolVectorIndex(
     private val scope: CoroutineScope,
 ) {
 
-    /** Diagnostics for the assistant page. */
-    data class Snapshot(val modelId: String?, val cached: Int) {
+    /**
+     * Diagnostics for the assistant page: which model, and how much of the last catalogue it
+     * covers. [cached] against [total] rather than a bare count, because "12 of 40" is the
+     * sentence that tells a user whether the last rebuild finished or whether their MCP server
+     * just added thirty tools.
+     */
+    data class Snapshot(val modelId: String?, val cached: Int, val total: Int) {
         val hasVector: Boolean get() = modelId != null
+        val ready: Boolean get() = total > 0 && cached == total
     }
 
     /**
@@ -55,8 +65,44 @@ class ToolVectorIndex(
     @Volatile
     private var activeModelId: String? = null
 
+    /** The last catalogue this index was asked to cover, so a rebuild can mean something. */
+    @Volatile
+    private var lastEntries: List<ToolCatalogEntry> = emptyList()
+
+    private val _state = MutableStateFlow(Snapshot(modelId = null, cached = 0, total = 0))
+
+    /** The same thing [snapshot] returns, for a screen that has to react to it. */
+    val state: StateFlow<Snapshot> = _state.asStateFlow()
+
     /** What is held right now. */
-    fun snapshot(): Snapshot = Snapshot(activeModelId, cache.size)
+    fun snapshot(): Snapshot = _state.value.copy(
+        modelId = activeModelId,
+        cached = countCached(lastEntries),
+    )
+
+    /** Drops what is held and produces it again — the visible "Rebuild" behind the status row. */
+    suspend fun rebuild(): Boolean {
+        val entries = lastEntries
+        if (entries.isEmpty()) return false
+        // Not a model swap: the same model re-embeds the same catalogue. That is the point of the
+        // button — it is the answer to "the ranking looks wrong and I want to see it redone".
+        cache.clear()
+        publish(entries)
+        return prepare(entries)
+    }
+
+    private fun countCached(entries: List<ToolCatalogEntry>): Int {
+        val model = activeModelId ?: return 0
+        return entries.count { ToolVectorCacheRules.lookup(model, it, cache) != null }
+    }
+
+    private fun publish(entries: List<ToolCatalogEntry>) {
+        _state.value = Snapshot(
+            modelId = activeModelId,
+            cached = countCached(entries),
+            total = entries.size,
+        )
+    }
 
     /**
      * Embeds whatever [entries] are missing, and reports whether the catalogue is rankable
@@ -65,7 +111,11 @@ class ToolVectorIndex(
      */
     suspend fun prepare(entries: List<ToolCatalogEntry>): Boolean {
         if (entries.isEmpty()) return false
-        val model = embeddings.ensureLoaded() ?: return false
+        lastEntries = entries
+        val model = embeddings.ensureLoaded() ?: run {
+            publish(entries)
+            return false
+        }
 
         val missing = embeddingLock.withLock {
             if (model.modelId != activeModelId) {
@@ -76,18 +126,25 @@ class ToolVectorIndex(
             }
             ToolVectorCacheRules.missing(model.modelId, entries, cache)
         }
-        if (missing.isEmpty()) return ToolVectorCacheRules.ready(model.modelId, entries, cache)
+        if (missing.isEmpty()) {
+            publish(entries)
+            return ToolVectorCacheRules.ready(model.modelId, entries, cache)
+        }
 
         val vectors = runCatching { embeddings.embed(missing.map(ToolVectorCacheRules::embedTextOf)) }
             .onFailure { Log.d(TAG, "embedding ${missing.size} tool entries failed", it) }
             .getOrNull()
-            ?: return false
+            ?: run {
+                publish(entries)
+                return false
+            }
 
         missing.forEachIndexed { index, entry ->
             val vector = vectors.getOrNull(index) ?: return@forEachIndexed
             cache[ToolVectorCacheRules.key(model.modelId, entry.name)] =
                 CachedToolVector(ToolVectorCacheRules.textHash(entry), vector)
         }
+        publish(entries)
         return ToolVectorCacheRules.ready(model.modelId, entries, cache)
     }
 
@@ -115,12 +172,26 @@ class ToolVectorIndex(
         // One missing vector is enough to answer lexically: a partial ranking would silently
         // pretend the un-embedded tools were considered and found irrelevant.
         if (vectors.any { it == null }) return null
-        val queryVector = runCatching { embeddings.embed(listOf(query.trim())).first() }
+        // Capped because the query can be a whole pasted document: the tool intent is in the
+        // opening lines, the model would truncate it anyway, and an input larger than the
+        // embedder's context is not something this path should discover at runtime.
+        val queryVector = runCatching { embeddings.embed(listOf(query.trim().take(MAX_QUERY_CHARS))).first() }
             .onFailure { Log.d(TAG, "embedding the tool query failed", it) }
             .getOrNull()
             ?: return null
         return ToolRankFusion.rankByCosine(queryVector, entries.map { it.name }, vectors.map { it ?: return null })
     }
+
+    /**
+     * The ranking of [catalog] for [query] as names, falling back to the lexical one. Never null:
+     * a caller that has to attach *something* this turn cannot do anything with "no opinion".
+     *
+     * The fallback is what makes the first turn of a cold conversation work: the vectors are still
+     * being produced in the background, and a turn that guesses from the lexical ranking is a turn
+     * that has the right tools, rather than one that has none.
+     */
+    suspend fun ranking(query: String, catalog: ToolCatalog): List<String> =
+        retrieve(query, catalog)?.map { it.name } ?: catalog.matchAll(query).map { it.name }
 
     /**
      * The catalogue ranking `tool_search` should answer with, or null to leave it entirely to the
@@ -142,5 +213,8 @@ class ToolVectorIndex(
 
     private companion object {
         const val TAG = "ToolVectorIndex"
+
+        /** How much of a query is embedded. See the cap's use site. */
+        const val MAX_QUERY_CHARS = 1000
     }
 }

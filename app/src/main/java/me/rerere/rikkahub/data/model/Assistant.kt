@@ -151,6 +151,13 @@ data class Assistant(
     // Appended last on purpose: a new field may never shift the position of an existing one.
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val contextBudgetReminderPercent: Int = 70,
+    // P3-03 — tools the user wants attached on every turn of progressive tool mode, whatever the
+    // retrieval thinks of the current request. Empty (the default) is a strict no-op, and
+    // @EncodeDefault(NEVER) keeps an assistant that never pinned anything byte-identical in the
+    // store. Pins survive the retrieval being unavailable: they are the user's word, not a guess.
+    // Appended last on purpose: a new field may never shift the position of an existing one.
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val pinnedToolNames: List<String> = emptyList(),
 )
 
 @Serializable

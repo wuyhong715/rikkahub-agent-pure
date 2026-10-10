@@ -42,7 +42,9 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dokar.sonner.ToastType
 import me.rerere.rikkahub.R
+import androidx.compose.foundation.layout.Row
 import me.rerere.rikkahub.data.ai.tools.LocalToolOption
+import me.rerere.rikkahub.data.ai.tools.ToolSurfaceMode
 import me.rerere.rikkahub.data.ai.tools.LocalTools
 import me.rerere.rikkahub.data.ai.tools.local.PermissionHelper
 import me.rerere.rikkahub.data.ai.tools.local.TermuxIntegration
@@ -1337,25 +1339,73 @@ private fun AssistantLocalToolContent(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp),
             )
+            if (assistant.toolSurfaceMode == ToolSurfaceMode.PROGRESSIVE_CATALOG) {
+                // P3-03 — the pin only exists in progressive mode. Explaining it here, next to the
+                // switches it modifies, is cheaper than a user concluding the mode is broken
+                // because the tool they wanted was never offered.
+                Text(
+                    text = stringResource(R.string.assistant_page_local_tools_pin_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp),
+                )
+            }
             CardGroup {
                 liveToolNames.forEach { toolName ->
                     item(
                         headlineContent = { Text(toolName) },
                         trailingContent = {
-                            Switch(
-                                checked = toolName !in assistant.disabledLocalTools,
-                                onCheckedChange = { next ->
-                                    onUpdateAssistant { current ->
-                                        current.copy(
-                                            disabledLocalTools = if (next) {
-                                                current.disabledLocalTools - toolName
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (assistant.toolSurfaceMode == ToolSurfaceMode.PROGRESSIVE_CATALOG) {
+                                    val pinned = toolName in assistant.pinnedToolNames
+                                    TextButton(
+                                        // Read the pin state from `current`, not from the
+                                        // composition: same rule as the switch beside it, so a
+                                        // burst of taps cannot write back a stale list.
+                                        onClick = {
+                                            onUpdateAssistant { current ->
+                                                val nowPinned = toolName in current.pinnedToolNames
+                                                current.copy(
+                                                    pinnedToolNames = if (nowPinned) {
+                                                        current.pinnedToolNames - toolName
+                                                    } else {
+                                                        current.pinnedToolNames + toolName
+                                                    },
+                                                )
+                                            }
+                                        },
+                                    ) {
+                                        Text(
+                                            text = stringResource(
+                                                if (pinned) {
+                                                    R.string.assistant_page_local_tools_pinned
+                                                } else {
+                                                    R.string.assistant_page_local_tools_pin
+                                                }
+                                            ),
+                                            color = if (pinned) {
+                                                MaterialTheme.colorScheme.primary
                                             } else {
-                                                current.disabledLocalTools + toolName
+                                                MaterialTheme.colorScheme.onSurfaceVariant
                                             },
                                         )
                                     }
-                                },
-                            )
+                                }
+                                Switch(
+                                    checked = toolName !in assistant.disabledLocalTools,
+                                    onCheckedChange = { next ->
+                                        onUpdateAssistant { current ->
+                                            current.copy(
+                                                disabledLocalTools = if (next) {
+                                                    current.disabledLocalTools - toolName
+                                                } else {
+                                                    current.disabledLocalTools + toolName
+                                                },
+                                            )
+                                        }
+                                    },
+                                )
+                            }
                         },
                     )
                 }
