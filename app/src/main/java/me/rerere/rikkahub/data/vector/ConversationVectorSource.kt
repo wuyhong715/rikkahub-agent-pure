@@ -81,7 +81,7 @@ class ConversationVectorSource(
                 continue
             }
             val written = store.apply(SOURCE, doc.docKey, plan, model.modelId, nowMs) { texts ->
-                embeddings.embed(texts)
+                embeddings.embedDocuments(texts)
             }
             plan as SyncPlan.Replace
             chunks += written
@@ -121,7 +121,7 @@ class ConversationVectorSource(
     ): ConversationSearchOutcome {
         val model = embeddings.ensureLoaded()
             ?: return ConversationSearchOutcome(available = false)
-        val queryVector = embeddings.embedOne(query)
+        val queryVector = embeddings.embedQuery(query)
         val result = store.search(SOURCE, model.modelId, queryVector, limit, relativeFloor)
         val models = store.modelIdsOf(SOURCE)
         return ConversationSearchOutcome(

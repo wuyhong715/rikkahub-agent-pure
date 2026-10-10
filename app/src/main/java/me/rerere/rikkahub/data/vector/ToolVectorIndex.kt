@@ -135,7 +135,7 @@ class ToolVectorIndex(
             return ToolVectorCacheRules.ready(model.modelId, entries, cache)
         }
 
-        val vectors = runCatching { embeddings.embed(missing.map(ToolVectorCacheRules::embedTextOf)) }
+        val vectors = runCatching { embeddings.embedDocuments(missing.map(ToolVectorCacheRules::embedTextOf)) }
             .onFailure { Log.d(TAG, "embedding ${missing.size} tool entries failed", it) }
             .getOrNull()
             ?: run {
@@ -179,7 +179,7 @@ class ToolVectorIndex(
         // Capped because the query can be a whole pasted document: the tool intent is in the
         // opening lines, the model would truncate it anyway, and an input larger than the
         // embedder's context is not something this path should discover at runtime.
-        val queryVector = runCatching { embeddings.embed(listOf(query.trim().take(MAX_QUERY_CHARS))).first() }
+        val queryVector = runCatching { embeddings.embedQuery(query.trim().take(MAX_QUERY_CHARS)) }
             .onFailure { Log.d(TAG, "embedding the tool query failed", it) }
             .getOrNull()
             ?: return null

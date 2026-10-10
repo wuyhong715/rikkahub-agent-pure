@@ -808,6 +808,7 @@ private fun AssistantMemoryContent(
                                             R.string.assistant_page_embedding_size_mb,
                                             (entry.sizeBytes / 1_000_000L).toInt(),
                                             entry.dim,
+                                            entry.contextLabel,
                                         ),
                                         style = MaterialTheme.typography.bodySmall,
                                     )
