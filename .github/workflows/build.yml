@@ -178,25 +178,30 @@ jobs:
         uses: actions/cache@v4
         with:
           path: litert_npu_runtime_libraries/qualcomm_runtime_v79/src/main/jni/arm64-v8a
-          key: npu-qairt-2.47.0.260601-htp-v79
+          key: npu-qairt-2.47.0.260601-htp-v79-jit
 
       - name: Fetch Qualcomm NPU runtime libraries
         if: matrix.soc == 'snapdragon'
         run: |
           set -euo pipefail
           DEST=litert_npu_runtime_libraries/qualcomm_runtime_v79/src/main/jni/arm64-v8a
-          if [ -f "$DEST/libQnnHtpV79Skel.so" ]; then
+          if [ -f "$DEST/libQnnHtpPrepare.so" ]; then
             echo "restored from cache"
             ls -l "$DEST"
             exit 0
           fi
-          # Google's half: libLiteRtDispatch_Qualcomm.so, the NPU accelerator LiteRT dlopens.
+          # The *jit* bundle, not the AOT one. Our model carries QNN `bytecode`, which the
+          # device has to compile, so it needs the HTP compiler -- libQnnHtpPrepare.so --
+          # and that library is only in the jit bundle's fetch script. The AOT bundle's
+          # script copies the four runtime libraries and nothing else, which is why the
+          # engine could be created and then failed the moment it had to run.
           curl -sSL -o /tmp/npu.zip \
-            "https://github.com/google-ai-edge/LiteRT/releases/download/v2.2.0/litert_npu_runtime_libraries.zip"
+            "https://github.com/google-ai-edge/LiteRT/releases/download/v2.2.0/litert_npu_runtime_libraries_jit.zip"
           unzip -q /tmp/npu.zip -d /tmp/npuz
           cp /tmp/npuz/qualcomm_runtime_v79/src/main/jni/arm64-v8a/libLiteRtDispatch_Qualcomm.so "$DEST/"
-          # Qualcomm's half: libQnnHtp.so / libQnnSystem.so / libQnnHtpV79Stub.so and the
-          # DSP-side libQnnHtpV79Skel.so.
+          cp /tmp/npuz/qualcomm_runtime_v79/src/main/jni/arm64-v8a/libLiteRtCompilerPlugin_Qualcomm.so "$DEST/"
+          # Qualcomm's half: the four runtime libraries, the DSP-side skeleton, and the
+          # compiler libraries that only the jit path needs.
           bash litert_npu_runtime_libraries/fetch_qualcomm_library.sh
           ls -l "$DEST"
 

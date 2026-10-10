@@ -12,7 +12,7 @@ trap cleanup EXIT
 QAIRT_URL='https://softwarecenter.qualcomm.com/api/download/software/sdks/Qualcomm_AI_Runtime_Community/All/2.47.0.260601/v2.47.0.260601.zip'
 QAIRT_CONTENT_DIR='qairt/2.47.0.260601'
 # LINT.ThenChange(
-#     ./fetch_qualcomm_library_jit.sh:fetch_qairt_sdk_version,
+#     ./fetch_qualcomm_library.sh:fetch_qairt_sdk_version,
 #     ../../../opensource_only/third_party/qairt/workspace.bzl:bazel_qairt_sdk_version,
 #     ../../../opensource_only/ci/tools/python/vendor_sdk/qualcomm/setup.py:wheel_qairt_sdk_version,
 #     ../../vendors/CMakeLists.txt:qairt_headers_dir,
@@ -45,5 +45,19 @@ for version in "${QNN_VERSIONS[@]}"; do
 
   # libQnnHtpV${version}Stub.so
   cp -rf "${SOURCE_DIR}/lib/aarch64-android/libQnnHtpV${version}Stub.so" \
+    "${DEST_DIR}/qualcomm_runtime_v${version}/${JNI_ARM64_DIR}/"
+
+  # The following libraries are only needed for JIT model compilation.
+
+  # libQnnHtpPrepare.so
+  cp -rf "${SOURCE_DIR}/lib/aarch64-android/libQnnHtpPrepare.so" \
+    "${DEST_DIR}/qualcomm_runtime_v${version}/${JNI_ARM64_DIR}/"
+
+  # libQnnIr.so
+  cp -rf "${SOURCE_DIR}/lib/aarch64-android/libQnnIr.so" \
+    "${DEST_DIR}/qualcomm_runtime_v${version}/${JNI_ARM64_DIR}/"
+
+  # libQnnSaver.so
+  cp -rf "${SOURCE_DIR}/lib/aarch64-android/libQnnSaver.so" \
     "${DEST_DIR}/qualcomm_runtime_v${version}/${JNI_ARM64_DIR}/"
 done
