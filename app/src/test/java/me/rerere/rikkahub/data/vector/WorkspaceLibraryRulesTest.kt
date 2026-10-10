@@ -32,12 +32,14 @@ class WorkspaceLibraryRulesTest {
 
     @Test
     fun `binaries and unknown extensions are not indexed`() {
-        assertNull(WorkspaceLibraryRules.kindOf("photo.png"))
         assertNull(WorkspaceLibraryRules.kindOf("libfoo.so"))
         assertNull(WorkspaceLibraryRules.kindOf("cache.jar"))
         assertNull(WorkspaceLibraryRules.kindOf("archive.zip"))
         assertNull(WorkspaceLibraryRules.kindOf("model.gguf"))
         assertNull(WorkspaceLibraryRules.kindOf("binary"))
+        // Media that is not text, and whose meaning needs a model of its own.
+        assertNull(WorkspaceLibraryRules.kindOf("clip.mp4"))
+        assertNull(WorkspaceLibraryRules.kindOf("voice.m4a"))
     }
 
     @Test
@@ -66,6 +68,8 @@ class WorkspaceLibraryRulesTest {
         assertEquals(ChunkingMode.CODE, WorkspaceLibraryRules.chunkModeOf(LibraryFileKind.CODE, "a.kt"))
         assertEquals(ChunkingMode.CODE, WorkspaceLibraryRules.chunkModeOf(LibraryFileKind.CODE, "Makefile"))
         assertEquals(ChunkingMode.PLAIN, WorkspaceLibraryRules.chunkModeOf(LibraryFileKind.DOCUMENT, "a.pdf"))
+        // Recognised text is lines of prose, whatever the image happened to be of.
+        assertEquals(ChunkingMode.PLAIN, WorkspaceLibraryRules.chunkModeOf(LibraryFileKind.IMAGE, "screen.png"))
     }
 
     @Test
@@ -177,5 +181,81 @@ class WorkspaceLibraryRulesTest {
     fun `the default directory is a relative path inside the workspace`() {
         assertEquals("library", WorkspaceLibraryRules.DEFAULT_DIR)
         assertFalse(WorkspaceLibraryRules.DEFAULT_DIR.startsWith("/"))
+    }
+
+    @Test
+    fun `images are indexed, whatever format the screenshot arrived in`() {
+        assertEquals(LibraryFileKind.IMAGE, WorkspaceLibraryRules.kindOf("screen.png"))
+        assertEquals(LibraryFileKind.IMAGE, WorkspaceLibraryRules.kindOf("Shot.PNG"))
+        assertEquals(LibraryFileKind.IMAGE, WorkspaceLibraryRules.kindOf("photo.jpg"))
+        assertEquals(LibraryFileKind.IMAGE, WorkspaceLibraryRules.kindOf("photo.jpeg"))
+        assertEquals(LibraryFileKind.IMAGE, WorkspaceLibraryRules.kindOf("scan.webp"))
+        assertEquals(LibraryFileKind.IMAGE, WorkspaceLibraryRules.kindOf("IMG_0001.HEIC"))
+    }
+
+    @Test
+    fun `an image is charged the same whatever it weighs`() {
+        // The bug this pins: charging an image by its byte count - the way text is charged - spends
+        // most of a round's budget on the first photograph of a folder full of them.
+        assertEquals(
+            WorkspaceLibraryRules.ESTIMATED_CHARS_PER_IMAGE,
+            WorkspaceLibraryRules.estimatedChars(LibraryFileKind.IMAGE, 12_000_000),
+        )
+        assertEquals(
+            WorkspaceLibraryRules.ESTIMATED_CHARS_PER_IMAGE,
+            WorkspaceLibraryRules.estimatedChars(LibraryFileKind.IMAGE, 400_000),
+        )
+        assertTrue(
+            WorkspaceLibraryRules.ESTIMATED_CHARS_PER_IMAGE < WorkspaceLibraryRules.MAX_CHARS_PER_ROUND,
+        )
+    }
+
+    @Test
+    fun `a round recognises only so many images`() {
+        // Zero-padded so that the planner's path order is also the numeric order; without it the
+        // round would legitimately keep shot10 before shot2, and the test would be asserting the
+        // compiler's string comparison rather than the cap.
+        val candidates = (1..10).map {
+            candidate("shot%02d.png".format(it), kind = LibraryFileKind.IMAGE, sizeBytes = 500_000)
+        }
+        val round = WorkspaceLibraryRules.planRound(candidates, indexed = emptySet(), maxImages = 3)
+        assertEquals(listOf("shot01.png", "shot02.png", "shot03.png"), round.take.map { it.path })
+        assertEquals(7, round.deferred)
+    }
+
+    @Test
+    fun `the image cap never pushes out the files that are not images`() {
+        val candidates = (1..5).map {
+            candidate("shot$it.png", kind = LibraryFileKind.IMAGE, sizeBytes = 500_000)
+        } + candidate("notes.md")
+        val round = WorkspaceLibraryRules.planRound(candidates, indexed = emptySet(), maxImages = 1)
+        assertEquals(listOf("notes.md", "shot1.png"), round.take.map { it.path })
+        assertEquals(4, round.deferred)
+    }
+
+    @Test
+    fun `an image over its cap is reported rather than decoded`() {
+        val round = WorkspaceLibraryRules.planRound(
+            listOf(
+                candidate(
+                    "huge.png",
+                    kind = LibraryFileKind.IMAGE,
+                    sizeBytes = WorkspaceLibraryRules.MAX_IMAGE_FILE_BYTES + 1,
+                ),
+            ),
+            indexed = emptySet(),
+        )
+        assertEquals(emptyList<String>(), round.take.map { it.path })
+        assertEquals(listOf("huge.png"), round.tooBig)
+    }
+
+    @Test
+    fun `an image with no text in it is indexed as its own name`() {
+        // Otherwise the file never enters the index, and every round recognises it again.
+        assertEquals("Image: IMG_0001.jpg", WorkspaceLibraryRules.placeholderForImage("IMG_0001.jpg"))
+        assertTrue(
+            WorkspaceLibraryRules.placeholderForImage("a.png")
+                .startsWith(WorkspaceLibraryRules.IMAGE_PLACEHOLDER_PREFIX),
+        )
     }
 }

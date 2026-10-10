@@ -41,6 +41,11 @@ class LibraryIndexCoordinator(
     private val embeddings: EmbeddingService,
     private val source: WorkspaceLibrarySource,
     private val workspaceRepository: WorkspaceRepository,
+    /**
+     * Reads the text out of an image file. A parameter with a default rather than a constructor of
+     * its own, so the wiring in `DataSourceModule` does not have to know about the recognizer.
+     */
+    private val imageText: ImageTextExtractor = ImageTextExtractor(),
 ) {
 
     /** What the settings screen shows, and what a log line is written from. */
@@ -295,8 +300,9 @@ class LibraryIndexCoordinator(
      * Reads one file into the text that will be embedded.
      *
      * Documents go through the same parsers the chat uses for an uploaded attachment, so a PDF the
-     * model can read in a message is a PDF the library can index. The cap is applied after
-     * extraction, because that is where the cost is.
+     * model can read in a message is a PDF the library can index. Images go through on-device text
+     * recognition and are indexed as the words they contain - see [ImageTextExtractor]. The cap is
+     * applied after extraction, because that is where the cost is.
      */
     private suspend fun readDoc(
         workspaceId: String,
@@ -314,6 +320,20 @@ class LibraryIndexCoordinator(
                         relative,
                     )
                     withContext(Dispatchers.IO) { parseDocument(file, parser) }
+                }
+
+                LibraryFileKind.IMAGE -> {
+                    val file = workspaceRepository.resolveFile(
+                        workspaceId,
+                        WorkspaceStorageArea.FILES,
+                        relative,
+                    )
+                    val recognised = withContext(Dispatchers.IO) { imageText.extract(file) }
+                    // An image with no text in it would otherwise never enter the index, and a file
+                    // the index has never seen is one that every later round reads first - so a
+                    // photograph of a wall would be recognised again every five minutes, forever.
+                    // Its name is the one thing it can be searched by, so that is what gets indexed.
+                    recognised.ifBlank { WorkspaceLibraryRules.placeholderForImage(candidate.name) }
                 }
 
                 else -> workspaceRepository.readText(workspaceId, relative)
