@@ -76,14 +76,25 @@ cronUtils = "9.2.1"
 # instead (see ShizukuManager.kt).
 shizuku = "13.1.5"
 genaiPrompt = "1.0.0-beta2"
-# Pinned below 0.14.0 deliberately. 0.14.0 drops libLiteRtClGlAccelerator.so and moves
-# the GPU backend from OpenCL/GLES to Dawn/WebGPU-on-Vulkan, which Adreno 6xx rejects:
-# every CreateComputePipelines call returns VK_ERROR_UNKNOWN, the delegate keeps
-# submitting the resulting invalid command buffers, and the native execution thread
-# SIGSEGVs. That is unrecoverable from Kotlin, so the accelerator fallback cannot catch
-# it. 0.13.1 has an identical public API (same classes, same tool-calling surface,
-# getTokenCount/getBenchmarkInfo/cancelProcess all present) and a working GPU path.
-litertlm = "0.13.1"
+# 0.18.0 deliberately, and it is the most aggressive thing in this file.
+#
+# EmbeddingGemma 2's multi-modal embedder is only reachable from 0.17.0: `EmbeddingEngine`
+# does not exist in 0.13.1 .. 0.16.1 (checked by unpacking every published AAR). The upgrade
+# costs us the OpenCL/GLES GPU backend -- 0.14.0 replaced it with Dawn/WebGPU-on-Vulkan, which
+# Adreno 6xx rejects: every CreateComputePipelines call returns VK_ERROR_UNKNOWN, the delegate
+# keeps submitting the resulting invalid command buffers, and the native execution thread
+# SIGSEGVs. That is unrecoverable from Kotlin, so the accelerator fallback cannot catch it,
+# and it is exactly why this was pinned below 0.14.0 before. We take the trade knowingly: the
+# durable crash marker in LocalRuntimePreferences still forces CPU after one fault, so the
+# worst case is one crash per device per SDK version rather than a loop. Adreno 830
+# (Snapdragon 8 Elite) is the device this is verified against -- see cold-memory M25.
+#
+# API compatibility, verified with javap against both published AARs: 0.18.0 removed the
+# standalone `Capabilities` type (now `ModelInfo` + `LlmCapability`) and added
+# `activationDataType` to EngineConfig. Everything else this repo touches -- ConversationConfig,
+# SamplerConfig, Content/Contents, Message, ToolProvider, and every Backend.CPU()/GPU()/NPU()
+# call site -- is source-compatible, because the new parameters all carry defaults.
+litertlm = "0.18.0"
 snakeyaml = "2.6"
 # Vico — Compose-native charts, used by the statistics page's daily usage chart.
 vico = "3.3.1"

@@ -6,7 +6,7 @@ import android.os.Build
 import android.os.PerformanceHintManager
 import android.os.Process
 import com.google.ai.edge.litertlm.Backend
-import com.google.ai.edge.litertlm.Capabilities
+import com.google.ai.edge.litertlm.LlmCapability
 import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.Contents
 import com.google.ai.edge.litertlm.Conversation
@@ -17,6 +17,7 @@ import com.google.ai.edge.litertlm.ExperimentalApi
 import com.google.ai.edge.litertlm.ExperimentalFlags
 import com.google.ai.edge.litertlm.Message
 import com.google.ai.edge.litertlm.MessageCallback
+import com.google.ai.edge.litertlm.ModelInfo
 import com.google.ai.edge.litertlm.SamplerConfig
 import com.google.ai.edge.litertlm.ToolProvider
 import kotlinx.serialization.json.JsonArray
@@ -426,7 +427,7 @@ class LiteRtRuntime(private val context: Context) {
      *
      * Returns the resolved accelerator label that was actually used.
      */
-    @OptIn(ExperimentalApi::class) // ExperimentalFlags.* + Capabilities.hasSpeculativeDecodingSupport
+    @OptIn(ExperimentalApi::class) // ExperimentalFlags.* + LlmCapability.hasSpeculativeDecodingSupport
     suspend fun ensureLoaded(
         modelPath: String,
         preferredAccel: String? = null,
@@ -466,8 +467,13 @@ class LiteRtRuntime(private val context: Context) {
         }
 
         // Probe the file for speculative-decoding support BEFORE building the engine.
+        // 0.18 removed the standalone `Capabilities` type; `ModelInfo.from(path)` answers the
+        // same question. A generative file is a `ModelInfo.Llm` and implements [LlmCapability];
+        // anything else -- an embedding bundle, a file we cannot read -- is simply "no".
         val supportsSpeculativeDecoding = try {
-            Capabilities(modelPath).use { it.hasSpeculativeDecodingSupport() }
+            ModelInfo.from(modelPath).use { info ->
+                (info as? LlmCapability)?.hasSpeculativeDecodingSupport() == true
+            }
         } catch (_: Throwable) {
             false
         }

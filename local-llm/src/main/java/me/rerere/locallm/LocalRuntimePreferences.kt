@@ -49,6 +49,9 @@ class LocalRuntimePreferences(private val context: Context) {
             AcceleratorProbe.defaultForceCpu(
                 socManufacturer = android.os.Build.SOC_MANUFACTURER,
                 socModel = android.os.Build.SOC_MODEL,
+                gpuBackendSafe = AcceleratorProbe.gpuBackendIsSafeByDefault(
+                    BuildConfig.LITERTLM_SDK_VERSION,
+                ),
             )
         } else {
             // SOC_* is API 31+. No Google Tensor device runs an OS this old, so we
