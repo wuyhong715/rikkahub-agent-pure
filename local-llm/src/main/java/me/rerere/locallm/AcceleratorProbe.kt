@@ -17,18 +17,70 @@ import android.os.Build
  */
 object AcceleratorProbe {
 
+    /**
+     * The litertlm release that replaced the OpenCL/GLES GPU accelerator with
+     * Dawn/WebGPU-on-Vulkan. Everything at or above it is a different GPU backend with a
+     * different failure mode - see [gpuBackendIsSafeByDefault].
+     */
+    const val VULKAN_GPU_SDK = "0.14.0"
+
     data class LiteRtCapabilities(
         val isQualcomm: Boolean,
         val qnnLibrarySupported: Boolean,
         val gpuDelegateSupported: Boolean,
         val nnapiSupported: Boolean,
+        /**
+         * The GPU accelerator bundled with the current litertlm is the OpenCL/GLES one, i.e.
+         * the SDK is older than [VULKAN_GPU_SDK]. Defaults to true so a capability snapshot
+         * written before the Vulkan move keeps its old meaning.
+         */
+        val gpuBackendSafe: Boolean = true,
     )
 
     fun pickLiteRt(caps: LiteRtCapabilities): String = when {
         caps.isQualcomm && caps.qnnLibrarySupported -> "QNN"
-        caps.gpuDelegateSupported -> "GPU"
+        caps.gpuDelegateSupported && caps.gpuBackendSafe -> "GPU"
+        // NNAPI reaches the same vendor DSP through a different door, and it is no better
+        // verified on the devices the Vulkan move breaks. When the GPU backend is the new
+        // one, CPU is the only backend this code is willing to pick unattended. Note the NPU
+        // branch above is deliberately untouched: QNN is what we are here to exercise.
+        !caps.gpuBackendSafe -> "CPU"
         caps.nnapiSupported -> "NNAPI"
         else -> "CPU"
+    }
+
+    /**
+     * Whether the GPU backend shipped with [sdkVersion] may be selected **by default**.
+     *
+     * 0.14.0 swapped the GPU accelerator from OpenCL/GLES to Dawn/WebGPU-on-Vulkan. On Adreno
+     * that path does not fail cleanly: the delegate keeps submitting command buffers the
+     * driver rejected, and the native thread ends up either SIGSEGV-ing (Adreno 6xx) or
+     * **spinning at full CPU** (observed on Adreno 830 / SM8750). The second shape is the
+     * dangerous one, because it never raises the native crash the auto-recovery sweep keys
+     * off, so the GPU->CPU fallback never fires and the device simply burns until the user
+     * kills it. A default that can wedge the phone is not a default we get to make, so the
+     * pre-Vulkan answer for now is: CPU unless the user opts in via "Try GPU acceleration".
+     *
+     * Fails safe - a version string this cannot parse is treated as unsafe.
+     */
+    fun gpuBackendIsSafeByDefault(sdkVersion: String): Boolean =
+        compareVersions(sdkVersion, VULKAN_GPU_SDK)?.let { it < 0 } ?: false
+
+    /** Dotted-numeric version compare: negative/zero/positive, or null if unparseable. */
+    internal fun compareVersions(a: String, b: String): Int? {
+        val pa = parseVersion(a) ?: return null
+        val pb = parseVersion(b) ?: return null
+        for (i in 0 until maxOf(pa.size, pb.size)) {
+            val d = pa.getOrElse(i) { 0 } - pb.getOrElse(i) { 0 }
+            if (d != 0) return if (d < 0) -1 else 1
+        }
+        return 0
+    }
+
+    private fun parseVersion(raw: String): List<Int>? {
+        val parts = raw.trim().split('.')
+        if (parts.isEmpty()) return null
+        return parts.map { it.toIntOrNull()?.takeIf { n -> n >= 0 } ?: return null }
     }
 
     /**
@@ -48,8 +100,16 @@ object AcceleratorProbe {
      *
      * @param socManufacturer `Build.SOC_MANUFACTURER` (API 31+), or null on older devices.
      * @param socModel `Build.SOC_MODEL` (API 31+), or null on older devices.
+     * @param gpuBackendSafe false when the bundled GPU accelerator is the post-0.14.0 Vulkan
+     *   one. That is a much wider bad class than Google Tensor - see
+     *   [gpuBackendIsSafeByDefault] - so it forces CPU before the SoC check even runs.
      */
-    fun defaultForceCpu(socManufacturer: String?, socModel: String?): Boolean {
+    fun defaultForceCpu(
+        socManufacturer: String?,
+        socModel: String?,
+        gpuBackendSafe: Boolean = true,
+    ): Boolean {
+        if (!gpuBackendSafe) return true
         // Google Tensor SoCs report SOC_MANUFACTURER = "Google"; SOC_MODEL is checked as a
         // belt-and-braces signal ("Tensor G1".."Tensor G5"). Any positive match keeps the
         // conservative CPU default. Everything else - including pre-API-31 devices where
@@ -95,6 +155,7 @@ object AcceleratorProbe {
                 qnnLibrarySupported = qnnLibrarySupported,
                 gpuDelegateSupported = gpuDelegateSupported,
                 nnapiSupported = nnapiSupported,
+                gpuBackendSafe = gpuBackendIsSafeByDefault(BuildConfig.LITERTLM_SDK_VERSION),
             )
         )
     }
