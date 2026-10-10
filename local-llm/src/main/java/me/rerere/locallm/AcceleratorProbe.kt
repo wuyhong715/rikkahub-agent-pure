@@ -3,6 +3,7 @@ package me.rerere.locallm
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import me.rerere.locallm.npu.NpuRuntimePlan
 
 /**
  * Decides which accelerator to use for each runtime. Two layers:
@@ -66,17 +67,37 @@ object AcceleratorProbe {
      * @param forceCpu short-circuits to "CPU" without probing — set when the user has
      *   the "Try GPU acceleration" toggle off, OR when the auto-recovery sweep saw a
      *   prior native crash inside liblitertlm and flipped the flag for us.
+     * @param socFamily the installed flavour's SOC_FAMILY. NPU is opt-in per
+     *   *build*, so this is checked before any device-side probe. See [NpuRuntimePlan].
      */
-    fun probeLiteRt(context: Context, forceCpu: Boolean = false): String {
+    fun probeLiteRt(
+        context: Context,
+        forceCpu: Boolean = false,
+        socFamily: String = "generic",
+    ): String {
         if (forceCpu) return "CPU"
+        // NPU is opt-in per *build*, not per device: only a soc flavour compiled for this
+        // device's vendor may offer that vendor's runtime, so a generic APK answers "no"
+        // here whatever the phone is. See NpuRuntimePlan for why the release is split.
+        val npuOfferedByBuild = NpuRuntimePlan.isUsableOn(
+            family = NpuRuntimePlan.familyOf(socFamily),
+            // SOC_MANUFACTURER is API 31+; older devices read as null, which the plan treats
+            // as "not this build's vendor".
+            socManufacturer = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                Build.SOC_MANUFACTURER
+            } else {
+                null
+            },
+        )
         val isQualcomm = Build.HARDWARE.contains("qcom", ignoreCase = true) ||
             Build.MANUFACTURER.equals("Qualcomm", ignoreCase = true)
-        val qnnLibrarySupported = isQualcomm && runCatching {
-            // The QNN delegate is bundled in the LiteRT-LM AAR (litertlm-android). Attempting to
-            // load it eagerly fails fast on non-Qualcomm devices or where the right ABI is absent.
-            // A failed load leaves the class loader in a partially-initialised state for that
-            // library name, but Android's JNI loader is idempotent for subsequent real loads of the
-            // same name by the actual runtime — the side effect is acceptable.
+        val qnnLibrarySupported = isQualcomm && npuOfferedByBuild && runCatching {
+            // This used to claim the QNN delegate ships inside the LiteRT-LM AAR. It does
+            // not: unpacking the published AAR shows only liblitertlm_jni.so, and the
+            // installed APK carries no QNN or dispatch library at all. LiteRT-LM reaches a
+            // vendor NPU through a *dispatch* library the app itself has to supply
+            // (NpuRuntimePlan.dispatchLibraryFor), so this stays false until one has been
+            // fetched. Kept for the case where a future build ships the libraries.
             System.loadLibrary("qnn_delegate_jni")
             true
         }.getOrDefault(false)
