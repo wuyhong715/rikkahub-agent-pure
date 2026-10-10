@@ -1064,6 +1064,15 @@ data class Settings(
     val aiLogLevel: AiLogLevel = AiLogLevel.INFO,
     val backupReminderConfig: BackupReminderConfig = BackupReminderConfig(),
     val launchCount: Int = 0,
+
+    /**
+     * Moxw - the GGUF file name the vector index embeds with, or empty to pick automatically
+     * among the installed curation. Stored per field like everything else here, which is what
+     * SettingsPersistenceCoverageTest enforces: a field without a Preferences.Key would look
+     * saved and then vanish on the next launch.
+     * Appended last on purpose: a new field may never shift the position of an existing one.
+     */
+    val embeddingModelFile: String = "",
 ) {
     companion object {
         // 构造一个用于初始化的settings, 但它不能用于保存，防止使用初始值存储
@@ -1100,14 +1109,6 @@ data class NetworkSetting(
      * with no content" report. Kept well above a legitimate long-context prefill.
      */
     val streamFirstOutputTimeoutSeconds: Int = 120,
-    /**
-     * Moxw - the GGUF file name the vector index embeds with, or empty to pick automatically.
-     * Stored per field like everything else here, which is what
-     * SettingsPersistenceCoverageTest enforces: a field without a Preferences.Key would look
-     * saved and then vanish on the next launch.
-     * Appended last on purpose: a new field may never shift the position of an existing one.
-     */
-    val embeddingModelFile: String = "",
 )
 
 @Serializable

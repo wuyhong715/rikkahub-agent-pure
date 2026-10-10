@@ -130,7 +130,7 @@ class VectorIndexStore(
             relativeFloor = relativeFloor,
         )
         VectorSearchResult(
-            hits = ranked.hits.map { it.item.first.copy(score = it.score) },
+            hits = ranked.hits.map { it.item.copy(score = it.score) },
             skipped = ranked.skipped,
         )
     }
