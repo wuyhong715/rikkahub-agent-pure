@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+      The HTP stub library reaches the Hexagon DSP through Qualcomm's FastRPC transport,
+      and that transport is a *vendor* library living in /vendor/lib64. The file is world
+      readable and it is named in /vendor/etc/public.libraries.txt, and neither of those is
+      enough on its own: since Android 12 a vendor public library only lands in an app's
+      linker namespace if the app asks for it by name here.
+
+      What the failure looks like without this is genuinely misleading, because the library
+      is right there on disk:
+
+        Failed in loading stub: dlopen failed: library "libcdsprpc.so" not found
+        needed by .../lib/arm64/libQnnHtpV79Stub.so in namespace clns-9
+        Failed to create transport for device, error: 4000
+        Failed to load skel, error: 4000
+
+      so QNN reports a missing stub, and then a missing skeleton, when the one thing
+      actually missing is a namespace entry. required="false" throughout: this flavour still
+      has to install on a device that has none of them.
+    -->
+    <uses-native-library android:name="libcdsprpc.so" android:required="false" />
+    <uses-native-library android:name="libadsprpc.so" android:required="false" />
+    <uses-native-library android:name="libsdsprpc.so" android:required="false" />
+
+</manifest>
