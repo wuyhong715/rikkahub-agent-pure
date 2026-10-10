@@ -689,7 +689,9 @@ private fun AssistantMemoryContent(
             workspaceId = libraryWorkspace.id,
             currentCwd = assistant.libraryDir.ifBlank { DEFAULT_LIBRARY_DIR_ABSOLUTE },
             onSelectCwd = { selected ->
-                val updated = assistant.copy(libraryDir = selected)
+                // The picker's reset button hands back null, and for this field that means the
+                // default directory - not "the workspace root", which arrives as "/workspace".
+                val updated = assistant.copy(libraryDir = selected.orEmpty())
                 onUpdateAssistant(updated)
                 // Where the files are is part of what the index is of: a different directory has
                 // never been indexed, so this is a first build rather than a refresh.
