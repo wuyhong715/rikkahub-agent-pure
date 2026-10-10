@@ -48,18 +48,24 @@ object NpuProbe {
 
     /**
      * Runs the probe only when a request file exists under [appFilesDir] -- see
-     * [findRequest] for the two places it may be.
+     * [findRequest] for the three places it may be.
      *
      * @param appNativeLibDir the app's own `applicationInfo.nativeLibraryDir`. Passed in so the
      *   probe can try the stock search path first and the downloaded runtime dir second; the
      *   difference between the two outcomes is the whole answer.
+     * @param externalRequestDir the app's own external files dir, if it has one. An app's
+     *   private data dir can only be written by that app, so a probe run against a build whose
+     *   workspace we are not inside has no other way in: this directory is writable by the
+     *   shell and readable by the app with no permission at all. Only the trigger is looked for
+     *   here; where it is found decides where the result goes.
      */
     fun runIfRequested(
         appFilesDir: File,
         appNativeLibDir: String = "",
         sdkVersion: String = "",
+        externalRequestDir: File? = null,
     ) {
-        val request = findRequest(appFilesDir) ?: return
+        val request = findRequest(appFilesDir, externalRequestDir) ?: return
         val lines = runCatching { request.readLines() }.getOrDefault(emptyList())
         // Point of no return: drop the trigger before anything native is loaded.
         runCatching { request.delete() }
@@ -125,18 +131,25 @@ object NpuProbe {
     }
 
     /**
-     * The request file lives either directly in the app's files dir or in a workspace's own
-     * files dir under it. Both are searched because only the second is reachable from inside
-     * the workspace, while only the first is obvious from the app side.
+     * Three places, in order, because there are three ways to drop a trigger:
+     *
+     *  1. the app's files dir -- obvious from the app side;
+     *  2. `<filesDir>/workspaces/<uuid>/files` -- what the proot workspace's `/workspace`
+     *     actually binds to, so this is where a file written from inside it lands;
+     *  3. the app's external files dir -- reachable from the shell side without being inside
+     *     the app at all, which is the only option for an app whose workspace we do not host.
      */
-    internal fun findRequest(appFilesDir: File): File? {
+    internal fun findRequest(appFilesDir: File, externalRequestDir: File? = null): File? {
         val direct = File(appFilesDir, REQUEST_FILE)
         if (direct.isFile) return direct
         val workspaces = File(appFilesDir, "workspaces")
-        return workspaces.listFiles()
+        workspaces.listFiles()
             ?.asSequence()
             ?.map { File(File(it, "files"), REQUEST_FILE) }
             ?.firstOrNull { it.isFile }
+            ?.let { return it }
+        val external = externalRequestDir?.let { File(it, REQUEST_FILE) }
+        return external?.takeIf { it.isFile }
     }
 
     private fun attempt(

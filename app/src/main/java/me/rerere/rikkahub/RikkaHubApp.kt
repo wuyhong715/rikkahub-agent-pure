@@ -120,6 +120,7 @@ class RikkaHubApp : Application() {
                 appFilesDir = filesDir,
                 appNativeLibDir = applicationInfo.nativeLibraryDir,
                 sdkVersion = me.rerere.locallm.BuildConfig.LITERTLM_SDK_VERSION,
+                externalRequestDir = getExternalFilesDir(null),
             )
         }
 

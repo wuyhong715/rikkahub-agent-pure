@@ -80,4 +80,30 @@ class NpuProbeTest {
     fun `result file name is distinct from the request name`() {
         assertSame(false, NpuProbe.RESULT_FILE == NpuProbe.REQUEST_FILE)
     }
+
+    @Test
+    fun `request in the external files dir is found last`() {
+        // The shell side can write here and the app can read it with no permission, which is
+        // the only way to drive a build whose workspace we do not host.
+        val filesDir = tmp.newFolder("files")
+        val ext = tmp.newFolder("external")
+        val r = requestIn(ext)
+        assertEquals(r.absolutePath, NpuProbe.findRequest(filesDir, ext)?.absolutePath)
+    }
+
+    @Test
+    fun `the app files dir still wins over the external one`() {
+        val filesDir = tmp.newFolder("files")
+        val ext = tmp.newFolder("external")
+        val top = requestIn(filesDir)
+        requestIn(ext)
+        assertEquals(top.absolutePath, NpuProbe.findRequest(filesDir, ext)?.absolutePath)
+    }
+
+    @Test
+    fun `an absent external dir is not an error`() {
+        val filesDir = tmp.newFolder("files")
+        assertNull(NpuProbe.findRequest(filesDir, null))
+        assertNull(NpuProbe.findRequest(filesDir, File(filesDir, "nope")))
+    }
 }
