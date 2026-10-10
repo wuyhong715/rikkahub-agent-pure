@@ -133,8 +133,9 @@
   <string name="assistant_page_local_tools_pin">Pin</string>
   <string name="assistant_page_local_tools_pinned">Pinned</string>
   <string name="assistant_page_local_tools_pin_desc">In progressive mode a tool is attached only when the current request retrieves it. Pin the tools you always want available — the screen automation ones, for example.</string>
-  <string name="assistant_page_tool_surface_mode">Progressive MCP tool catalog</string>
-  <string name="assistant_page_tool_surface_mode_desc">Replaces the MCP tools in each request with a tool_search / tool_open pair, so only the schemas the model opens are sent. Cuts the first-turn tool tokens, but the tool list changes between turns, which can cost prompt-cache hits. Local tools are never catalogued. Off by default.</string>
+  <string name="assistant_page_local_tools_pin_hint_off">Turn on “Load tools on demand” in Basic settings and you can pin tools here to keep them always available.</string>
+  <string name="assistant_page_tool_surface_mode">Load tools on demand</string>
+  <string name="assistant_page_tool_surface_mode_desc">Stops attaching every tool. Local tools, MCP tools and skills all become reachable through tool_search / tool_open, and only the ones you pinned, the model opened, or this request retrieved are attached — a skill shows up in the use_skill listing when it is retrieved. Far fewer tool tokens, but the list changes between turns, which can cost prompt-cache hits. Off by default.</string>
   <string name="assistant_page_subagent_context_refs">Sub-agent context references</string>
   <string name="assistant_page_subagent_context_refs_desc">Lets subagent_dispatch also send the last N turns of this conversation to the sub-agent, verbatim, so a task that refers to what you were just discussing no longer has to be retyped. The turns travel as plain text — the sub-agent still cannot read this conversation. Off by default, and while it is off the tool schema is identical to before, so existing chats send exactly the same request.</string>
   <string name="assistant_page_subagent_tool_surface">Freeze sub-agent tool surface</string>

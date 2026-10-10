@@ -1339,17 +1339,22 @@ private fun AssistantLocalToolContent(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp),
             )
-            if (assistant.toolSurfaceMode == ToolSurfaceMode.PROGRESSIVE_CATALOG) {
-                // P3-03 — the pin only exists in progressive mode. Explaining it here, next to the
-                // switches it modifies, is cheaper than a user concluding the mode is broken
-                // because the tool they wanted was never offered.
-                Text(
-                    text = stringResource(R.string.assistant_page_local_tools_pin_desc),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp),
-                )
-            }
+            // P3-03 — the pin only exists in progressive mode, so this section says which of the
+            // two situations the user is in. Both branches exist because both were real: the first
+            // device test went looking for the control, found nothing, and had no way to tell that
+            // the mode it needs is one page away.
+            Text(
+                text = stringResource(
+                    if (assistant.toolSurfaceMode == ToolSurfaceMode.PROGRESSIVE_CATALOG) {
+                        R.string.assistant_page_local_tools_pin_desc
+                    } else {
+                        R.string.assistant_page_local_tools_pin_hint_off
+                    }
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp),
+            )
             CardGroup {
                 liveToolNames.forEach { toolName ->
                     item(
