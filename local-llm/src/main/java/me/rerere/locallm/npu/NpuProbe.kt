@@ -20,9 +20,15 @@ import java.io.File
  *
  * ```
  * npu-probe-request      line 1: absolute path of a .litertlm embedding model
- *                        line 2: optional runtime dir, default <filesDir>/npu-runtime
- * npu-probe-result.txt   appended to as the probe progresses
+ *                        line 2: optional runtime dir, default <requestDir>/npu-runtime
+ * npu-probe-result.txt   appended to as the probe progresses, in the same directory
  * ```
+ *
+ * Where "the app's own files directory" is deliberately *several* directories. The proot
+ * workspace binds `/workspace` to `<filesDir>/workspaces/<uuid>/files`, not to `<filesDir>`
+ * itself, so a file dropped from inside the workspace lands one level down. The request is
+ * therefore searched for in the files dir and in every workspace's files dir beneath it, and
+ * the result is written next to whichever one matched.
  *
  * The request file is deleted before anything is loaded, so a native abort cannot become a
  * crash loop on the next launch -- the normal app-start path runs this again on every cold
@@ -41,27 +47,28 @@ object NpuProbe {
     const val DEFAULT_RUNTIME_DIR = "npu-runtime"
 
     /**
-     * Runs the probe only when [filesDir]/[REQUEST_FILE] exists.
+     * Runs the probe only when a request file exists under [appFilesDir] -- see
+     * [findRequest] for the two places it may be.
      *
      * @param appNativeLibDir the app's own `applicationInfo.nativeLibraryDir`. Passed in so the
      *   probe can try the stock search path first and the downloaded runtime dir second; the
      *   difference between the two outcomes is the whole answer.
      */
     fun runIfRequested(
-        filesDir: File,
+        appFilesDir: File,
         appNativeLibDir: String = "",
         sdkVersion: String = "",
     ) {
-        val request = File(filesDir, REQUEST_FILE)
-        if (!request.isFile) return
+        val request = findRequest(appFilesDir) ?: return
         val lines = runCatching { request.readLines() }.getOrDefault(emptyList())
         // Point of no return: drop the trigger before anything native is loaded.
         runCatching { request.delete() }
 
+        val requestDir = request.parentFile ?: appFilesDir
         val modelPath = lines.getOrNull(0)?.trim().orEmpty()
         val runtimeDir = lines.getOrNull(1)?.trim()?.takeIf { it.isNotEmpty() }
-            ?: File(filesDir, DEFAULT_RUNTIME_DIR).absolutePath
-        val result = File(filesDir, RESULT_FILE)
+            ?: File(requestDir, DEFAULT_RUNTIME_DIR).absolutePath
+        val result = File(requestDir, RESULT_FILE)
         runCatching { result.delete() }
 
         fun say(line: String) {
@@ -70,7 +77,8 @@ object NpuProbe {
 
         say("=== NpuProbe ===")
         say("litetrlmSdk   = $sdkVersion")
-        say("filesDir      = ${filesDir.absolutePath}")
+        say("requestDir    = ${requestDir.absolutePath}")
+        say("appFilesDir   = ${appFilesDir.absolutePath}")
         say("appNativeDir  = $appNativeLibDir")
         say("model         = $modelPath")
         say("runtimeDir    = $runtimeDir")
@@ -111,9 +119,24 @@ object NpuProbe {
         attempt(::say, modelPath, appNativeLibDir, File(appNativeLibDir).parentFile?.absolutePath)
 
         say("--- attempt B: nativeLibraryDir = downloaded runtime ---")
-        attempt(::say, modelPath, runtimeDir, filesDir.absolutePath)
+        attempt(::say, modelPath, runtimeDir, requestDir.absolutePath)
 
         say("=== done ===")
+    }
+
+    /**
+     * The request file lives either directly in the app's files dir or in a workspace's own
+     * files dir under it. Both are searched because only the second is reachable from inside
+     * the workspace, while only the first is obvious from the app side.
+     */
+    internal fun findRequest(appFilesDir: File): File? {
+        val direct = File(appFilesDir, REQUEST_FILE)
+        if (direct.isFile) return direct
+        val workspaces = File(appFilesDir, "workspaces")
+        return workspaces.listFiles()
+            ?.asSequence()
+            ?.map { File(File(it, "files"), REQUEST_FILE) }
+            ?.firstOrNull { it.isFile }
     }
 
     private fun attempt(

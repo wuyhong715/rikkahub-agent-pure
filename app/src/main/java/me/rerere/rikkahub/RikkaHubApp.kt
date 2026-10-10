@@ -116,7 +116,7 @@ class RikkaHubApp : Application() {
         // is written down before the call that can kill the process.
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             me.rerere.locallm.npu.NpuProbe.runIfRequested(
-                filesDir = filesDir,
+                appFilesDir = filesDir,
                 appNativeLibDir = applicationInfo.nativeLibraryDir,
                 sdkVersion = me.rerere.locallm.BuildConfig.LITERTLM_SDK_VERSION,
             )
