@@ -121,11 +121,19 @@ object NpuProbe {
 
         // 2. The same thing LiteRtRuntime does, but with the NPU backend and the downloaded
         //    runtime directory. Two attempts, so the stock search path is a control.
-        say("--- attempt A: nativeLibraryDir = app's own ---")
-        attempt(::say, modelPath, appNativeLibDir, File(appNativeLibDir).parentFile?.absolutePath)
+        // Both attempts get a writable cache. An earlier revision handed attempt A
+        // `File(appNativeLibDir).parentFile`, i.e. the app's install directory, which is
+        // __not writable__ -- so A failed on the cache and the library directory was never
+        // actually exercised. The A/B difference has to be the library directory and nothing
+        // else, or the comparison says nothing.
+        val cacheDir = File(appFilesDir, "npu-probe-cache")
+        runCatching { cacheDir.mkdirs() }
+
+        say("--- attempt A: nativeLibraryDir = app's own, writable cache ---")
+        attempt(::say, modelPath, appNativeLibDir, cacheDir.absolutePath)
 
         say("--- attempt B: nativeLibraryDir = downloaded runtime ---")
-        attempt(::say, modelPath, runtimeDir, requestDir.absolutePath)
+        attempt(::say, modelPath, runtimeDir, cacheDir.absolutePath)
 
         say("=== done ===")
     }
@@ -159,6 +167,7 @@ object NpuProbe {
         cacheDir: String?,
     ) {
         say("phase=ctor nativeLibraryDir=$nativeLibDir")
+        say("  ADSP_LIBRARY_PATH before = ${System.getenv("ADSP_LIBRARY_PATH")}")
         val backend = Backend.NPU(nativeLibraryDir = nativeLibDir)
         val cfg = EmbeddingEngineConfig(
             modelPath = modelPath,
@@ -179,6 +188,7 @@ object NpuProbe {
             return
         }
         say("  initialize OK")
+        say("  ADSP_LIBRARY_PATH after  = ${System.getenv("ADSP_LIBRARY_PATH")}")
         runCatching { engine.computeEmbedding(listOf(InputData.Text("task: search query | text: hello"))) }
             .onSuccess {
                 say("  computeEmbedding OK: dim=${it.embedding.size} first=${it.embedding.take(3)}")
