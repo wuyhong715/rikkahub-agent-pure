@@ -1631,7 +1631,7 @@ class ChatService(
         if (surfaceAssistant.enableRecentChatsReference) {
             addAll(
                 createConversationTools(
-                    conversationRepo = conversationRepository,
+                    conversationRepo = conversationRepo,
                     assistantId = surfaceAssistant.id,
                     conversationIndex = conversationIndex,
                 )
@@ -1985,7 +1985,7 @@ class ChatService(
         if (surfaceAssistant.enableRecentChatsReference) {
             addAll(
                 createConversationTools(
-                    conversationRepo = conversationRepository,
+                    conversationRepo = conversationRepo,
                     assistantId = surfaceAssistant.id,
                     conversationIndex = conversationIndex,
                 )

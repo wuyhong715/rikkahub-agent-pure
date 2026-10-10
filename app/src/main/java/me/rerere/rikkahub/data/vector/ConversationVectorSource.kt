@@ -141,6 +141,9 @@ class ConversationVectorSource(
         )
     }
 
+    /** The message keys already in the index, for ordering a round. */
+    suspend fun indexedPaths(): Set<String> = store.docKeys(SOURCE).toSet()
+
     /** How many messages are indexed - what the settings row shows. */
     suspend fun indexedMessages(): Int = store.docKeys(SOURCE).size
 
