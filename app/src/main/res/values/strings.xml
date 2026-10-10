@@ -130,6 +130,9 @@
   <string name="assistant_page_tool_index_ready">%1$d of %2$d tool entries embedded</string>
   <string name="assistant_page_tool_index_never">Not built yet — the next chat builds it</string>
   <string name="assistant_page_tool_index_off">No embedding model yet — tools are matched by keyword</string>
+  <string name="assistant_page_tool_surface_no_model">Semantic tool search is not running yet</string>
+  <string name="assistant_page_tool_surface_no_model_desc">No embedding model is installed, so tools are matched by keyword only — a request that describes what it wants in other words will not find them.</string>
+  <string name="assistant_page_tool_surface_no_model_action">Install</string>
   <string name="assistant_page_local_tools_pin">Pin</string>
   <string name="assistant_page_local_tools_pinned">Pinned</string>
   <string name="assistant_page_local_tools_pin_desc">In progressive mode a tool is attached only when the current request retrieves it. Pin the tools you always want available — the screen automation ones, for example.</string>

@@ -58,7 +58,15 @@ import me.rerere.rikkahub.ui.components.ui.TagsInput
 import me.rerere.rikkahub.ui.components.ui.AssistantAvatar
 import me.rerere.rikkahub.ui.hooks.heroAnimation
 import me.rerere.rikkahub.ui.theme.CustomColors
+import androidx.compose.ui.platform.LocalContext
+import me.rerere.rikkahub.Screen
+import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.vector.EmbeddingModelFiles
+import me.rerere.rikkahub.data.vector.EmbeddingModelRules
+import me.rerere.rikkahub.ui.context.LocalNavController
+import me.rerere.llamacpp.LlamaCppEmbeddingCatalog
 import me.rerere.rikkahub.utils.toFixed
+import org.koin.compose.koinInject
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 import kotlin.math.roundToInt
@@ -116,6 +124,22 @@ internal fun AssistantBasicContent(
     onUpdate: (Assistant) -> Unit,
     vm: AssistantDetailVM
 ) {
+    // P3-05 — whether semantic retrieval can work at all, answered through the same resolver the
+    // embedder itself uses. Asking any other way would let this warning disagree with the feature
+    // it is warning about: a configured file that was deleted, or a curated model installed under
+    // its repo name, both have to land on the same answer here as they do at embedding time.
+    val context = LocalContext.current
+    val settingsStore: SettingsStore = koinInject()
+    val settings by settingsStore.settingsFlow.collectAsStateWithLifecycle()
+    val embeddingReady = remember(settings.embeddingModelFile) {
+        EmbeddingModelRules.pick(
+            configured = settings.embeddingModelFile.takeIf { it.isNotBlank() },
+            installed = EmbeddingModelFiles.installedFiles(context),
+            curatedOrder = LlamaCppEmbeddingCatalog.ENTRIES.map { it.file },
+        ) != null
+    }
+    val navController = LocalNavController.current
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -767,6 +791,29 @@ internal fun AssistantBasicContent(
                 }
             )
             HorizontalDivider()
+            // P3-05 — turning the mode on without a model is a silent downgrade: tools fall back to
+            // keyword matching, which a request written in Chinese will not match at all. Saying so
+            // here, where the switch was just flipped, and offering the trip to the one page that
+            // can fix it, is the difference between a default and a trap.
+            if (assistant.toolSurfaceMode == ToolSurfaceMode.PROGRESSIVE_CATALOG && !embeddingReady) {
+                FormItem(
+                    modifier = Modifier.padding(8.dp),
+                    label = {
+                        Text(stringResource(R.string.assistant_page_tool_surface_no_model))
+                    },
+                    description = {
+                        Text(stringResource(R.string.assistant_page_tool_surface_no_model_desc))
+                    },
+                    tail = {
+                        TextButton(
+                            onClick = { navController.navigate(Screen.AssistantMemory(id = assistant.id.toString())) },
+                        ) {
+                            Text(stringResource(R.string.assistant_page_tool_surface_no_model_action))
+                        }
+                    }
+                )
+                HorizontalDivider()
+            }
             FormItem(
                 modifier = Modifier.padding(8.dp),
                 label = {

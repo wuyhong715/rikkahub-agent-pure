@@ -2553,6 +2553,9 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_page_tool_index_ready">已嵌入 %1$d / %2$d 个工具条目</string>
   <string name="assistant_page_tool_index_never">尚未建立（下次对话会自动完成）</string>
   <string name="assistant_page_tool_index_off">还没有向量模型（目前按关键词匹配工具）</string>
+  <string name="assistant_page_tool_surface_no_model">语义工具检索还没生效</string>
+  <string name="assistant_page_tool_surface_no_model_desc">还没有安装向量模型，工具只能用关键词匹配——用别的说法描述你要做的事会找不到它们。</string>
+  <string name="assistant_page_tool_surface_no_model_action">去安装</string>
   <string name="assistant_page_local_tools_pin">常驻</string>
   <string name="assistant_page_local_tools_pinned">已常驻</string>
   <string name="assistant_page_local_tools_pin_desc">渐进模式下，工具只在当前请求检索到它时才附带给模型。把你想让它永远可用的工具钉住——例如屏幕自动化那一组。</string>

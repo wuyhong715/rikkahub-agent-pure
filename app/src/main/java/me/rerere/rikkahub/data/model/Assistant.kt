@@ -88,10 +88,16 @@ data class Assistant(
     // Phase 17 (①) — Progressive tool exposure. DIRECT (default) keeps the historical behaviour:
     // every enabled MCP tool's schema is injected on every request. PROGRESSIVE_CATALOG replaces
     // the MCP portion of the tool list with the small `tool_search` / `tool_open` pair, and only
-    // activated schemas get injected (from the following turn onwards). Local tools are never
-    // catalogued — only MCP tools — so the blast radius of this phase stays small.
+    // activated schemas get injected (from the following turn onwards). P3-03/P3-04 put local
+    // tools and skills behind the same pair.
+    //
+    // ON by default in this product line. Moxw is the retrieval-driven client, so a new assistant
+    // should be built that way rather than opt in — and the moment the mode is on without an
+    // embedding model the UI says so and offers the install (see AssistantBasicPage), which is what
+    // makes the default honest instead of merely bold. An assistant that already stored DIRECT keeps
+    // it, and the compatibility line (a separate branch, without any of this) still ships DIRECT.
     // Appended last on purpose: a new field may never shift the position of an existing one.
-    val toolSurfaceMode: ToolSurfaceMode = ToolSurfaceMode.DIRECT,
+    val toolSurfaceMode: ToolSurfaceMode = ToolSurfaceMode.PROGRESSIVE_CATALOG,
     // T-04 / (4) - let `subagent_dispatch` carry a slice of THIS conversation to the
     // sub-agent. Off by default, and the flag gates the tool SCHEMA as well as the
     // behaviour: with it off, the subagent_dispatch definition is byte-identical to the
