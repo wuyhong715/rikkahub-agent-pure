@@ -178,7 +178,7 @@ object WorkspaceLibraryRules {
      * inline in the sync where it was easy to get wrong twice.
      */
     fun toForget(indexed: Collection<String>, seen: Collection<String>): List<String> =
-        indexed.filter { it !in seen }
+        RoundBudget.toForget(indexed, seen)
 
     /** One file the walk found and the allow-list accepted. */
     data class Candidate(
@@ -211,24 +211,16 @@ object WorkspaceLibraryRules {
         budgetChars: Int = MAX_CHARS_PER_ROUND,
         maxFiles: Int = MAX_FILES_PER_ROUND,
     ): Round {
-        val tooBig = candidates
-            .filter { it.sizeBytes > sizeCapOf(it.kind) }
-            .map { it.path }
-        val eligible = candidates
-            .filter { it.sizeBytes <= sizeCapOf(it.kind) }
-            .sortedWith(compareBy({ it.path in indexed }, { it.path }))
-
-        val take = mutableListOf<Candidate>()
-        var chars = 0L
-        for (candidate in eligible) {
-            if (take.size >= maxFiles) break
-            val cost = estimatedChars(candidate.kind, candidate.sizeBytes).toLong()
-            // Always take at least one file: a round that plans nothing because the first file is
-            // large would never make progress on a library of large files.
-            if (take.isNotEmpty() && chars + cost > budgetChars) break
-            take += candidate
-            chars += cost
-        }
-        return Round(take = take, deferred = eligible.size - take.size, tooBig = tooBig)
+        val planned = RoundBudget.plan(
+            items = candidates,
+            key = { it.path },
+            sizeOf = { it.sizeBytes },
+            capOf = { sizeCapOf(it.kind) },
+            estimateChars = { estimatedChars(it.kind, it.sizeBytes) },
+            indexed = indexed,
+            budgetChars = budgetChars,
+            maxItems = maxFiles,
+        )
+        return Round(take = planned.take, deferred = planned.deferred, tooBig = planned.tooBig)
     }
 }

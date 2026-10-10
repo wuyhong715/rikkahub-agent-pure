@@ -65,6 +65,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.ui.platform.LocalContext
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.ai.tools.ToolSurfaceMode
+import me.rerere.rikkahub.data.vector.ConversationIndexCoordinator
 import me.rerere.rikkahub.data.vector.LibraryIndexCoordinator
 import me.rerere.rikkahub.data.vector.MemoryIndexCoordinator
 import me.rerere.rikkahub.data.vector.ToolVectorIndex
@@ -157,6 +158,10 @@ private fun AssistantMemoryContent(
     // they can ask for, rather than an index that silently does or does not exist.
     val libraryIndex: LibraryIndexCoordinator = koinInject()
     val libraryIndexStatus by libraryIndex.status.collectAsStateWithLifecycle()
+    // P5 — history search's index. App-wide rather than per-assistant, and shown here because this
+    // is the page where the embedding model it depends on is chosen.
+    val conversationIndex: ConversationIndexCoordinator = koinInject()
+    val conversationIndexStatus by conversationIndex.status.collectAsStateWithLifecycle()
     // P3-03 — the tool catalogue's vectors. Same treatment as the knowledge-base index above: a
     // row the user can read the state of and ask for again, rather than an index that silently
     // does or does not exist.
@@ -521,6 +526,51 @@ private fun AssistantMemoryContent(
                     )
                 }
             }
+        }
+
+        // P5 — history search. A row of its own rather than a line under the model, because it is
+        // the one index whose absence is not a missing convenience: the keyword search it replaced
+        // needed no model, so with none installed this feature does not exist.
+        CardGroup {
+            item(
+                headlineContent = { Text(stringResource(R.string.assistant_page_history_index)) },
+                supportingContent = {
+                    val report = conversationIndexStatus.lastReport
+                    Text(
+                        when {
+                            conversationIndexStatus.running -> stringResource(
+                                R.string.assistant_page_index_running
+                            )
+
+                            conversationIndexStatus.lastError != null -> stringResource(
+                                R.string.assistant_page_index_error,
+                                conversationIndexStatus.lastError.orEmpty(),
+                            )
+
+                            embeddingInstalled.isEmpty() -> stringResource(
+                                R.string.assistant_page_history_index_no_model
+                            )
+
+                            report != null -> stringResource(
+                                R.string.assistant_page_history_index_report,
+                                report.indexedTotal,
+                                report.read,
+                                report.deferred,
+                            )
+
+                            else -> stringResource(R.string.assistant_page_history_index_idle)
+                        }
+                    )
+                },
+                trailingContent = {
+                    TextButton(
+                        onClick = { conversationIndex.requestSync(minIntervalMs = 0L) },
+                        enabled = !conversationIndexStatus.running,
+                    ) {
+                        Text(stringResource(R.string.assistant_page_index_rebuild_action))
+                    }
+                },
+            )
         }
 
         CardGroup {

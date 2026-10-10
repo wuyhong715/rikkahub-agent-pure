@@ -102,6 +102,7 @@ import me.rerere.rikkahub.data.ai.tools.buildCompactionTools
 import me.rerere.rikkahub.data.ai.tools.createWorkspaceTools
 import me.rerere.rikkahub.data.ai.tools.buildColdMemoryTools
 import me.rerere.rikkahub.data.ai.tools.buildLibrarySearchTool
+import me.rerere.rikkahub.data.ai.tools.createConversationTools
 import me.rerere.rikkahub.data.ai.tools.buildMemorySearchTool
 import me.rerere.rikkahub.data.ai.tools.ColdMemoryDoc
 import me.rerere.rikkahub.data.ai.tools.ColdMemoryRules
@@ -461,6 +462,7 @@ class ChatService(
     /** Moxw - owns the tool catalogue's vectors, so `tool_search` can rank by meaning. */
     private val toolVectors: me.rerere.rikkahub.data.vector.ToolVectorIndex,
     private val libraryIndex: me.rerere.rikkahub.data.vector.LibraryIndexCoordinator,
+    private val conversationIndex: me.rerere.rikkahub.data.vector.ConversationIndexCoordinator,
 ) {
     // workspace 系统提示注入 (依赖 workspaceRepository, 故在类内构造)
     private val workspaceReminderTransformer = WorkspaceReminderTransformer(workspaceRepository)
@@ -1622,6 +1624,19 @@ class ChatService(
         // P4 — the file library's search, on both build paths so a regenerate sees the surface the
         // first pass had. Off unless enabled AND configured.
         addAll(createLibraryToolsIfConfigured(surfaceAssistant))
+        // P5 — history search. Registered here rather than in ChatToolFactory because that
+        // factory's createTools has no callers in the repository: the model never actually had
+        // this tool in the chat path. Gated on the same flag the static recent-chats reference
+        // uses, so turning that off still means "the assistant does not look at old chats".
+        if (surfaceAssistant.enableRecentChatsReference) {
+            addAll(
+                createConversationTools(
+                    conversationRepo = conversationRepository,
+                    assistantId = surfaceAssistant.id,
+                    conversationIndex = conversationIndex,
+                )
+            )
+        }
         if (surfaceAssistant.enabledSkills.isNotEmpty()) {
             addAll(
                 createSkillTools(
@@ -1963,6 +1978,19 @@ class ChatService(
         // P4 — the file library's search, on both build paths so a regenerate sees the surface the
         // first pass had. Off unless enabled AND configured.
         addAll(createLibraryToolsIfConfigured(surfaceAssistant))
+        // P5 — history search. Registered here rather than in ChatToolFactory because that
+        // factory's createTools has no callers in the repository: the model never actually had
+        // this tool in the chat path. Gated on the same flag the static recent-chats reference
+        // uses, so turning that off still means "the assistant does not look at old chats".
+        if (surfaceAssistant.enableRecentChatsReference) {
+            addAll(
+                createConversationTools(
+                    conversationRepo = conversationRepository,
+                    assistantId = surfaceAssistant.id,
+                    conversationIndex = conversationIndex,
+                )
+            )
+        }
                     // P3-04 — the skill face is BUILT here and attached below the tool-surface
                     // branch, because in progressive mode what it *lists* depends on the same
                     // catalogue the tools do (what the user pinned, what the model opened, what this
@@ -2353,6 +2381,11 @@ class ChatService(
                     generateSuggestion(conversationId, finalConversation)
                 }
             }
+
+            // P5 — the turn that just finished should be searchable by the time the user asks
+            // about it. Debounced inside, so a burst of messages costs one round rather than one
+            // per message, and it only ever touches this conversation's slice of the index.
+            conversationIndex.requestSyncOf(conversationId)
 
             launchAuxJob(conversationId, AuxJobKind.TITLE) {
                 generateTitle(conversationId, finalConversation)

@@ -36,6 +36,7 @@ class ChatToolFactory(
     private val mcpManager: McpManager,
     private val skillManager: SkillManager,
     private val workspaceRepository: WorkspaceRepository,
+    private val conversationIndex: me.rerere.rikkahub.data.vector.ConversationIndexCoordinator,
 ) {
     suspend fun createTools(
         settings: Settings,
@@ -63,7 +64,7 @@ class ChatToolFactory(
         }
         addAll(ToolSurfaceResolver.resolve(localTools, assistant, ToolSurfaceResolver.contextless))
         if (assistant.enableRecentChatsReference) {
-            addAll(createConversationTools(conversationRepository, assistant.id))
+            addAll(createConversationTools(conversationRepository, assistant.id, conversationIndex))
         }
         addAll(createWorkspaceToolsIfReady(assistant.workspaceId?.toString(), workspaceCwd))
         if (assistant.enabledSkills.isNotEmpty()) {

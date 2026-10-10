@@ -395,6 +395,15 @@ class ConversationRepository(
         assistantId: Uuid? = null,
     ) = messageFtsManager.search(keyword, sort, assistantId?.toString())
 
+    /**
+     * Every conversation id, in no particular order.
+     *
+     * Exposed for the history vector index, which walks the whole history to work out what is new.
+     * Ordering does not matter to it: a complete walk is what lets it conclude that a message which
+     * is no longer there was deleted, and a complete walk visits everything.
+     */
+    suspend fun getAllConversationIds(): List<String> = conversationDAO.getAllIds()
+
     suspend fun rebuildAllIndexes(onProgress: (current: Int, total: Int) -> Unit = { _, _ -> }) {
         messageFtsManager.deleteAll()
         val allIds = conversationDAO.getAllIds()

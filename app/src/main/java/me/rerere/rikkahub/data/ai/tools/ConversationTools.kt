@@ -10,8 +10,11 @@ import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
-import me.rerere.rikkahub.data.db.fts.MessageSearchSort
 import me.rerere.rikkahub.data.repository.ConversationRepository
+import me.rerere.rikkahub.data.vector.ConversationIndexCoordinator
+import me.rerere.rikkahub.data.vector.ConversationSearchEnvelope
+import me.rerere.rikkahub.data.vector.DEFAULT_SEARCH_LIMIT
+import me.rerere.rikkahub.data.vector.MAX_SEARCH_LIMIT
 import me.rerere.rikkahub.utils.JsonInstantPretty
 import me.rerere.rikkahub.utils.toLocalDate
 import kotlin.uuid.Uuid
@@ -23,6 +26,7 @@ import kotlin.uuid.Uuid
 fun createConversationTools(
     conversationRepo: ConversationRepository,
     assistantId: Uuid,
+    conversationIndex: ConversationIndexCoordinator,
 ): List<Tool> = listOf(
     Tool(
         name = "recent_chats",
@@ -66,9 +70,22 @@ fun createConversationTools(
     Tool(
         name = "conversation_search",
         description = """
-            Full-text search across the user's past conversations to recall specific information they mentioned before.
-            Use focused keywords. Run multiple searches with different keywords if needed.
-            Each result includes the conversation title, a snippet with matched keywords wrapped in [brackets], and the date.
+            Search the user's past conversations by meaning, and get back the passages that match,
+            with the conversation and the date each one came from - including what was said in the
+            current conversation a moment ago.
+
+            Use this when you need something from before that you cannot quote - "what did we
+            decide about the deployment", "the thing they mentioned about the streaming bug".
+            Describe the conversation rather than guessing the words in it: this matches on
+            meaning, so exact wording matters less than it used to.
+
+            Each result names its conversation, so it can be opened or listed by other tools.
+
+            Scores are cosine similarities and are NOT comparable between calls: compare the
+            passages within one result set, and never treat a number as a relevance threshold.
+
+            If it reports that semantic search is unavailable, no embedding model is installed.
+            Say so to the user rather than retrying - there is no keyword fallback any more.
         """.trimIndent(),
         parameters = {
             InputSchema.Obj(
@@ -89,23 +106,28 @@ fun createConversationTools(
             )
         },
         execute = {
-            val query = it.jsonObject["query"]?.jsonPrimitive?.contentOrNull
-                ?: error("query is required")
-            val limit = (it.jsonObject["limit"]?.jsonPrimitive?.intOrNull ?: 15).coerceIn(1, 50)
-            val results = conversationRepo
-                .searchMessages(query, MessageSearchSort.RELEVANCE)
-                .take(limit)
-            val payload = buildJsonArray {
-                results.forEach { result ->
-                    add(buildJsonObject {
-                        put("conversation_id", result.conversationId)
-                        put("title", result.title.ifBlank { "Untitled" })
-                        put("snippet", result.snippet)
-                        put("date", result.updateAt.toLocalDate())
-                    })
-                }
+            val params = it.jsonObject
+            val query = params["query"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
+            if (query.isEmpty()) {
+                return@Tool listOf(UIMessagePart.Text(ConversationSearchEnvelope.missingQuery()))
             }
-            listOf(UIMessagePart.Text(JsonInstantPretty.encodeToString(payload)))
+            // Clamped rather than refused, like the other searches: a model asking for fifty
+            // passages is over-eager, not wrong, and failing the call costs it a round trip to
+            // learn something the maximum already tells it.
+            val limit = (params["limit"]?.jsonPrimitive?.intOrNull ?: DEFAULT_SEARCH_LIMIT)
+                .coerceIn(1, MAX_SEARCH_LIMIT)
+            val response = conversationIndex.search(query, limit)
+            val body = if (response.available) {
+                ConversationSearchEnvelope.hits(
+                    query = query,
+                    results = response.results,
+                    indexedMessages = response.indexedMessages,
+                    stale = response.stale,
+                )
+            } else {
+                ConversationSearchEnvelope.unavailable(response.note)
+            }
+            listOf(UIMessagePart.Text(body))
         }
     )
 )

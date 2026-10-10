@@ -138,6 +138,24 @@ val dataSourceModule = module {
         )
     }
 
+    // P5 — history search. One source for every conversation (the keyword index it replaces was
+    // never per-assistant either), and a coordinator that shares the app scope for the same reason
+    // the others do: a sweep over a year of chat must outlive the screen that started it.
+    single {
+        me.rerere.rikkahub.data.vector.ConversationVectorSource(
+            store = get(),
+            embeddings = get(),
+        )
+    }
+    single {
+        me.rerere.rikkahub.data.vector.ConversationIndexCoordinator(
+            scope = get<me.rerere.rikkahub.AppScope>(),
+            embeddings = get(),
+            source = get(),
+            conversationRepository = get(),
+        )
+    }
+
     // P3-02 - the tool catalogue's vectors, in memory only: a tool's vector is derivable from its
     // name and description, and the catalogue changes with the MCP connections rather than with
     // the conversation. Given the app scope for the same reason the memory index is: a catalogue

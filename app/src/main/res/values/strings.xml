@@ -129,6 +129,10 @@
   <string name="assistant_page_library_index">Library index</string>
   <string name="assistant_page_library_index_idle">Not indexed yet</string>
   <string name="assistant_page_library_index_report">%1$d files indexed · %2$d found · %3$d for the next round</string>
+  <string name="assistant_page_history_index">History search index</string>
+  <string name="assistant_page_history_index_idle">Not indexed yet</string>
+  <string name="assistant_page_history_index_report">%1$d messages indexed · %2$d read this round · %3$d waiting</string>
+  <string name="assistant_page_history_index_no_model">Needs an embedding model — install one below; until then past conversations cannot be searched at all.</string>
   <string name="assistant_page_index_rebuild_action">Rebuild</string>
   <string name="assistant_page_index_running">Indexing…</string>
   <string name="assistant_page_index_error">Failed: %1$s</string>

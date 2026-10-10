@@ -2552,6 +2552,10 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_page_library_index">文件库索引</string>
   <string name="assistant_page_library_index_idle">还没建立索引</string>
   <string name="assistant_page_library_index_report">已索引 %1$d 个文件 · 发现 %2$d 个 · %3$d 个待下一轮</string>
+  <string name="assistant_page_history_index">历史对话索引</string>
+  <string name="assistant_page_history_index_idle">还没建立索引</string>
+  <string name="assistant_page_history_index_report">已索引 %1$d 条消息 · 本轮读了 %2$d 条 · %3$d 条待下一轮</string>
+  <string name="assistant_page_history_index_no_model">需要向量模型——先在下面装一个；在那之前历史对话完全搜不了。</string>
   <string name="assistant_page_index_rebuild_action">重建</string>
   <string name="assistant_page_index_running">正在建立索引…</string>
   <string name="assistant_page_index_error">失败：%1$s</string>
