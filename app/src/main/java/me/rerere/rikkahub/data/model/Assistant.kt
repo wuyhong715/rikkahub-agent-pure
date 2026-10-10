@@ -10,7 +10,6 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.rikkahub.data.ai.tools.LenientLocalToolListSerializer
 import me.rerere.rikkahub.data.ai.tools.LocalToolOption
-import me.rerere.rikkahub.data.ai.tools.ToolSurfaceMode
 import me.rerere.rikkahub.utils.SimpleCache
 import java.util.concurrent.TimeUnit
 import kotlin.uuid.Uuid
@@ -85,19 +84,13 @@ data class Assistant(
     // from the next turn; the turn that triggered it keeps its raw history.
     // Appended last on purpose: a new field may never shift the position of an existing one.
     val enableCompactContextTool: Boolean = false,
-    // Phase 17 (①) — Progressive tool exposure. DIRECT (default) keeps the historical behaviour:
-    // every enabled MCP tool's schema is injected on every request. PROGRESSIVE_CATALOG replaces
-    // the MCP portion of the tool list with the small `tool_search` / `tool_open` pair, and only
-    // activated schemas get injected (from the following turn onwards). P3-03/P3-04 put local
-    // tools and skills behind the same pair.
-    //
-    // ON by default in this product line. Moxw is the retrieval-driven client, so a new assistant
-    // should be built that way rather than opt in — and the moment the mode is on without an
-    // embedding model the UI says so and offers the install (see AssistantBasicPage), which is what
-    // makes the default honest instead of merely bold. An assistant that already stored DIRECT keeps
-    // it, and the compatibility line (a separate branch, without any of this) still ships DIRECT.
-    // Appended last on purpose: a new field may never shift the position of an existing one.
-    val toolSurfaceMode: ToolSurfaceMode = ToolSurfaceMode.PROGRESSIVE_CATALOG,
+    // Phase 17 (①) — tool exposure. This field used to hold DIRECT / PROGRESSIVE_CATALOG and let an
+    // assistant inject every enabled tool's schema up front. Moxw removed the direct dump: the tool
+    // list is always built from `tool_search` / `tool_open` plus what the turn actually retrieved,
+    // because the embedding model is a prerequisite here rather than an enhancement. The field is
+    // gone rather than fixed to one value, so there is no stored mode left to disagree with the
+    // behaviour; an old payload's `toolSurfaceMode` is simply an unknown key now
+    // (`ignoreUnknownKeys = true`).
     // T-04 / (4) - let `subagent_dispatch` carry a slice of THIS conversation to the
     // sub-agent. Off by default, and the flag gates the tool SCHEMA as well as the
     // behaviour: with it off, the subagent_dispatch definition is byte-identical to the

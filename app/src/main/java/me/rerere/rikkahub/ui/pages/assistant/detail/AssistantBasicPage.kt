@@ -47,7 +47,6 @@ import me.rerere.ai.provider.ModelType
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.model.Assistant
-import me.rerere.rikkahub.data.ai.tools.ToolSurfaceMode
 import me.rerere.rikkahub.subagent.SubAgentDefaults
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
 import me.rerere.rikkahub.ui.components.ai.ReasoningButton
@@ -765,37 +764,13 @@ internal fun AssistantBasicContent(
                 }
             }
             HorizontalDivider()
-            FormItem(
-                modifier = Modifier.padding(8.dp),
-                label = {
-                    Text(stringResource(R.string.assistant_page_tool_surface_mode))
-                },
-                description = {
-                    Text(stringResource(R.string.assistant_page_tool_surface_mode_desc))
-                },
-                tail = {
-                    Switch(
-                        checked = assistant.toolSurfaceMode == ToolSurfaceMode.PROGRESSIVE_CATALOG,
-                        onCheckedChange = {
-                            onUpdate(
-                                assistant.copy(
-                                    toolSurfaceMode = if (it) {
-                                        ToolSurfaceMode.PROGRESSIVE_CATALOG
-                                    } else {
-                                        ToolSurfaceMode.DIRECT
-                                    }
-                                )
-                            )
-                        }
-                    )
-                }
-            )
-            HorizontalDivider()
-            // P3-05 — turning the mode on without a model is a silent downgrade: tools fall back to
-            // keyword matching, which a request written in Chinese will not match at all. Saying so
-            // here, where the switch was just flipped, and offering the trip to the one page that
-            // can fix it, is the difference between a default and a trap.
-            if (assistant.toolSurfaceMode == ToolSurfaceMode.PROGRESSIVE_CATALOG && !embeddingReady) {
+            // The tool-surface switch that used to live here is gone: Moxw surfaces tools one way
+            // only, so there is no mode left to choose. What stays is the part that mattered —
+            // saying so when the embedding model the whole arrangement depends on is missing. This
+            // is not a "smaller tool list" warning: an unrankable catalogue yields no tools at all,
+            // and the trip to the one page that can fix it is the difference between a prerequisite
+            // and a dead end.
+            if (!embeddingReady) {
                 FormItem(
                     modifier = Modifier.padding(8.dp),
                     label = {

@@ -2456,8 +2456,6 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_page_context_reminder_threshold">上下文提醒阈值</string>
   <string name="assistant_page_context_reminder_threshold_desc">当估算上下文达到模型窗口的这个比例时，注入 &lt;context_reminder&gt;，让模型赶在自动压缩触发之前自行决定是否需要压缩。建议低于自动压缩阈值，否则会被客户端的强制压缩抢先。</string>
   <string name="assistant_page_context_reminder_threshold_value">%1$d%%</string>
-  <string name="assistant_page_tool_surface_mode">工具按需加载</string>
-  <string name="assistant_page_tool_surface_mode_desc">不再把全部工具直接发给模型：本地工具、MCP 工具和技能都改为经 tool_search / tool_open 检索，只有你钉住的、模型打开的、以及本次请求检索到的会被附带——技能在被检索到时才出现在 use_skill 的列表里。工具 token 大幅减少，但工具列表会在回合间变化，可能损失提示缓存命中。默认关闭。</string>
   <string name="assistant_page_subagent_context_refs">子智能体上下文引用</string>
   <string name="assistant_page_subagent_context_refs_desc">让 subagent_dispatch 也能把本会话最近 N 个回合原文发给子智能体，因此引用刚讨论内容的任务无需重述。回合以纯文本传递——子智能体仍然无法读取本会话。默认关闭；关闭时工具 schema 与之前完全一致，现有会话发送的请求不变。</string>
   <string name="assistant_page_subagent_tool_surface">冻结子智能体工具面</string>
@@ -2571,7 +2569,6 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_page_local_tools_pin">常驻</string>
   <string name="assistant_page_local_tools_pinned">已常驻</string>
   <string name="assistant_page_local_tools_pin_desc">渐进模式下，工具只在当前请求检索到它时才附带给模型。把你想让它永远可用的工具钉住——例如屏幕自动化那一组。</string>
-  <string name="assistant_page_local_tools_pin_hint_off">在「基础设定」里打开「工具按需加载」后，就可以在这里钉住常驻工具。</string>
   <string name="assistant_page_tool_retry">重试偶发的工具失败</string>
   <string name="assistant_page_tool_retry_desc">当只读工具（网页抓取、文件列举、搜索）因一次性网络或超时错误失败时，以较短的指数退避再重试最多两次，然后把失败上报给模型。只有每次调用都是纯读取的工具才会重试——任何会写入、发送或执行命令的操作绝不重试，因此重试永远不会重复产生副作用。默认关闭。</string>
   <!-- Statistics: overview section header -->

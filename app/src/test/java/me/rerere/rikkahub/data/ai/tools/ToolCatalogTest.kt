@@ -45,6 +45,23 @@ class ToolCatalogTest {
 
     private fun catalogOf(vararg names: String) = ToolCatalog(names.map { entry(it) })
 
+    /**
+     * Moxw — `tool_search` now runs on a vector channel and has no lexical fallback, so every
+     * wiring test has to hand it one. This stands in for [ToolVectorIndex.answer]: a name
+     * containing the query, in catalogue order, which is all these tests ever asserted.
+     */
+    private fun semanticRanking(catalog: ToolCatalog): suspend (String) -> ToolSearchAnswer = { query ->
+        ToolSearchAnswer.Ranked(
+            catalog.entries.filter { query.isNotBlank() && it.name.contains(query) }
+        )
+    }
+
+    /** The wiring under test with a working vector channel: `buildToolCatalogTools(catalog, state)`. */
+    private fun catalogTools(
+        catalog: ToolCatalog,
+        activation: ToolActivationState = ToolActivationState(),
+    ): List<Tool> = buildToolCatalogTools(catalog, activation, semanticRanking(catalog))
+
     // ---------------------------------------------------------------- search
 
     @Test
@@ -227,19 +244,19 @@ class ToolCatalogTest {
 
     @Test
     fun `factory returns the search and open tools`() {
-        val tools = buildToolCatalogTools(catalogOf("t_1"), ToolActivationState())
+        val tools = catalogTools(catalogOf("t_1"))
         assertEquals(listOf("tool_search", "tool_open"), tools.map { it.name })
     }
 
     @Test
     fun `catalog tools do not require approval`() {
-        val tools = buildToolCatalogTools(catalogOf("t_1"), ToolActivationState())
+        val tools = catalogTools(catalogOf("t_1"))
         assertTrue(tools.none { it.needsApproval(JsonNull) })
     }
 
     @Test
     fun `tool_search execute returns hits for a matching query`() = runBlocking {
-        val tools = buildToolCatalogTools(catalogOf("mcp__vps__compute"), ToolActivationState())
+        val tools = catalogTools(catalogOf("mcp__vps__compute"))
         val search = tools.first { it.name == "tool_search" }
         val parts = search.execute(buildJsonObject { put("query", "compute") })
         val text = (parts.single() as UIMessagePart.Text).text
@@ -248,7 +265,7 @@ class ToolCatalogTest {
 
     @Test
     fun `tool_search tolerates a missing query`() = runBlocking {
-        val tools = buildToolCatalogTools(catalogOf("t_1"), ToolActivationState())
+        val tools = catalogTools(catalogOf("t_1"))
         val search = tools.first { it.name == "tool_search" }
         val parts = search.execute(JsonObject(emptyMap()))
         val text = (parts.single() as UIMessagePart.Text).text
@@ -258,7 +275,7 @@ class ToolCatalogTest {
     @Test
     fun `tool_open activates the requested names`() = runBlocking {
         val activation = ToolActivationState()
-        val tools = buildToolCatalogTools(catalogOf("t_1", "t_2"), activation)
+        val tools = catalogTools(catalogOf("t_1", "t_2"), activation)
         val open = tools.first { it.name == "tool_open" }
         val parts = open.execute(
             buildJsonObject {
@@ -273,7 +290,7 @@ class ToolCatalogTest {
     @Test
     fun `tool_open without names activates nothing`() = runBlocking {
         val activation = ToolActivationState()
-        val tools = buildToolCatalogTools(catalogOf("t_1"), activation)
+        val tools = catalogTools(catalogOf("t_1"), activation)
         val open = tools.first { it.name == "tool_open" }
         val parts = open.execute(JsonObject(emptyMap()))
         val text = (parts.single() as UIMessagePart.Text).text
@@ -283,12 +300,26 @@ class ToolCatalogTest {
 
     @Test
     fun `tool_search accepts a json result that can be parsed back`() = runBlocking {
-        val tools = buildToolCatalogTools(catalogOf("mcp__vps__compute"), ToolActivationState())
+        val tools = catalogTools(catalogOf("mcp__vps__compute"))
         val search = tools.first { it.name == "tool_search" }
         val text = (search.execute(buildJsonObject { put("query", "compute") }).single() as UIMessagePart.Text).text
         val parsed = kotlinx.serialization.json.Json.parseToJsonElement(text).jsonObject
         assertEquals(1, parsed["total"]?.jsonPrimitive?.content?.toInt())
         val results = parsed["results"] as JsonArray
         assertEquals("mcp__vps__compute", results.single().jsonObject["name"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `tool_search reports an unrankable catalogue instead of guessing`() = runBlocking {
+        val catalog = catalogOf("mcp__vps__compute")
+        val tools = buildToolCatalogTools(catalog, ToolActivationState()) { query ->
+            ToolSearchAnswer.Unavailable("no embedding model is installed ($query)")
+        }
+        val search = tools.first { it.name == "tool_search" }
+        val text = (search.execute(buildJsonObject { put("query", "compute") }).single() as UIMessagePart.Text).text
+        val parsed = kotlinx.serialization.json.Json.parseToJsonElement(text).jsonObject
+        assertEquals("false", parsed["available"]?.jsonPrimitive?.content)
+        assertTrue(parsed["note"]?.jsonPrimitive?.content.orEmpty().contains("no embedding model"))
+        assertNull(parsed["results"])
     }
 }

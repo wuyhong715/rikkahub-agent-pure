@@ -64,7 +64,6 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.RadioButton
 import androidx.compose.ui.platform.LocalContext
 import me.rerere.rikkahub.data.datastore.SettingsStore
-import me.rerere.rikkahub.data.ai.tools.ToolSurfaceMode
 import me.rerere.rikkahub.data.vector.ConversationIndexCoordinator
 import me.rerere.rikkahub.data.vector.LibraryIndexCoordinator
 import me.rerere.rikkahub.data.vector.MemoryIndexCoordinator
@@ -612,36 +611,34 @@ private fun AssistantMemoryContent(
                     }
                 },
             )
-            // Only meaningful in the mode that uses it: in DIRECT mode every schema is attached
-            // anyway and there is nothing for this index to rank.
-            if (assistant.toolSurfaceMode == ToolSurfaceMode.PROGRESSIVE_CATALOG) {
-                item(
-                    headlineContent = { Text(stringResource(R.string.assistant_page_tool_index_title)) },
-                    supportingContent = {
-                        Text(
-                            text = when {
-                                toolIndexStatus.total == 0 ->
-                                    stringResource(R.string.assistant_page_tool_index_never)
-                                !toolIndexStatus.hasVector ->
-                                    stringResource(R.string.assistant_page_tool_index_off)
-                                else -> stringResource(
-                                    R.string.assistant_page_tool_index_ready,
-                                    toolIndexStatus.cached,
-                                    toolIndexStatus.total,
-                                )
-                            },
-                        )
-                    },
-                    trailingContent = {
-                        TextButton(
-                            onClick = { scope.launch { toolVectors.rebuild() } },
-                            enabled = toolIndexStatus.total > 0,
-                        ) {
-                            Text(stringResource(R.string.assistant_page_index_rebuild_action))
-                        }
-                    },
-                )
-            }
+            // The catalogue's own index. There is no longer a mode where it would be beside the
+            // point — every turn is built from it now.
+            item(
+                headlineContent = { Text(stringResource(R.string.assistant_page_tool_index_title)) },
+                supportingContent = {
+                    Text(
+                        text = when {
+                            toolIndexStatus.total == 0 ->
+                                stringResource(R.string.assistant_page_tool_index_never)
+                            !toolIndexStatus.hasVector ->
+                                stringResource(R.string.assistant_page_tool_index_off)
+                            else -> stringResource(
+                                R.string.assistant_page_tool_index_ready,
+                                toolIndexStatus.cached,
+                                toolIndexStatus.total,
+                            )
+                        },
+                    )
+                },
+                trailingContent = {
+                    TextButton(
+                        onClick = { scope.launch { toolVectors.rebuild() } },
+                        enabled = toolIndexStatus.total > 0,
+                    ) {
+                        Text(stringResource(R.string.assistant_page_index_rebuild_action))
+                    }
+                },
+            )
         }
 
         CardGroup {

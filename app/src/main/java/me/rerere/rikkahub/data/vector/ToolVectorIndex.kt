@@ -9,10 +9,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 import me.rerere.rikkahub.data.ai.tools.ToolCatalog
 import me.rerere.rikkahub.data.ai.tools.matchAll
 import me.rerere.rikkahub.data.ai.tools.ToolCatalogEntry
 import me.rerere.rikkahub.data.ai.tools.ToolRankFusion
+import me.rerere.rikkahub.data.ai.tools.ToolSearchAnswer
 
 /**
  * P3-02 — the impure half of semantic tool retrieval: hold a vector per catalogue entry, produce
@@ -25,11 +27,13 @@ import me.rerere.rikkahub.data.ai.tools.ToolRankFusion
  *
  * ## The one rule that matters at call time
  *
- * **A search never waits for the catalogue to be embedded.** [retrieve] returns null the moment any
- * entry is not in the cache, and the caller falls back to its lexical ranking for that turn. The
- * tool call is on the critical path of a chat turn; stalling it for seconds to embed a few hundred
- * short strings is worse than answering it exactly-but-literally, because the vectors are being
- * warmed in the background anyway and the *next* turn gets the fused ranking.
+ * **A search waits for the catalogue to be embedded, but only briefly.** [answer] gives the vectors
+ * [READY_WAIT_MS] to arrive, then reports [ToolSearchAnswer.Unavailable] rather than a ranking it
+ * does not have. The old behaviour — answer lexically instead — is gone with the rest of this
+ * product line's keyword paths: a keyword pass is not a smaller version of this feature, it is a
+ * different one that returns nothing at all for a query written in Chinese. Once the model is
+ * loaded a few hundred short strings embed well inside the budget, and a warm catalogue does not
+ * wait at all.
  *
  * Vectors are held in memory only. They are derivable from (model, name, text), the catalogue is
  * small and changes with the MCP connections rather than with the conversation, and a persisted
@@ -183,32 +187,64 @@ class ToolVectorIndex(
     }
 
     /**
-     * The ranking of [catalog] for [query] as names, falling back to the lexical one. Never null:
-     * a caller that has to attach *something* this turn cannot do anything with "no opinion".
+     * The ranking of [catalog] for [query] as names, best first — empty when it cannot be produced.
      *
-     * The fallback is what makes the first turn of a cold conversation work: the vectors are still
-     * being produced in the background, and a turn that guesses from the lexical ranking is a turn
-     * that has the right tools, rather than one that has none.
+     * This is the "what does this turn get without asking" ranking. Empty is the honest answer: the
+     * turn then carries exactly what the user pinned and what the model opened, and nothing
+     * guessed. `tool_search` is always attached, so a turn that starts with no ranking can still go
+     * and look — it just has to say what it is looking for first.
      */
     suspend fun ranking(query: String, catalog: ToolCatalog): List<String> =
-        retrieve(query, catalog)?.map { it.name } ?: catalog.matchAll(query).map { it.name }
+        fused(query, catalog)?.map { it.name }.orEmpty()
 
     /**
-     * The catalogue ranking `tool_search` should answer with, or null to leave it entirely to the
-     * lexical scorer.
+     * What `tool_search` should answer with: the catalogue's entries best first, or the reason it
+     * cannot rank them.
      *
-     * The two channels are fused rather than chosen between: the lexical ranking is exact and free,
-     * the vector ranking reaches tools whose names share nothing with the query, and
-     * [ToolRankFusion.fuse] combines the *orderings* — which is the only part of a cosine here that
-     * is trustworthy (see that file on why an absolute cutoff is not an option).
+     * The lexical and vector channels are fused rather than chosen between — the lexical pass is
+     * exact and free when the query *is* a tool's name, the vector pass reaches tools whose names
+     * share nothing with it, and [ToolRankFusion.fuse] combines the *orderings*, which is the only
+     * part of a cosine here that is trustworthy (see that file on why an absolute cutoff is not an
+     * option). Fusion is not a fallback: both run on every search. When neither can, the answer
+     * says so instead of guessing.
      */
-    suspend fun retrieve(query: String, catalog: ToolCatalog): List<ToolCatalogEntry>? {
-        val ranked = rank(query, catalog.entries) ?: return null
+    suspend fun answer(query: String, catalog: ToolCatalog): ToolSearchAnswer {
+        val ranked = fused(query, catalog) ?: return ToolSearchAnswer.Unavailable(
+            if (snapshot().hasVector) WARMING_NOTE else NO_MODEL_NOTE,
+        )
+        return ToolSearchAnswer.Ranked(ranked)
+    }
+
+    /**
+     * The fused ranking, or null when it cannot be produced right now. Empty is a real answer
+     * ("nothing in this catalogue is close"); null is "not yet".
+     */
+    private suspend fun fused(query: String, catalog: ToolCatalog): List<ToolCatalogEntry>? {
+        if (query.isBlank() || catalog.entries.isEmpty()) return emptyList()
+        if (!awaitRankable(catalog.entries)) return null
+        val vector = rank(query, catalog.entries) ?: return null
         val fused = ToolRankFusion.fuse(
             lexical = catalog.matchAll(query).map { it.name },
-            vector = ranked,
+            vector = vector,
         )
         return fused.mapNotNull { catalog.entry(it) }
+    }
+
+    /**
+     * Waits up to [READY_WAIT_MS] for [entries] to become rankable, and reports whether they are.
+     *
+     * The wait is a second chance at work already under way: [prewarm] is launched when the tool
+     * surface is built, so by the time a search arrives the only thing between the caller and a
+     * ranking is a few milliseconds of embedding. A catalogue that is already covered returns
+     * immediately — [prepare] is then a directory listing and a map scan.
+     *
+     * No model at all returns false *without* waiting: patience does not fix that, and the caller
+     * has a different sentence for it.
+     */
+    private suspend fun awaitRankable(entries: List<ToolCatalogEntry>): Boolean {
+        val model = activeModelId ?: return false
+        if (ToolVectorCacheRules.ready(model, entries, cache)) return true
+        return withTimeoutOrNull(READY_WAIT_MS) { prepare(entries) } == true
     }
 
     private companion object {
@@ -216,5 +252,20 @@ class ToolVectorIndex(
 
         /** How much of a query is embedded. See the cap's use site. */
         const val MAX_QUERY_CHARS = 1000
+
+        /**
+         * How long a search waits for the catalogue's vectors before saying it cannot. Sized to
+         * disappear next to a model round trip while still bounding the very first search after a
+         * cold start.
+         */
+        const val READY_WAIT_MS = 3_000L
+
+        const val NO_MODEL_NOTE =
+            "Semantic search is unavailable: no embedding model is installed. Tell the user to " +
+                "install one (assistant memory page -> Embedding model), then search again."
+
+        const val WARMING_NOTE =
+            "Semantic search is not ready yet: the tool catalog is still being embedded. " +
+                "Search again in a moment."
     }
 }

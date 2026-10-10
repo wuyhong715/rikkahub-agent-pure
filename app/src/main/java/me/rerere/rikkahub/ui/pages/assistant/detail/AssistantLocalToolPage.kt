@@ -44,7 +44,6 @@ import com.dokar.sonner.ToastType
 import me.rerere.rikkahub.R
 import androidx.compose.foundation.layout.Row
 import me.rerere.rikkahub.data.ai.tools.LocalToolOption
-import me.rerere.rikkahub.data.ai.tools.ToolSurfaceMode
 import me.rerere.rikkahub.data.ai.tools.LocalTools
 import me.rerere.rikkahub.data.ai.tools.local.PermissionHelper
 import me.rerere.rikkahub.data.ai.tools.local.TermuxIntegration
@@ -1339,18 +1338,10 @@ private fun AssistantLocalToolContent(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp),
             )
-            // P3-03 — the pin only exists in progressive mode, so this section says which of the
-            // two situations the user is in. Both branches exist because both were real: the first
-            // device test went looking for the control, found nothing, and had no way to tell that
-            // the mode it needs is one page away.
+            // P3-03 — the pin controls live in this section; Moxw has only the mode they belong to,
+            // so the sentence that used to branch on the mode is now unconditional.
             Text(
-                text = stringResource(
-                    if (assistant.toolSurfaceMode == ToolSurfaceMode.PROGRESSIVE_CATALOG) {
-                        R.string.assistant_page_local_tools_pin_desc
-                    } else {
-                        R.string.assistant_page_local_tools_pin_hint_off
-                    }
-                ),
+                text = stringResource(R.string.assistant_page_local_tools_pin_desc),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp),
@@ -1361,40 +1352,38 @@ private fun AssistantLocalToolContent(
                         headlineContent = { Text(toolName) },
                         trailingContent = {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                if (assistant.toolSurfaceMode == ToolSurfaceMode.PROGRESSIVE_CATALOG) {
-                                    val pinned = toolName in assistant.pinnedToolNames
-                                    TextButton(
-                                        // Read the pin state from `current`, not from the
-                                        // composition: same rule as the switch beside it, so a
-                                        // burst of taps cannot write back a stale list.
-                                        onClick = {
-                                            onUpdateAssistant { current ->
-                                                val nowPinned = toolName in current.pinnedToolNames
-                                                current.copy(
-                                                    pinnedToolNames = if (nowPinned) {
-                                                        current.pinnedToolNames - toolName
-                                                    } else {
-                                                        current.pinnedToolNames + toolName
-                                                    },
-                                                )
-                                            }
-                                        },
-                                    ) {
-                                        Text(
-                                            text = stringResource(
-                                                if (pinned) {
-                                                    R.string.assistant_page_local_tools_pinned
+                                val pinned = toolName in assistant.pinnedToolNames
+                                TextButton(
+                                    // Read the pin state from `current`, not from the
+                                    // composition: same rule as the switch beside it, so a
+                                    // burst of taps cannot write back a stale list.
+                                    onClick = {
+                                        onUpdateAssistant { current ->
+                                            val nowPinned = toolName in current.pinnedToolNames
+                                            current.copy(
+                                                pinnedToolNames = if (nowPinned) {
+                                                    current.pinnedToolNames - toolName
                                                 } else {
-                                                    R.string.assistant_page_local_tools_pin
-                                                }
-                                            ),
-                                            color = if (pinned) {
-                                                MaterialTheme.colorScheme.primary
+                                                    current.pinnedToolNames + toolName
+                                                },
+                                            )
+                                        }
+                                    },
+                                ) {
+                                    Text(
+                                        text = stringResource(
+                                            if (pinned) {
+                                                R.string.assistant_page_local_tools_pinned
                                             } else {
-                                                MaterialTheme.colorScheme.onSurfaceVariant
-                                            },
-                                        )
-                                    }
+                                                R.string.assistant_page_local_tools_pin
+                                            }
+                                        ),
+                                        color = if (pinned) {
+                                            MaterialTheme.colorScheme.primary
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        },
+                                    )
                                 }
                                 Switch(
                                     checked = toolName !in assistant.disabledLocalTools,
