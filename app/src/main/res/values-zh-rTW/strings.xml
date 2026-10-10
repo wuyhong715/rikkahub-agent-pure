@@ -759,6 +759,16 @@
   <string name="setting_model_page_translate_model">翻譯模型</string>
   <string name="setting_model_page_translate_model_desc">用於翻譯功能的模型</string>
   <string name="setting_model_page_translate_prompt_vars">變數: 原始文字: {source_text}, 目標語言: {target_lang}</string>
+  <string name="setting_page_group_appearance">外觀與互動</string>
+  <string name="setting_page_group_models">模型與 AI</string>
+  <string name="setting_page_group_assistant">助手與自動化</string>
+  <string name="setting_page_group_device">裝置與權限</string>
+  <string name="setting_page_group_connections">連接與整合</string>
+  <string name="setting_page_group_data">資料</string>
+  <string name="setting_page_group_about">關於與診斷</string>
+  <string name="setting_page_embedding_model">本地向量模型</string>
+  <string name="setting_page_embedding_model_missing">未安裝 — 記憶與全部搜尋工具都不可用。點此安裝。</string>
+  <string name="setting_page_embedding_model_ready_auto">已安裝（自動選擇）</string>
   <string name="setting_page_about">關於</string>
   <string name="setting_page_about_desc">關於本APP</string>
   <string name="setting_page_assistant">助手</string>
@@ -819,7 +829,7 @@
   <string name="setting_page_share">分享</string>
   <string name="setting_page_share_desc">分享本APP給朋友</string>
   <string name="setting_page_share_text">RikkaHub Agent · Pure - 開源安卓AI助手\n\n專案位址: https://github.com/wuyhong715/rikkahub-agent-pure/releases/latest</string>
-  <string name="setting_page_theme_setting">主題</string>
+  <string name="setting_page_theme_setting">自訂主題</string>
   <string name="setting_page_theme_setting_desc">自訂應用配色方案</string>
   <string name="setting_theme_page_preset_themes">預設主題</string>
   <string name="setting_theme_page_custom_themes">自訂主題</string>
@@ -1119,9 +1129,9 @@
   <string name="setting_page_preferences_desc">主題、通知、介面與一般設定</string>
   <string name="setting_page_preferences_theme">主題</string>
   <string name="setting_page_preferences_theme_desc">動態色彩、主題、AMOLED 深色模式</string>
-  <string name="setting_page_preferences_notification">通知</string>
+  <string name="setting_page_preferences_notification">通知提醒</string>
   <string name="setting_page_preferences_notification_desc">更新提醒、訊息產生通知</string>
-  <string name="setting_page_preferences_general">一般</string>
+  <string name="setting_page_preferences_general">互動行為</string>
   <string name="setting_page_preferences_general_desc">互動行為、捲動、輸入設定</string>
   <string name="setting_page_preferences_ui">UI 偏好設定</string>
   <string name="setting_page_preferences_ui_desc">訊息顯示、字型、程式碼區塊</string>
@@ -1433,7 +1443,7 @@
   <string name="setting_page_doctor_report_copied">診斷報告已複製到剪貼簿。</string>
   <string name="setting_page_doctor_run_again">重新執行</string>
   <string name="setting_page_doctor_running">正在執行…</string>
-  <string name="setting_page_notifications">通知</string>
+  <string name="setting_page_notifications">通知存取</string>
   <string name="setting_page_notifications_action_ago_hours">%1$d 小時前</string>
   <string name="setting_page_notifications_action_ago_minutes">%1$d 分鐘前</string>
   <string name="setting_page_notifications_action_ago_seconds">%1$d 秒前</string>

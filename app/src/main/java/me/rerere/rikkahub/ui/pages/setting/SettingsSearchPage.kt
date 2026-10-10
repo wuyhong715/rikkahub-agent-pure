@@ -30,6 +30,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.context.LocalNavController
@@ -49,7 +50,10 @@ fun SettingsSearchPage(vm: SettingVM = koinViewModel()) {
         focusRequester.requestFocus()
     }
 
-    val entries = remember(settings.developerMode) { settingsSearchIndex(settings.developerMode) }
+    val currentAssistantId = settings.getCurrentAssistant().id.toString()
+    val entries = remember(settings.developerMode, currentAssistantId) {
+        settingsSearchIndex(settings.developerMode, currentAssistantId)
+    }
     val filtered = remember(entries, query) {
         val q = query.trim()
         if (q.isEmpty()) {
@@ -58,6 +62,7 @@ fun SettingsSearchPage(vm: SettingVM = koinViewModel()) {
             entries.filter { entry ->
                 context.getString(entry.titleRes).contains(q, ignoreCase = true) ||
                     entry.descriptionRes?.let { context.getString(it).contains(q, ignoreCase = true) } == true ||
+                    entry.altTitles.any { context.getString(it).contains(q, ignoreCase = true) } ||
                     context.getString(entry.groupRes).contains(q, ignoreCase = true)
             }
         }
