@@ -51,7 +51,8 @@ fun buildLibrarySearchTool(
         match of another. Compare the passages within one result set; never treat a particular
         number as a relevance threshold.
 
-        If it reports that semantic search is unavailable, fall back to `find_files`.
+        If it reports that semantic search is unavailable, no embedding model is installed. Say so
+        to the user rather than retrying - there is no keyword fallback any more.
     """.trimIndent(),
     parameters = {
         InputSchema.Obj(

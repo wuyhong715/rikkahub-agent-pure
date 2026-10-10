@@ -34,9 +34,8 @@ data class LibrarySearchOutcome(
  * The JSON `library_search` answers with.
  *
  * Deliberately a sibling of [MemorySearchEnvelope] rather than a shared shape: the two differ in
- * the one place that matters to a model - what to do when the search comes back empty. Cold memory
- * has `memory_index` / `memory_read` to fall back on; the library has `find_files` for names and
- * `workspace_read_file` for contents, and a hint that names the wrong family is worse than no hint.
+ * what a hit is. The library's is a path in a workspace, cold memory's is a file in a directory,
+ * and each has to name itself the way the tool that reads it expects.
  */
 object LibrarySearchEnvelope {
 
@@ -70,16 +69,20 @@ object LibrarySearchEnvelope {
         }.toString()
 
     /**
-     * Sent when no embedding model is installed. The hint matters more than the error: a model that
-     * only finds out semantic search is off will otherwise stop looking through the files entirely,
-     * when `find_files` (by name) and `workspace_read_file` (by content it can see) still work.
+     * Sent when no embedding model is installed.
+     *
+     * The hint is an instruction, not an alternative. It used to send the model to `find_files` /
+     * `workspace_read_file` instead, which is a decent answer to "semantic search is optional" and
+     * the wrong one here: the index is how this library is searched, so the only useful thing to
+     * pass on is how to install the model it needs.
      */
     fun unavailable(detail: String?): String = buildJsonObject {
         put("error", "unavailable")
         put("detail", detail ?: "no embedding model is installed")
         put(
             "hint",
-            "Use find_files to look for a name, or workspace_read_file to open a file you already know.",
+            "Searching the file library needs the embedding model, and none is installed. Ask the " +
+                "user to install one from the assistant's memory settings.",
         )
     }.toString()
 

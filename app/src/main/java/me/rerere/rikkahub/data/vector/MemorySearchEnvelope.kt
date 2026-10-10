@@ -73,10 +73,23 @@ object MemorySearchEnvelope {
      * only finds out semantic search is off will otherwise stop looking for the notes entirely,
      * when the exact-name tools it already has would have answered the question.
      */
+    /**
+     * Sent when no embedding model is installed.
+     *
+     * The hint is an instruction, not an alternative. It used to point at `memory_index` /
+     * `memory_read` — a keyword-free way to browse the same directory — but that is a fallback for
+     * a feature that is simply off, and Moxw does not keep those: the model is what searching by
+     * meaning runs on, so the only thing worth telling anyone is how to install it.
+     */
     fun unavailable(detail: String?): String = buildJsonObject {
         put("error", "unavailable")
         put("detail", detail ?: "no embedding model is installed")
-        put("hint", "Use memory_index to list the knowledge base and memory_read to open a document.")
+        put(
+            "hint",
+            "Searching cold memory needs the embedding model, and none is installed. Ask the user " +
+                "to install one from the assistant's memory settings; until then this knowledge " +
+                "base cannot be searched.",
+        )
     }.toString()
 
     fun missingQuery(): String = buildJsonObject {
