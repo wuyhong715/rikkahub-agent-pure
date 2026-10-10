@@ -73,12 +73,26 @@ class MemoryIndexCoordinator(
         val key = "${assistant.id}:$workspaceId:$dir"
         val now = System.currentTimeMillis()
         val previous = lastAttemptAtMs[key] ?: 0L
-        if (now - previous < minIntervalMs) return false
+        if (now - previous < minIntervalMs) {
+            // Logged because the debounce is otherwise invisible: "the index is stale and nothing
+            // is happening" is indistinguishable from "the trigger never fired", and that cost a
+            // diagnostic round on the first device test.
+            Log.d(TAG, "skipping sync of '$dir': one ran ${(now - previous) / 1000}s ago")
+            return false
+        }
         lastAttemptAtMs[key] = now
 
         scope.launch {
-            runCatching { syncNow(assistant) }
+            val report = runCatching { syncNow(assistant) }
                 .onFailure { Log.d(TAG, "background sync failed", it) }
+                .getOrNull()
+            if (report == null) {
+                // Nothing was indexed - most often because no model is installed yet. Do not let
+                // that count as this assistant's one attempt for the next five minutes: the user
+                // is probably installing the model right now, and the next conversation they open
+                // should try again rather than wait out a debounce for work that never ran.
+                lastAttemptAtMs.remove(key)
+            }
         }
         return true
     }

@@ -125,7 +125,7 @@
   <string name="assistant_page_index_running">Indexing…</string>
   <string name="assistant_page_index_error">Failed: %1$s</string>
   <string name="assistant_page_index_report">%1$d document(s), %2$d passage(s) indexed</string>
-  <string name="assistant_page_index_never">Not indexed yet</string>
+  <string name="assistant_page_index_never">Not indexed yet — open a chat, or tap Rebuild</string>
   <string name="assistant_page_tool_surface_mode">Progressive MCP tool catalog</string>
   <string name="assistant_page_tool_surface_mode_desc">Replaces the MCP tools in each request with a tool_search / tool_open pair, so only the schemas the model opens are sent. Cuts the first-turn tool tokens, but the tool list changes between turns, which can cost prompt-cache hits. Local tools are never catalogued. Off by default.</string>
   <string name="assistant_page_subagent_context_refs">Sub-agent context references</string>

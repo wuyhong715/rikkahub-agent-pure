@@ -74,12 +74,15 @@ class EmbeddingModelViewModel(
      * ("automatic") on a fresh install, and a user who has just waited for a file to arrive
      * should not have to go and pick it out of a list.
      *
+     * [onInstalled] runs after the file is on disk and selected, for a caller that wants to start
+     * indexing with it.
+     *
      * Deliberately does *not* register the file as a chat model in the local provider the way the
      * local-model page does on completion. These files cannot hold a conversation, and offering
      * one as if it could is a trap; the embedding lookup finds them by listing the directory, so
      * nothing else needs to know they exist.
      */
-    fun download(entry: LlamaCppEmbeddingEntry) {
+    fun download(entry: LlamaCppEmbeddingEntry, onInstalled: () -> Unit = {}) {
         if (job?.isActive == true) return
         _error.value = null
         _download.value = Download(entry.file, 0, 0L, entry.sizeBytes)
@@ -106,6 +109,10 @@ class EmbeddingModelViewModel(
                             _download.value = null
                             refresh()
                             settingsStore.update { it.copy(embeddingModelFile = entry.file) }
+                            // The caller builds the index with it: a model that has just been
+                            // waited for should not need a conversation to be opened before
+                            // anything happens.
+                            onInstalled()
                         }
 
                         is ModelInstall.Progress.Failed -> {

@@ -333,13 +333,18 @@ private fun AssistantMemoryContent(
                             // Seed a default directory and create it, so flipping the switch just
                             // works; the picker is still there to change it.
                             val workspace = coldMemoryWorkspace
-                            if (enabled && assistant.coldMemoryDir == null && workspace != null) {
-                                onUpdateAssistant(
-                                    assistant.copy(
-                                        coldMemoryEnabled = true,
-                                        coldMemoryDir = DEFAULT_COLD_MEMORY_DIR_ABSOLUTE,
-                                    )
+                            val updated = if (enabled && assistant.coldMemoryDir == null && workspace != null) {
+                                assistant.copy(
+                                    coldMemoryEnabled = true,
+                                    coldMemoryDir = DEFAULT_COLD_MEMORY_DIR_ABSOLUTE,
                                 )
+                            } else {
+                                assistant.copy(coldMemoryEnabled = enabled)
+                            }
+                            onUpdateAssistant(updated)
+                            // Create the seeded directory only on the way in, matching where it is
+                            // seeded: flipping the switch off should not create anything.
+                            if (enabled && workspace != null && assistant.coldMemoryDir == null) {
                                 scope.launch {
                                     runCatching {
                                         workspaceRepository.createDirectory(
@@ -349,9 +354,12 @@ private fun AssistantMemoryContent(
                                         )
                                     }
                                 }
-                            } else {
-                                onUpdateAssistant(assistant.copy(coldMemoryEnabled = enabled))
                             }
+                            // Turning it on is the moment to build the index, not some later
+                            // conversation: waiting for one leaves the user looking at a
+                            // "not indexed yet" row, rebuilding by hand and wondering whether the
+                            // feature works at all.
+                            memoryIndex.requestSync(updated, minIntervalMs = 0L)
                         }
                     )
                 }
@@ -509,7 +517,11 @@ private fun AssistantMemoryContent(
             workspaceId = coldMemoryWorkspace.id,
             currentCwd = assistant.coldMemoryDir,
             onSelectCwd = { selected ->
-                onUpdateAssistant(assistant.copy(coldMemoryDir = selected))
+                val updated = assistant.copy(coldMemoryDir = selected)
+                onUpdateAssistant(updated)
+                // Where the documents are is part of what the index is of: a new directory has
+                // never been indexed, so this is a first build rather than a refresh.
+                memoryIndex.requestSync(updated, minIntervalMs = 0L)
             },
             onDismiss = { showColdMemoryDirPicker = false },
         )
@@ -533,6 +545,7 @@ private fun AssistantMemoryContent(
                         selected = settings.embeddingModelFile.isEmpty(),
                         onClick = {
                             scope.launch { settingsStore.update { it.copy(embeddingModelFile = "") } }
+                            memoryIndex.requestSync(assistant, minIntervalMs = 0L)
                             showEmbeddingModelPicker = false
                         },
                     )
@@ -542,6 +555,7 @@ private fun AssistantMemoryContent(
                             selected = settings.embeddingModelFile == fileName,
                             onClick = {
                                 scope.launch { settingsStore.update { it.copy(embeddingModelFile = fileName) } }
+                                memoryIndex.requestSync(assistant, minIntervalMs = 0L)
                                 showEmbeddingModelPicker = false
                             },
                         )
@@ -578,7 +592,11 @@ private fun AssistantMemoryContent(
                                     )
                                 }
                                 TextButton(
-                                    onClick = { embeddingVm.download(entry) },
+                                    onClick = {
+                                        embeddingVm.download(entry) {
+                                            memoryIndex.requestSync(assistant, minIntervalMs = 0L)
+                                        }
+                                    },
                                     enabled = embeddingDownload == null,
                                 ) {
                                     Text(stringResource(R.string.assistant_page_embedding_download))

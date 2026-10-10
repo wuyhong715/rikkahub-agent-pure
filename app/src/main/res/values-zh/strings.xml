@@ -2548,7 +2548,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_page_index_running">正在建立索引…</string>
   <string name="assistant_page_index_error">失败：%1$s</string>
   <string name="assistant_page_index_report">已索引 %1$d 篇文档、%2$d 个片段</string>
-  <string name="assistant_page_index_never">尚未建立索引</string>
+  <string name="assistant_page_index_never">尚未建立索引（打开对话会自动建立，或点「重建」）</string>
   <string name="assistant_page_tool_retry">重试偶发的工具失败</string>
   <string name="assistant_page_tool_retry_desc">当只读工具（网页抓取、文件列举、搜索）因一次性网络或超时错误失败时，以较短的指数退避再重试最多两次，然后把失败上报给模型。只有每次调用都是纯读取的工具才会重试——任何会写入、发送或执行命令的操作绝不重试，因此重试永远不会重复产生副作用。默认关闭。</string>
   <!-- Statistics: overview section header -->
