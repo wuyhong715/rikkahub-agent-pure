@@ -11,6 +11,10 @@ import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.vector.ColdMemorySearchOutcome
+import me.rerere.rikkahub.data.vector.DEFAULT_SEARCH_LIMIT
+import me.rerere.rikkahub.data.vector.MAX_SEARCH_LIMIT
+import me.rerere.rikkahub.data.vector.MemorySearchEnvelope
 
 /**
  * T-06 / (7) — Cold memory: a plain Markdown knowledge base on disk, read on demand.
@@ -376,3 +380,75 @@ private fun errorEnvelope(code: String, detail: String): String = buildJsonObjec
     put("error", code)
     put("detail", detail)
 }.toString()
+
+/**
+ * Moxw - semantic search over the cold-memory knowledge base.
+ *
+ * Sits beside `memory_index` / `memory_read` rather than replacing them: those are exact and free,
+ * and a model that already knows the file name should not pay for an embedding call to be told it.
+ * What this adds is finding a document *by topic*, which is the whole difficulty of a knowledge
+ * base that has grown past the point where its index fits in a prompt.
+ *
+ * The search and the envelope are both injected/pure (see [MemorySearchEnvelope]), so this
+ * function only owns the tool contract: its schema, its name, and which failures are arguments
+ * rather than results.
+ */
+fun buildMemorySearchTool(
+    dirLabel: String,
+    search: suspend (query: String, limit: Int) -> ColdMemorySearchOutcome,
+): Tool = Tool(
+    name = "memory_search",
+    description = """
+        Search the cold-memory knowledge base by meaning, and get back the passages that match,
+        with the file each one came from.
+
+        Prefer this over guessing at file names from `memory_index` when you are looking for notes
+        about a topic ("what did we decide about deployment", "anything about the streaming bug").
+        Each hit names its file, so `memory_read` can pull in the full document when a passage is
+        not enough.
+
+        Scores are cosine similarities between the query and each passage, and they are NOT
+        comparable between calls: a loosely related passage of one query can outscore a perfect
+        match of another. Compare the passages within one result set; never treat a particular
+        number as a relevance threshold.
+
+        If it reports that semantic search is unavailable, fall back to `memory_index` and
+        `memory_read`.
+    """.trimIndent(),
+    parameters = {
+        InputSchema.Obj(
+            properties = buildJsonObject {
+                put("query", buildJsonObject {
+                    put("type", "string")
+                    put("description", "What to look for, in natural language or keywords.")
+                })
+                put("limit", buildJsonObject {
+                    put("type", "integer")
+                    put("description", "Maximum passages to return. Defaults to ${DEFAULT_SEARCH_LIMIT}.")
+                })
+            },
+            required = listOf("query"),
+        )
+    },
+    needsApproval = { false },
+    execute = {
+        val params = it.jsonObject
+        val query = params["query"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
+        if (query.isEmpty()) {
+            return@Tool listOf(UIMessagePart.Text(MemorySearchEnvelope.missingQuery()))
+        }
+        // Clamped rather than refused: a model asking for 100 passages is over-eager, not wrong,
+        // and failing the call would cost it a round trip to learn something it can be told by
+        // simply getting the maximum.
+        val limit = params["limit"]?.jsonPrimitive?.intOrNull?.coerceIn(1, MAX_SEARCH_LIMIT)
+            ?: DEFAULT_SEARCH_LIMIT
+
+        val outcome = search(query, limit)
+        val body = if (outcome.available) {
+            MemorySearchEnvelope.hits(dirLabel, query, outcome)
+        } else {
+            MemorySearchEnvelope.unavailable(outcome.note)
+        }
+        listOf(UIMessagePart.Text(body))
+    },
+)

@@ -35,6 +35,12 @@ class MemoryVectorSource(
     )
 
     data class SearchOutcome(
+        /**
+         * False when no embedding model is installed. Carried separately from an empty [hits]
+         * because the two mean opposite things: "nothing matched" is an answer, while "there is
+         * nothing to search with" is a reason to use the exact-name tools instead.
+         */
+        val available: Boolean,
         val hits: List<RetrievedChunk>,
         /** How many documents the index knows about, so a caller can say "indexed 3 of 9". */
         val indexedDocuments: Int,
@@ -125,19 +131,17 @@ class MemoryVectorSource(
     ): SearchOutcome {
         val source = sourceOf(dir)
         val model = embeddings.ensureLoaded()
-            ?: return SearchOutcome(emptyList(), 0, stale = false)
+            ?: return SearchOutcome(available = false, hits = emptyList(), indexedDocuments = 0, stale = false)
         val queryVector = embeddings.embedOne(query)
         val result = store.search(source, model.modelId, queryVector, limit, relativeFloor)
         val models = store.modelIdsOf(source)
         return SearchOutcome(
+            available = true,
             hits = result.hits,
             indexedDocuments = store.docKeys(source).size,
             stale = models.any { it != model.modelId },
         )
     }
-
-    /** How many documents are in the index for [dir]. */
-    suspend fun indexedDocuments(dir: String): List<String> = store.docKeys(sourceOf(dir))
 
     companion object {
         const val KIND = "memory"

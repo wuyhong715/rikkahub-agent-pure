@@ -31,15 +31,8 @@ interface VectorChunkDao {
     @Query("DELETE FROM vector_chunks WHERE source = :source")
     suspend fun deleteSource(source: String)
 
-    /** Drops every row a previous embedding model produced, for this source. */
-    @Query("DELETE FROM vector_chunks WHERE source = :source AND model_id != :modelId")
-    suspend fun deleteOtherModels(source: String, modelId: String)
-
     @Query("SELECT DISTINCT doc_key FROM vector_chunks WHERE source = :source ORDER BY doc_key")
     suspend fun docKeys(source: String): List<String>
-
-    @Query("SELECT COUNT(*) FROM vector_chunks WHERE source = :source")
-    suspend fun countOfSource(source: String): Long
 
     @Query("SELECT DISTINCT model_id FROM vector_chunks WHERE source = :source")
     suspend fun modelIdsOfSource(source: String): List<String>

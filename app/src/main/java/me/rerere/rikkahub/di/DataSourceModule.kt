@@ -104,6 +104,17 @@ val dataSourceModule = module {
             embeddings = get(),
         )
     }
+    // Runs the index in the background. Given the app's own scope: the index outlives any one
+    // conversation, and a sync that a closed screen would cancel is a sync that never finishes.
+    single {
+        me.rerere.rikkahub.data.vector.MemoryIndexCoordinator(
+            scope = get<me.rerere.rikkahub.AppScope>(),
+            embeddings = get(),
+            source = get(),
+            workspaceRepository = get(),
+            settingsStore = get(),
+        )
+    }
 
     // P2-06 - the expert library also lives in its own database file (see
     // AgentDefinitionDatabase for why). Unlike the usage ledger this holds USER data, so a

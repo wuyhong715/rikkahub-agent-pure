@@ -145,14 +145,7 @@ class VectorIndexStore(
         dao.deleteSource(source)
     }
 
-    /** Drops vectors left behind by a different embedding model. */
-    suspend fun forgetOtherModels(source: String, modelId: String) = withContext(Dispatchers.IO) {
-        dao.deleteOtherModels(source, modelId)
-    }
-
     suspend fun docKeys(source: String): List<String> = withContext(Dispatchers.IO) { dao.docKeys(source) }
-
-    suspend fun countOf(source: String): Long = withContext(Dispatchers.IO) { dao.countOfSource(source) }
 
     suspend fun modelIdsOf(source: String): List<String> = withContext(Dispatchers.IO) {
         dao.modelIdsOfSource(source)

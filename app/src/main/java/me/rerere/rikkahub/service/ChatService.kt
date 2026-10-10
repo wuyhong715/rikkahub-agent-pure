@@ -69,6 +69,7 @@ import me.rerere.rikkahub.utils.cancelNotification
 import me.rerere.rikkahub.utils.sendNotification
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.AssistantResolver
+import me.rerere.rikkahub.data.vector.MemoryIndexCoordinator
 import me.rerere.rikkahub.data.ai.AutomationRecorder
 import me.rerere.rikkahub.data.ai.tools.AppPlaybookFile
 import me.rerere.rikkahub.data.ai.tools.AppPlaybookRules
@@ -98,6 +99,7 @@ import me.rerere.rikkahub.data.ai.tools.CompactionToolResult
 import me.rerere.rikkahub.data.ai.tools.buildCompactionTools
 import me.rerere.rikkahub.data.ai.tools.createWorkspaceTools
 import me.rerere.rikkahub.data.ai.tools.buildColdMemoryTools
+import me.rerere.rikkahub.data.ai.tools.buildMemorySearchTool
 import me.rerere.rikkahub.data.ai.tools.ColdMemoryDoc
 import me.rerere.rikkahub.data.ai.tools.ColdMemoryRules
 import me.rerere.rikkahub.data.ai.tools.ColdMemoryWriteResult
@@ -451,6 +453,8 @@ class ChatService(
     private val toolApprovalPreferences: me.rerere.rikkahub.data.preferences.ToolApprovalPreferences,
     private val workspaceRepository: WorkspaceRepository,
     private val folderRepository: FolderRepository,
+    /** Moxw - owns the knowledge-base vector index: its background sync and its search. */
+    private val memoryIndex: MemoryIndexCoordinator,
 ) {
     // workspace 系统提示注入 (依赖 workspaceRepository, 故在类内构造)
     private val workspaceReminderTransformer = WorkspaceReminderTransformer(workspaceRepository)
@@ -862,6 +866,13 @@ class ChatService(
         if (conversation != null) {
             updateConversation(conversationId, conversation)
             settingsStore.updateAssistant(conversation.assistantId)
+            // Moxw - opening a conversation is when the index is about to be wanted, and it is
+            // the only moment the app reliably sees. Debounced inside, so flicking between
+            // conversations does not re-scan a directory the last few minutes already covered;
+            // failures are logged there and never reach this call.
+            runCatching {
+                AssistantResolver.byId(settingsStore.settingsFlow.value, conversation.assistantId)
+            }.getOrNull()?.let { assistant -> memoryIndex.requestSync(assistant) }
         } else {
             // A send can race this asynchronous initialization for a brand-new conversation.
             // Once the session already contains a user message, never replace it with the
@@ -2259,7 +2270,7 @@ class ChatService(
             null
         }
 
-        return buildColdMemoryTools(
+        val tools = buildColdMemoryTools(
             dirLabel = if (dir.isEmpty()) {
                 ColdMemoryRules.WORKSPACE_PREFIX
             } else {
@@ -2295,7 +2306,20 @@ class ChatService(
                     totalChars = text.length,
                 )
             },
+        ).toMutableList()
+
+        // Moxw - semantic search joins the two exact-name tools. Registration does not depend on a
+        // model being installed: the tool reports that state itself, which is how the model finds
+        // out to fall back to memory_index rather than to stop looking for its notes.
+        tools += buildMemorySearchTool(
+            dirLabel = if (dir.isEmpty()) {
+                ColdMemoryRules.WORKSPACE_PREFIX
+            } else {
+                "${ColdMemoryRules.WORKSPACE_PREFIX}/$dir"
+            },
+            search = { query, limit -> memoryIndex.search(dir, query, limit) },
         )
+        return tools
     }
 
     /**

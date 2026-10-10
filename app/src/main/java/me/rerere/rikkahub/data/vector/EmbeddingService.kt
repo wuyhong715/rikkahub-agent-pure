@@ -4,7 +4,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import me.rerere.llamacpp.LlamaCppEmbedder
 import me.rerere.llamacpp.LlamaCppEmbeddingCatalog
-import me.rerere.llamacpp.ModelTooLargeException
 import java.io.File
 
 /**
@@ -39,9 +38,6 @@ class EmbeddingService(
 
     @Volatile
     private var active: ActiveModel? = null
-
-    /** The model in use, or null when none is installed. Loading is lazy and happens once. */
-    val current: ActiveModel? get() = active
 
     /**
      * Loads the model if it is not loaded yet. Returns null when there is nothing usable to
@@ -95,13 +91,5 @@ class EmbeddingService(
             embedder.unload()
             active = null
         }
-    }
-
-    /** True when a model is installed and usable. Never throws. */
-    suspend fun isAvailable(): Boolean = try {
-        ensureLoaded() != null
-    } catch (e: ModelTooLargeException) {
-        // Installed but it does not fit in this device's memory: an answer, not a crash.
-        false
     }
 }
