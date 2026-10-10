@@ -137,7 +137,7 @@ class MemoryVectorSource(
         val models = store.modelIdsOf(source)
         return SearchOutcome(
             available = true,
-            hits = result.hits,
+            hits = result.asHits(),
             indexedDocuments = store.docKeys(source).size,
             stale = models.any { it != model.modelId },
         )

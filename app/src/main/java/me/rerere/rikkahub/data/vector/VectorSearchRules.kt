@@ -2,6 +2,21 @@ package me.rerere.rikkahub.data.vector
 
 import me.rerere.llamacpp.VectorMath
 
+/**
+ * One retrieved chunk, with everything needed to show it or to re-read its document.
+ *
+ * Lives here, next to the ranking, rather than with the store: it is the currency both the store
+ * and the source adapters pass around, and keeping it in a file with no Room or Android imports
+ * is what makes [asHits] testable on a plain JVM.
+ */
+data class RetrievedChunk(
+    val source: String,
+    val docKey: String,
+    val chunkIndex: Int,
+    val text: String,
+    val score: Float,
+)
+
 /** One retrieved item and its similarity to the query. */
 data class ScoredChunk<T>(val item: T, val score: Float)
 
@@ -14,6 +29,17 @@ data class ScoredChunk<T>(val item: T, val score: Float)
  * otherwise search just quietly gets worse.
  */
 data class VectorSearchResult<T>(val hits: List<ScoredChunk<T>>, val skipped: Int)
+
+/**
+ * Unwraps a ranked result into plain hits, carrying each score onto its chunk.
+ *
+ * A named function rather than an inline `map` because the layering is easy to get backwards -
+ * [VectorSearchResult] holds `ScoredChunk`s, not the chunks themselves - and both call sites got
+ * it wrong in exactly opposite ways before this existed. Tested, so the next reader has one place
+ * to look instead of two places to guess.
+ */
+fun VectorSearchResult<RetrievedChunk>.asHits(): List<RetrievedChunk> =
+    hits.map { it.item.copy(score = it.score) }
 
 /**
  * Ranks candidates against a query vector.

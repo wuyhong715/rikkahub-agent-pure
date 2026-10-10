@@ -4,15 +4,6 @@ import androidx.room.withTransaction
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/** One retrieved chunk, with everything needed to show it or to re-read its document. */
-data class RetrievedChunk(
-    val source: String,
-    val docKey: String,
-    val chunkIndex: Int,
-    val text: String,
-    val score: Float,
-)
-
 /**
  * Reads and writes the vector index.
  *
@@ -129,10 +120,9 @@ class VectorIndexStore(
             limit = limit,
             relativeFloor = relativeFloor,
         )
-        VectorSearchResult(
-            hits = ranked.hits.map { it.item.copy(score = it.score) },
-            skipped = ranked.skipped,
-        )
+        // Passed straight through: `VectorSearchResult<T>` already carries its hits wrapped in
+        // their scores, so re-mapping here is how this line was got wrong twice.
+        ranked
     }
 
     /** Forgets one document. Used when the source reports it deleted. */

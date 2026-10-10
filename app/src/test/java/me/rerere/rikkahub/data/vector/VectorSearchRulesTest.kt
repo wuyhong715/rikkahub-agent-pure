@@ -58,6 +58,29 @@ class VectorSearchRulesTest {
     }
 
     @Test
+    fun `asHits carries each score onto its chunk`() {
+        // The layering that was got wrong twice: a ranked result holds *scored* chunks, and the
+        // plain chunks only exist on the other side of this call.
+        val chunks = listOf(
+            RetrievedChunk("memory:notes", "a.md", 0, "alpha", 0f),
+            RetrievedChunk("memory:notes", "b.md", 1, "beta", 0f),
+        )
+        val ranked = VectorSearchRules.rank(
+            query = floatArrayOf(1f, 0f),
+            candidates = chunks.zip(listOf(floatArrayOf(1f, 0f), floatArrayOf(0f, 1f))),
+            limit = 8,
+        )
+        assertEquals(2, ranked.hits.size)
+
+        val hits = ranked.asHits()
+
+        assertEquals(listOf("alpha", "beta"), hits.map { it.text })
+        assertEquals(1f, hits[0].score, 1e-5f)
+        assertEquals(0f, hits[1].score, 1e-5f)
+        assertEquals("a.md", hits[0].docKey)
+    }
+
+    @Test
     fun `no candidates gives an empty result`() {
         val result = VectorSearchRules.rank<String>(query, emptyList(), limit = 8)
         assertEquals(0, result.hits.size)
