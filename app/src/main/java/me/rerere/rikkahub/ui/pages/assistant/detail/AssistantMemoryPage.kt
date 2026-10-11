@@ -916,10 +916,22 @@ private fun AssistantMemoryContent(
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
                                     Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = entry.displayName,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                        )
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                text = entry.displayName,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                            )
+                                            if (entry == embeddingVm.recommended) {
+                                                Text(
+                                                    text = stringResource(
+                                                        R.string.assistant_page_embedding_recommended
+                                                    ),
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                    modifier = Modifier.padding(start = 6.dp),
+                                                )
+                                            }
+                                        }
                                         Text(
                                             text = stringResource(
                                                 R.string.assistant_page_embedding_size_mb,

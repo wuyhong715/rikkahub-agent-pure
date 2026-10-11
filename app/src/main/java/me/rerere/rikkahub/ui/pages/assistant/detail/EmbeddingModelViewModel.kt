@@ -13,7 +13,9 @@ import me.rerere.llamacpp.LlamaCppEmbeddingCatalog
 import me.rerere.llamacpp.LlamaCppEmbeddingEntry
 import me.rerere.locallm.ModelInstall
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.vector.EmbeddingDeviceProbe
 import me.rerere.rikkahub.data.vector.EmbeddingModelFiles
+import me.rerere.rikkahub.data.vector.EmbeddingTierRules
 import okhttp3.OkHttpClient
 
 /**
@@ -48,11 +50,26 @@ class EmbeddingModelViewModel(
     val installed: StateFlow<List<String>> = _installed.asStateFlow()
 
     /**
-     * Curated models that are not on disk yet. Recomputed on every read rather than cached: the
-     * only thing that changes it is a finished download, and [installed] is what that updates.
+     * Curated models that are not on disk yet, in the order the picker should offer them - the
+     * grid first, rung by rung, and then anything the grid does not place. Recomputed on every
+     * read rather than cached: the only thing that changes it is a finished download, and
+     * [installed] is what that updates.
      */
     val downloadable: List<LlamaCppEmbeddingEntry>
-        get() = LlamaCppEmbeddingCatalog.ENTRIES.filter { it.file !in _installed.value }
+        get() = LlamaCppEmbeddingCatalog.PICKER_ORDER.filter { it.file !in _installed.value }
+
+    /**
+     * The model this phone should be pointed at, or null when none of the grid fits it.
+     *
+     * Measured once: RAM and free space do not change while a dialog is open, and reading a
+     * filesystem statistic on every recomposition to answer a question that cannot have changed is
+     * exactly the kind of I/O that belongs off the frame. Null is a real answer - it means the
+     * phone has too little room for even the light rung, and the picker shows the list without a
+     * recommendation rather than suggesting a download that would not fit.
+     */
+    val recommended: LlamaCppEmbeddingEntry? by lazy {
+        EmbeddingTierRules.recommendedSlot(EmbeddingDeviceProbe.facts(context))?.entry
+    }
 
     private var job: Job? = null
 

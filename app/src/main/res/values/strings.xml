@@ -119,6 +119,7 @@
   <string name="assistant_page_embedding_model">Embedding model</string>
   <string name="assistant_page_embedding_model_desc">Searches the knowledge base by meaning. One model is loaded at a time; installing the recommended file is enough, but a specific one can be pinned here when several are installed.</string>
   <string name="assistant_page_embedding_model_auto">Automatic (recommended)</string>
+  <string name="assistant_page_embedding_recommended">Best for this phone</string>
   <string name="assistant_page_embedding_suggested">Available to download</string>
   <string name="assistant_page_embedding_download">Download</string>
   <string name="assistant_page_embedding_downloading">Downloading %1$d%%</string>

@@ -33,6 +33,10 @@ class LlamaCppEmbeddingCatalogTest {
                 ("Qwen3-Embedding-0.6B.Q4_K_M.gguf" to 396_475_040L),
             "CompendiumLabs/bge-small-zh-v1.5-gguf" to
                 ("bge-small-zh-v1.5-q8_0.gguf" to 26_472_640L),
+            "CompendiumLabs/bge-base-zh-v1.5-gguf" to
+                ("bge-base-zh-v1.5-q8_0.gguf" to 110_001_568L),
+            "CompendiumLabs/bge-large-zh-v1.5-gguf" to
+                ("bge-large-zh-v1.5-q4_k_m.gguf" to 202_115_392L),
         )
 
         LlamaCppEmbeddingCatalog.ENTRIES.forEach { entry ->
@@ -120,14 +124,73 @@ class LlamaCppEmbeddingCatalogTest {
     }
 
     @Test
-    fun `the recommended entry is EmbeddingGemma 2 text weights`() {
-        val recommended = LlamaCppEmbeddingCatalog.ENTRIES.first()
-        assertTrue(
-            "the first entry is what the picker pre-selects",
-            "recommended" in recommended.tags,
+    fun `every rung and lane has exactly one model`() {
+        // The grid is what a phone is answered with, so a missing cell is a phone with no
+        // suggestion at all - and a duplicate would make the answer depend on list order.
+        val cells = LlamaCppEmbeddingCatalog.SLOTS.map { it.tier to it.focus }
+        assertEquals(cells.size, cells.toSet().size)
+        EmbeddingTier.entries.forEach { tier ->
+            EmbeddingFocus.entries.forEach { focus ->
+                assertNotNull(
+                    "no model for $tier/$focus",
+                    LlamaCppEmbeddingCatalog.forSlot(tier, focus),
+                )
+            }
+        }
+        assertEquals(
+            EmbeddingTier.entries.size * EmbeddingFocus.entries.size,
+            LlamaCppEmbeddingCatalog.SLOTS.size,
         )
-        assertEquals("ggml-org/embeddinggemma-2-GGUF", recommended.repo)
-        assertEquals("embeddinggemma-2-Q8_0.gguf", recommended.file)
+    }
+
+    @Test
+    fun `every rung is heavier than the one below it, in both lanes`() {
+        // The only promise the tiers make: choosing a higher one costs the user more storage.
+        // Without this the labels would be free-floating adjectives.
+        EmbeddingFocus.entries.forEach { focus ->
+            val sizes = EmbeddingTier.entries.map {
+                LlamaCppEmbeddingCatalog.forSlot(it, focus)!!.entry.sizeBytes
+            }
+            assertEquals(sizes.sorted(), sizes)
+            assertEquals(sizes.size, sizes.toSet().size)
+        }
+    }
+
+    @Test
+    fun `the Chinese lane is the smaller of the two at every rung`() {
+        // Load-bearing, not incidental: EmbeddingTierRules declines to fall back from one lane to
+        // the other on the grounds that the swap could never rescue a device that failed its own
+        // lane. If a rung ever inverts this, that reasoning has to be revisited.
+        EmbeddingTier.entries.forEach { tier ->
+            val chinese = LlamaCppEmbeddingCatalog.forSlot(tier, EmbeddingFocus.CHINESE)!!.entry
+            val multi = LlamaCppEmbeddingCatalog.forSlot(tier, EmbeddingFocus.MULTILINGUAL)!!.entry
+            assertTrue(
+                "$tier: ${chinese.file} is not smaller than ${multi.file}",
+                chinese.sizeBytes <= multi.sizeBytes,
+            )
+        }
+    }
+
+    @Test
+    fun `the grid leads the order a picker offers`() {
+        val order = LlamaCppEmbeddingCatalog.PICKER_ORDER
+        val slots = LlamaCppEmbeddingCatalog.SLOTS
+        assertEquals(slots.map { it.entry }, order.take(slots.size))
+        // Nothing curated is dropped from the list, and nothing appears twice.
+        assertEquals(LlamaCppEmbeddingCatalog.ENTRIES.toSet(), order.toSet())
+        assertEquals(order.size, order.toSet().size)
+        // The automatic pick walks the same order, so what is offered first is what is used first.
+        assertEquals(order.map { it.file }, LlamaCppEmbeddingCatalog.curatedOrder)
+    }
+
+    @Test
+    fun `the light rung is where an install with nothing installed lands`() {
+        // The default tier is the product decision this whole change turns on: first run costs as
+        // little as possible.
+        assertEquals(
+            EmbeddingTier.LIGHT,
+            LlamaCppEmbeddingCatalog.SLOTS.first().tier,
+        )
     }
 
     @Test

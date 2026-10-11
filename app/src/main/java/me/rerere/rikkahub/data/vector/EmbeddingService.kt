@@ -40,7 +40,7 @@ class EmbeddingService(
     /** The user's explicit choice, if any. */
     private val configuredFileName: suspend () -> String?,
     private val embedder: LlamaCppEmbedder = LlamaCppEmbedder(),
-    private val curatedOrder: List<String> = LlamaCppEmbeddingCatalog.ENTRIES.map { it.file },
+    private val curatedOrder: List<String> = LlamaCppEmbeddingCatalog.curatedOrder,
     /** Prefix lookup, injectable so a test can exercise the behaviour without the catalogue. */
     private val entryFor: (String) -> LlamaCppEmbeddingEntry? = LlamaCppEmbeddingCatalog::entryFor,
     /**

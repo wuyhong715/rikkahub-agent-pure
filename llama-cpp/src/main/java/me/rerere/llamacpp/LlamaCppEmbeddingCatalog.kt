@@ -77,6 +77,54 @@ data class LlamaCppEmbeddingEntry(
         }
 }
 
+/**
+ * How much of a phone an entry is meant for - the rung of the ladder, not a quality verdict.
+ *
+ * A size ladder rather than a score, because size is the only property of an embedding model that
+ * a user can act on: what it costs them in storage and mobile data. Two models of the same size can
+ * differ in quality by more than two neighbouring rungs do, which is why [LlamaCppEmbeddingCatalog]
+ * pairs each rung with a [EmbeddingFocus] and lets the device pick from the pair rather than
+ * pretending one entry is "best".
+ */
+enum class EmbeddingTier(val rank: Int) {
+    /** 15-200 MB. Runs on anything, and is what an unknown device is offered. */
+    LIGHT(0),
+
+    /** 200-320 MB. The default on a phone bought in the last few years. */
+    STANDARD(1),
+
+    /** 400-640 MB. The best retrieval there is on a phone, for a phone that can spare the room. */
+    TOP(2),
+}
+
+/**
+ * Which half of the corpus an entry is strongest on.
+ *
+ * Not a claim that the others cannot do Chinese (they can, badly or well) but which side of the
+ * trade a user is being asked to make: the `bge-*-zh` files are Chinese-tuned and half the size,
+ * the Gemma/Qwen files are multilingual and hold far more context.
+ */
+enum class EmbeddingFocus {
+    /** The `bge-*-zh` family: Chinese-tuned, 512-token window. */
+    CHINESE,
+
+    /** EmbeddingGemma 2 and Qwen3-Embedding: many languages, 8K-32K window. */
+    MULTILINGUAL,
+}
+
+/**
+ * One cell of the recommendation grid: a size rung crossed with a corpus focus.
+ *
+ * The grid exists so that a phone can be answered with one model rather than a list. There is no
+ * "best" embedding model, only the best one that fits - and fitting is a property of the device.
+ * See [me.rerere.rikkahub.data.vector.EmbeddingTierRules] for the part that measures it.
+ */
+data class EmbeddingSlot(
+    val tier: EmbeddingTier,
+    val focus: EmbeddingFocus,
+    val entry: LlamaCppEmbeddingEntry,
+)
+
 object LlamaCppEmbeddingCatalog {
     /**
      * The curated embedding models.
@@ -92,12 +140,15 @@ object LlamaCppEmbeddingCatalog {
      *  * the repo must be public and ungated.
      *
      * Every repo, file name and byte size below was read off the live HuggingFace API on
-     * 2026-10-10. They are exact and must not be edited, guessed at, or extended without
-     * re-verifying against the live API: a wrong repo id or file name 404s on first download,
-     * which is worse than shipping no entry at all.
+     * 2026-10-10 (the first five) or 2026-10-11 (the two `bge-*-zh` additions). They are exact and
+     * must not be edited, guessed at, or extended without re-verifying against the live API: a
+     * wrong repo id or file name 404s on first download, which is worse than shipping no entry at
+     * all.
      *
-     * The order is the recommendation order: the first entry is what an install with no explicit
-     * choice embeds with (see [me.rerere.rikkahub.data.vector.EmbeddingModelRules.pick]).
+     * The order of this list is not a recommendation - [SLOTS] is. It only keeps every file the
+     * catalogue knows about in one place, including the one rung that is not part of the grid
+     * ([LlamaCppEmbeddingCatalog.entryFor] answers from it, which is what gives a curated file its
+     * task prefix).
      */
     val ENTRIES: List<LlamaCppEmbeddingEntry> = listOf(
         LlamaCppEmbeddingEntry(
@@ -109,7 +160,9 @@ object LlamaCppEmbeddingCatalog {
             pooling = "mean",
             minMemGb = 4,
             contextTokens = 8192,
-            tags = listOf("multilingual", "recommended"),
+            // No "recommended" tag: what is recommended is a [EmbeddingSlot], and which slot
+            // depends on the phone. This entry is the standard rung's multilingual half.
+            tags = listOf("multilingual"),
         ),
         LlamaCppEmbeddingEntry(
             displayName = "EmbeddingGemma 2 · Q4",
@@ -181,6 +234,41 @@ object LlamaCppEmbeddingCatalog {
             queryPrefix = "为这个句子生成表示以用于检索相关文章：",
             tags = listOf("chinese", "small"),
         ),
+        LlamaCppEmbeddingEntry(
+            displayName = "bge-base-zh-v1.5",
+            // The light rung for a Chinese phone, and the reason it exists: 110 MB gets 768-dim
+            // Chinese retrieval, where the multilingual entries need 176 MB for the same width and
+            // Qwen3-Embedding needs 396. Twelve layers over a 512-token window - chunks are cut to
+            // the window (ChunkSpec.fitting), so an indexed note becomes ~256-character pieces
+            // rather than the ~1200 the 8K entries get. More rows in the index, better matches
+            // inside each of them; that is the trade this rung asks the user to make.
+            repo = "CompendiumLabs/bge-base-zh-v1.5-gguf",
+            file = "bge-base-zh-v1.5-q8_0.gguf",
+            sizeBytes = 110_001_568L,
+            dim = 768,
+            pooling = "cls",
+            minMemGb = 2,
+            contextTokens = 512,
+            // Same upstream instruction the small model carries; BAAI publishes one for the family.
+            queryPrefix = "为这个句子生成表示以用于检索相关文章：",
+            tags = listOf("chinese"),
+        ),
+        LlamaCppEmbeddingEntry(
+            displayName = "bge-large-zh-v1.5",
+            // The standard rung for a Chinese phone: 24 layers, 1024-dim, and the strongest
+            // Chinese-only retrieval of anything here that a phone can hold. Quantised to Q4 so it
+            // lands under the standard rung's weight - the Q8 file is 348 MB, which is top-rung
+            // money for a 512-token model.
+            repo = "CompendiumLabs/bge-large-zh-v1.5-gguf",
+            file = "bge-large-zh-v1.5-q4_k_m.gguf",
+            sizeBytes = 202_115_392L,
+            dim = 1024,
+            pooling = "cls",
+            minMemGb = 4,
+            contextTokens = 512,
+            queryPrefix = "为这个句子生成表示以用于检索相关文章：",
+            tags = listOf("chinese"),
+        ),
     )
 
     /**
@@ -193,4 +281,48 @@ object LlamaCppEmbeddingCatalog {
      */
     fun entryFor(fileName: String): LlamaCppEmbeddingEntry? =
         ENTRIES.firstOrNull { it.file == fileName }
+
+    /**
+     * The grid: a size rung crossed with a corpus focus, six cells, one model each.
+     *
+     * Written as file names rather than entry references so that a cell whose file is not in
+     * [ENTRIES] - a typo, or an entry deleted without its cell - drops out here instead of
+     * throwing while the class initialises. `LlamaCppEmbeddingCatalogTest` asserts that all six
+     * cells survive, so the failure lands in CI rather than on a device.
+     */
+    private val SLOT_FILES: List<Triple<EmbeddingTier, EmbeddingFocus, String>> = listOf(
+        Triple(EmbeddingTier.LIGHT, EmbeddingFocus.CHINESE, "bge-base-zh-v1.5-q8_0.gguf"),
+        Triple(EmbeddingTier.LIGHT, EmbeddingFocus.MULTILINGUAL, "embeddinggemma-2-UD-Q4_K_XL.gguf"),
+        Triple(EmbeddingTier.STANDARD, EmbeddingFocus.CHINESE, "bge-large-zh-v1.5-q4_k_m.gguf"),
+        Triple(EmbeddingTier.STANDARD, EmbeddingFocus.MULTILINGUAL, "embeddinggemma-2-Q8_0.gguf"),
+        Triple(EmbeddingTier.TOP, EmbeddingFocus.CHINESE, "Qwen3-Embedding-0.6B.Q4_K_M.gguf"),
+        Triple(EmbeddingTier.TOP, EmbeddingFocus.MULTILINGUAL, "Qwen3-Embedding-0.6B-Q8_0.gguf"),
+    )
+
+    /** The six cells, in rung order; each rung holds its Chinese entry before its multilingual one. */
+    val SLOTS: List<EmbeddingSlot> = SLOT_FILES.mapNotNull { (tier, focus, file) ->
+        ENTRIES.firstOrNull { it.file == file }?.let { EmbeddingSlot(tier, focus, it) }
+    }
+
+    /** The cell a tier and a focus name, or null when the grid has no such cell. */
+    fun forSlot(tier: EmbeddingTier, focus: EmbeddingFocus): EmbeddingSlot? =
+        SLOTS.firstOrNull { it.tier == tier && it.focus == focus }
+
+    /**
+     * Every curated model in the order a picker should offer it: the grid first, rung by rung, and
+     * then anything in [ENTRIES] the grid does not place (the tiny `bge-small-zh-v1.5`) as an
+     * extra. Nothing is hidden - a phone that cannot hold the standard rung can still install it by
+     * hand - the order only says which one is being suggested.
+     */
+    val PICKER_ORDER: List<LlamaCppEmbeddingEntry> =
+        SLOTS.map { it.entry } +
+            ENTRIES.filter { entry -> SLOTS.none { it.entry.file == entry.file } }
+
+    /**
+     * [PICKER_ORDER] as file names, which is the shape [EmbeddingModelRules.pick] wants: the
+     * fallback for an install that has never chosen a model, tried in this order against whatever
+     * is actually on disk. So the rung the user was offered comes first, and a device that already
+     * holds a bigger model still keeps using it.
+     */
+    val curatedOrder: List<String> = PICKER_ORDER.map { it.file }
 }
