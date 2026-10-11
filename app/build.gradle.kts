@@ -58,7 +58,26 @@ android {
     //  · moxw — Moxw Agent. A standalone brand (own applicationId so it can
     //    coexist with pure on one device) carrying the local-vector work.
     //    Its version line is independent (0.x), see cold-memory M21.
-    flavorDimensions += "brand"
+    //
+    // A second dimension, "soc", decides whether the build is *allowed* to fetch an
+    // NPU runtime at all. It exists because NPU acceleration is not a switch that can
+    // be turned on for everyone:
+    //
+    //  · LiteRT reaches a vendor NPU through a "dispatch" library that is specific to
+    //    the silicon vendor, and the vendor's own libraries (Qualcomm's QAIRT
+    //    libQnnHtp*.so, …) sit behind that vendor's licence. We therefore ship *no*
+    //    NPU binaries in the APK; the app fetches them at runtime, on request, on a
+    //    device that actually has that vendor's NPU. SOC_FAMILY is the gate that
+    //    decides which vendor's runtime a given build will ever offer.
+    //  · generic     — offers none. The GPU/CPU build: every chat model, and the
+    //                  EmbeddingGemma 2 embedder on GPU or CPU. Works on any device.
+    //  · snapdragon  — additionally offers the Qualcomm NPU runtime.
+    //  · dimensity   — reserved for MediaTek. Defined so the variant graph exists and
+    //                  the release pipeline can be pointed at it, but not built: we
+    //                  have no MediaTek device to verify on, and Google's
+    //                  litert_npu_runtime_libraries bundle publishes dispatch
+    //                  libraries only for Qualcomm and Google Tensor.
+    flavorDimensions += listOf("brand", "soc")
     productFlavors {
         create("pure") {
             dimension = "brand"
@@ -81,6 +100,19 @@ android {
             buildConfigField("String", "VERSION_NAME", "\"0.1.0\"")
             buildConfigField("String", "VERSION_CODE", "\"1\"")
             buildConfigField("String", "UPDATE_API_URL", "\"\"")
+        }
+
+        create("generic") {
+            dimension = "soc"
+            buildConfigField("String", "SOC_FAMILY", "\"generic\"")
+        }
+        create("snapdragon") {
+            dimension = "soc"
+            buildConfigField("String", "SOC_FAMILY", "\"snapdragon\"")
+        }
+        create("dimensity") {
+            dimension = "soc"
+            buildConfigField("String", "SOC_FAMILY", "\"dimensity\"")
         }
     }
 

@@ -259,7 +259,10 @@ val appModule = module {
 
     // Phase 22A: Local-LLM on-device providers
     single { me.rerere.locallm.LocalRuntimePreferences(get()) }
-    single { me.rerere.locallm.litert.LiteRtRuntime(get()) }
+    // SOC_FAMILY comes from the `soc` flavour dimension: only a build made for a vendor may
+    // ever offer that vendor's NPU runtime (see NpuRuntimePlan). A `generic` build can never
+    // answer "QNN", whatever the device is.
+    single { me.rerere.locallm.litert.LiteRtRuntime(get(), me.rerere.rikkahub.BuildConfig.SOC_FAMILY) }
     single { me.rerere.llamacpp.LlamaCppRuntime() }
 
     single {

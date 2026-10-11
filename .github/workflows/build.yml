@@ -36,18 +36,38 @@ permissions:
 
 jobs:
   assemble:
-    name: assemble ${{ matrix.flavor }} + unit tests
+    name: assemble ${{ matrix.brand }} ${{ matrix.soc }} + unit tests
     runs-on: ubuntu-latest
     timeout-minutes: 150
-    # One job per shipping flavor (pure / moxw); they build in parallel.
+    # One job per shipping variant; they build in parallel.
+    #
+    # `artifact` is deliberately decoupled from the Gradle variant name: the release
+    # pipeline fetches `apk-pure` / `apk-moxw` by name, so introducing the `soc`
+    # dimension must not rename those artifacts. The Gradle task and the output
+    # directory do follow the flavour names (assemblePureGenericRelease,
+    # app/build/outputs/apk/pureGeneric/release/).
+    #
+    # dimensity is intentionally absent: the variant exists in the build graph, but
+    # there is no MediaTek device to verify on, and Google's
+    # litert_npu_runtime_libraries bundle ships dispatch libraries only for Qualcomm
+    # and Google Tensor.
     strategy:
       fail-fast: false
       matrix:
-        flavor: [pure, moxw]
-    # Include the flavor: both matrix jobs share this workflow ref, and a shared
-    # group with cancel-in-progress would let the second job cancel the first.
+        include:
+          - brand: pure
+            soc: generic
+            artifact: pure
+          - brand: moxw
+            soc: generic
+            artifact: moxw
+          - brand: moxw
+            soc: snapdragon
+            artifact: moxw-snapdragon
+    # Include the variant: the matrix jobs share this workflow ref, and a shared
+    # group with cancel-in-progress would let one job cancel another.
     concurrency:
-      group: build-${{ github.ref }}-${{ matrix.flavor }}
+      group: build-${{ github.ref }}-${{ matrix.artifact }}
       cancel-in-progress: true
     # NDK >= r23 reads this and, when ccache is on PATH, routes the C/C++
     # toolchain through it. llama.cpp (a submodule, thousands of translation
@@ -162,15 +182,24 @@ jobs:
       # does not run the library modules' tests, so the provider request-shape
       # tests in :ai never executed in CI. They are plain JVM tests
       # (android.util.Log is stubbed via returnDefaultValues), so this is seconds.
-      - name: Assemble ${{ matrix.flavor }} APK + unit tests
+      - name: Assemble ${{ matrix.brand }} ${{ matrix.soc }} APK + unit tests
+        id: assemble
         env:
           # Fast lane: a push to a non-master branch (feat/**) skips the release
           # lint pass. master pushes and pull requests keep lintVital as the
           # release gate — see skipLintVital in app/build.gradle.kts.
           SKIP_LINT: ${{ github.event_name == 'push' && github.ref != 'refs/heads/master' }}
-          FLAVOR: ${{ matrix.flavor }}
+          BRAND: ${{ matrix.brand }}
+          SOC: ${{ matrix.soc }}
         run: |
-          F="${FLAVOR^}"
+          # Gradle variant name = the flavours in dimension order, first letter of each
+          # upper-cased: pure + generic -> PureGeneric. AGP writes the outputs under the
+          # variant name with its *first* letter lower-cased, so the directory is
+          # app/build/outputs/apk/pureGeneric/release/ and the APKs inside are
+          # app-<brand>-<soc>-<abi>-release-unsigned.apk. Derive it once here rather than
+          # repeating the expression in three places.
+          V="${BRAND^}${SOC^}"
+          echo "apk_dir=app/build/outputs/apk/${V,}/release" >> "$GITHUB_OUTPUT"
           FLAGS=""
           if [ "$SKIP_LINT" = "true" ]; then
             echo "fast lane: -PskipLintVital"
@@ -180,20 +209,24 @@ jobs:
           # embedder's handle lifecycle, the cold-memory rules) that nothing used to run: the
           # module tests are flavour-independent, so they are named explicitly rather than
           # reached through :app.
-          ./gradlew ":app:assemble${F}Release" ":app:test${F}ReleaseUnitTest" :ai:testDebugUnitTest :llama-cpp:testDebugUnitTest $FLAGS --stacktrace
+          ./gradlew ":app:assemble${V}Release" ":app:test${V}ReleaseUnitTest" :ai:testDebugUnitTest :llama-cpp:testDebugUnitTest $FLAGS --stacktrace
 
-      - name: Show ${{ matrix.flavor }} APK sizes
-        run: ls -la app/build/outputs/apk/${{ matrix.flavor }}/release/*.apk || true
+      - name: Show ${{ matrix.brand }} ${{ matrix.soc }} APK sizes
+        run: |
+          ls -la ${{ steps.assemble.outputs.apk_dir }}/*.apk || {
+            echo "::warning::expected output dir not found; dumping every APK produced"
+            find app/build/outputs/apk -name '*.apk' -exec ls -la {} + || true
+          }
 
       - name: Show ccache stats
         if: always()
         run: ccache -s -v || true
 
-      - name: Upload ${{ matrix.flavor }} APK
+      - name: Upload ${{ matrix.artifact }} APK
         uses: actions/upload-artifact@v4
         with:
-          name: apk-${{ matrix.flavor }}
-          path: app/build/outputs/apk/${{ matrix.flavor }}/release/*.apk
+          name: apk-${{ matrix.artifact }}
+          path: ${{ steps.assemble.outputs.apk_dir }}/*.apk
           if-no-files-found: error
           retention-days: 14
 
@@ -201,7 +234,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: unit-test-report-${{ matrix.flavor }}
+          name: unit-test-report-${{ matrix.artifact }}
           path: |
             app/build/reports/tests/
             ai/build/reports/tests/
