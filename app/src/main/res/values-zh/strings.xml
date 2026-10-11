@@ -2582,8 +2582,8 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_page_embedding_facts">%1$d 维 · %2$d token 窗口</string>
   <string name="assistant_page_embedding_facts_vision">%1$d 维 · %2$d token 窗口 · 可读图片</string>
   <string name="assistant_page_embedding_gpu">GPU 加速</string>
-  <string name="assistant_page_embedding_gpu_off">当前跑在 CPU 上。开启后交给 GPU；两者算出的向量并非完全相同，所以索引会重建。</string>
-  <string name="assistant_page_embedding_gpu_on">当前跑在 GPU 上。它的向量与 CPU 有极小差异，所以同一份索引只用一个后端，切换会重建。</string>
+  <string name="assistant_page_embedding_gpu_off">当前跑在 CPU 上。开启后只把文本编码器交给 GPU，视觉塔仍在 CPU；两者算出的向量并非完全相同，所以索引会重建。</string>
+  <string name="assistant_page_embedding_gpu_on">文本已跑在 GPU 上，视觉塔仍在 CPU。两种加速器算出的向量有极小差异，所以切换会重建索引。</string>
   <string name="assistant_page_embedding_window">载入窗口</string>
   <string name="assistant_page_embedding_window_auto">自动（按策展默认）</string>
   <string name="assistant_page_embedding_window_value">%1$d token</string>

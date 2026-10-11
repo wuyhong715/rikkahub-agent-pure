@@ -91,16 +91,21 @@ class RealLitertEmbedNative : LitertEmbedNative {
             EmbeddingEngineConfig(
                 modelPath = modelPath,
                 backend = accelerator,
-                // Vision is pinned to the CPU, and this is now measured rather than reasoned about:
-                // on a Snapdragon 8 Elite (SM8750 / Adreno 830, 2026-10-11) asking for
-                // `visionBackend = Backend.GPU()` makes `EmbeddingEngine.initialize()` fail
-                // outright - `Failed to modify graph with delegate`, from
-                // `embedding_engine_impl.cc:391` - and takes the *whole* engine down with it, text
-                // tower included. Per-processor backends would be finer-grained, but there is no
-                // fallback inside the SDK for a graph a delegate cannot take, so the only two
-                // states available are "both towers on the CPU" and "no embedding at all".
-                // The text tower still follows the switch; see [LitertLmEmbedder.load] for the
-                // downgrade that keeps a bad turn of that switch from costing semantic search.
+                // Vision is pinned to the CPU. Measured, and measured *narrowly*: on a Snapdragon 8
+                // Elite (SM8750 / Adreno 830) asking for `visionBackend = Backend.GPU()` makes
+                // `EmbeddingEngine.initialize()` fail outright - `Failed to modify graph with
+                // delegate`, `embedding_engine_impl.cc:391` - and takes the *whole* engine down
+                // with it, text tower included.
+                //
+                // The text tower on the GPU is fine. With vision back on the CPU the same device
+                // opens the engine, embeds and rebuilds an index on `Backend.GPU()` (verified
+                // 2026-10-11, the day the line above was found). So the failure belongs to the
+                // vision graph, not to the accelerator - and it is not a reason to distrust the GPU
+                // path here in general.
+                //
+                // There is no finer-grained knob to reach for: the SDK builds every graph at once
+                // and has no fallback for one a delegate cannot take, so with `visionBackend` on the
+                // GPU the only two states on offer are "no embedding at all" and this one.
                 visionBackend = Backend.CPU(),
                 cacheDir = cacheDir,
                 // Picks which of the file's input signatures to load -- see the comment on

@@ -148,8 +148,8 @@
   <string name="assistant_page_embedding_facts">%1$d-dim \\u00b7 %2$d-token window</string>
   <string name="assistant_page_embedding_facts_vision">%1$d-dim \\u00b7 %2$d-token window \\u00b7 reads images</string>
   <string name="assistant_page_embedding_gpu">GPU acceleration</string>
-  <string name="assistant_page_embedding_gpu_off">On the CPU. Turning this on hands the model to the GPU; the two do not compute identical vectors, so the index is rebuilt.</string>
-  <string name="assistant_page_embedding_gpu_on">On the GPU. Vectors differ very slightly from the CPU\\u2019s, so this applies to one model at a time and changes rebuild the index.</string>
+  <string name="assistant_page_embedding_gpu_off">On the CPU. Turning this on moves the text encoder to the GPU; the vision tower stays on the CPU, and the index is rebuilt because the two accelerators do not compute identical vectors.</string>
+  <string name="assistant_page_embedding_gpu_on">On the GPU for text; the vision tower runs on the CPU. The two accelerators do not compute identical vectors, so switching rebuilds the index.</string>
   <string name="assistant_page_embedding_window">Input window</string>
   <string name="assistant_page_embedding_window_auto">Automatic (as curated)</string>
   <string name="assistant_page_embedding_window_value">%1$d tokens</string>
