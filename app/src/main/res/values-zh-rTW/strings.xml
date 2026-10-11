@@ -2366,4 +2366,6 @@
   <string name="setting_ssh_page_error_credential_missing">請填寫密碼或私鑰</string>
   <string name="chat_page_continuing">連線中斷，正在續寫回覆（%1$d/%2$d）</string>
   <string name="chat_page_subagents_running">子 agent %1$d 個執行中 · %2$s</string>
+  <string name="assistant_page_tool_surface_mode">漸進式 MCP 工具目錄</string>
+  <string name="assistant_page_tool_surface_mode_desc">用 tool_search / tool_open 一對工具取代每次請求裡的 MCP 工具，因此只送出模型實際開啟的那些 schema。可減少首輪工具 token，但工具列表會在回合間變化，可能損失提示快取命中。本地工具不會被編入目錄。預設關閉。</string>
 </resources>

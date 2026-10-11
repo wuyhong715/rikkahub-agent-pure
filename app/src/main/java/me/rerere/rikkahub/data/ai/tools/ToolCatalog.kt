@@ -21,6 +21,17 @@ internal const val TOOL_CATALOG_MAX_OPEN_PER_CALL = 4
 internal const val TOOL_CATALOG_MAX_ACTIVE_SCHEMAS = 6
 internal const val TOOL_CATALOG_MAX_SUMMARY_CHARS = 180
 
+/**
+ * How tools are surfaced to the model.
+ *
+ * [DIRECT] injects every tool's schema up front; [PROGRESSIVE_CATALOG] injects only the
+ * search/open pair, so the request stays small until the model explicitly opts in.
+ *
+ * The Moxw line always runs the catalogue (see `Brand.isMoxw`) and ignores this value; the pure
+ * line keeps the choice it has always had, which is why the field still exists.
+ */
+enum class ToolSurfaceMode { DIRECT, PROGRESSIVE_CATALOG }
+
 /** Where a catalogued entry comes from; used for scoring and serialized in search hits. */
 enum class ToolCatalogSource { LOCAL, MCP, SKILL }
 
@@ -243,11 +254,29 @@ fun buildToolCatalogTools(
      * fail silently — a request written in Chinese shares no characters with `scrape_web`, and a
      * keyword ranking returns nothing at all for it.
      */
+    /**
+     * pure — the catalogue is matched by keyword, and `tool_search` says so. The Moxw line
+     * searches by meaning and reports an unrankable catalogue instead of guessing at one, so the
+     * wording has to differ; the ranking itself is still supplied by [semanticSearch].
+     *
+     * Declared before [semanticSearch] on purpose: that parameter is a function type, and callers
+     * pass it as a trailing lambda.
+     */
+    lexicalOnly: Boolean = false,
     semanticSearch: suspend (String) -> ToolSearchAnswer,
 ): List<Tool> = listOf(
     Tool(
         name = "tool_search",
-        description = """
+        description = if (lexicalOnly) {
+            """
+            Search the tool catalog by keyword and return matching tool names with short
+            summaries. Use this whenever you are unsure which tools exist. It returns
+            names and summaries ONLY — never schemas or parameters. To actually call a
+            tool, first activate it with tool_open; activation takes effect on your NEXT
+            turn, not the current one.
+            """.trimIndent()
+        } else {
+            """
             Search the tool catalog by meaning and return matching tool names with short
             summaries. Use this whenever you are unsure which tools exist. Describe what you want
             to do in your own words and in any language: the catalog is matched semantically, so a
@@ -259,7 +288,8 @@ fun buildToolCatalogTools(
             If it reports that semantic search is unavailable, the embedding model is missing or
             still warming up. Say so to the user and stop rather than retrying with other words:
             searching again cannot fix it.
-        """.trimIndent(),
+            """.trimIndent()
+        },
         parameters = {
             InputSchema.Obj(
                 properties = buildJsonObject {
@@ -277,16 +307,21 @@ fun buildToolCatalogTools(
             // so a returned name can be handed straight back to `tool_open` whichever branch ran.
             // An `Unavailable` answer is passed to the model verbatim, install instructions and
             // all: the exact-but-blind keyword ranking it replaces is what this product removed.
-            val body = when (val answer = semanticSearch(query)) {
-                is ToolSearchAnswer.Unavailable -> ToolSearchOutcome.unavailable(answer.note)
-                is ToolSearchAnswer.Ranked -> {
-                    val limited = answer.entries.take(TOOL_CATALOG_MAX_SEARCH_RESULTS)
-                    ToolSearchOutcome(
-                        hits = limited.map { e -> ToolSearchHit(e.name, e.summary, e.source) },
-                        total = answer.entries.size,
-                        truncated = answer.entries.size > limited.size,
-                    ).toJson()
-                }
+            // The pure line still keeps that ranking, which is why [lexicalOnly] exists.
+            val answer = semanticSearch(query)
+            val entries = when (answer) {
+                is ToolSearchAnswer.Ranked -> answer.entries
+                is ToolSearchAnswer.Unavailable -> if (lexicalOnly) catalog.matchAll(query) else null
+            }
+            val body = if (entries == null) {
+                ToolSearchOutcome.unavailable((answer as ToolSearchAnswer.Unavailable).note)
+            } else {
+                val limited = entries.take(TOOL_CATALOG_MAX_SEARCH_RESULTS)
+                ToolSearchOutcome(
+                    hits = limited.map { e -> ToolSearchHit(e.name, e.summary, e.source) },
+                    total = entries.size,
+                    truncated = entries.size > limited.size,
+                ).toJson()
             }
             listOf(UIMessagePart.Text(body))
         },

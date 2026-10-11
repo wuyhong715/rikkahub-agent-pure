@@ -2594,6 +2594,8 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_page_tool_index_ready">已嵌入 %1$d / %2$d 个工具条目</string>
   <string name="assistant_page_tool_index_never">尚未建立（下次对话会自动完成）</string>
   <string name="assistant_page_tool_index_off">还没有向量模型（目前按关键词匹配工具）</string>
+  <string name="assistant_page_tool_surface_mode">渐进式 MCP 工具目录</string>
+  <string name="assistant_page_tool_surface_mode_desc">用 tool_search / tool_open 一对工具替换每次请求里的 MCP 工具，因此只发送模型实际打开的那些 schema。可减少首轮工具 token，但工具列表会在回合间变化，可能损失提示缓存命中。本地工具不会被编入目录。默认关闭。</string>
   <string name="assistant_page_tool_surface_no_model">语义工具检索不可用</string>
   <string name="assistant_page_tool_surface_no_model_desc">还没有安装向量模型，本次请求不会附带任何工具——本产品不提供关键词回退。</string>
   <string name="embedding_gate_later">稍后</string>

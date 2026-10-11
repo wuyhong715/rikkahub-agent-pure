@@ -48,6 +48,7 @@ import me.rerere.rikkahub.Brand
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.ai.tools.ToolSurfaceMode
 import me.rerere.rikkahub.data.vector.EmbeddingReadiness
 import me.rerere.rikkahub.subagent.SubAgentDefaults
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
@@ -762,14 +763,40 @@ internal fun AssistantBasicContent(
                 }
             }
             HorizontalDivider()
-            // The tool-surface switch that used to live here is gone: Moxw surfaces tools one way
-            // only, so there is no mode left to choose. What stays is the part that mattered —
-            // saying so when the embedding model the whole arrangement depends on is missing. This
-            // is not a "smaller tool list" warning: an unrankable catalogue yields no tools at all,
-            // and the trip to the one page that can fix it is the difference between a prerequisite
-            // and a dead end.
-            // Moxw only: the pure line has no embedding model, and its tool surface does not
-            // depend on one.
+            // The Moxw line surfaces tools one way only, so there is no mode to choose there.
+            // What it shows instead is the part that matters — saying so when the embedding model
+            // the whole arrangement depends on is missing. That is not a "smaller tool list"
+            // warning: an unrankable catalogue yields no tools at all, and the trip to the one page
+            // that can fix it is the difference between a prerequisite and a dead end. The pure
+            // line keeps the DIRECT / PROGRESSIVE_CATALOG choice it has always had.
+            if (!Brand.isMoxw) {
+                FormItem(
+                    modifier = Modifier.padding(8.dp),
+                    label = {
+                        Text(stringResource(R.string.assistant_page_tool_surface_mode))
+                    },
+                    description = {
+                        Text(stringResource(R.string.assistant_page_tool_surface_mode_desc))
+                    },
+                    tail = {
+                        Switch(
+                            checked = assistant.toolSurfaceMode == ToolSurfaceMode.PROGRESSIVE_CATALOG,
+                            onCheckedChange = { enabled ->
+                                onUpdate(
+                                    assistant.copy(
+                                        toolSurfaceMode = if (enabled) {
+                                            ToolSurfaceMode.PROGRESSIVE_CATALOG
+                                        } else {
+                                            ToolSurfaceMode.DIRECT
+                                        }
+                                    )
+                                )
+                            }
+                        )
+                    }
+                )
+                HorizontalDivider()
+            }
             if (Brand.isMoxw && !embeddingReady) {
                 FormItem(
                     modifier = Modifier.padding(8.dp),
