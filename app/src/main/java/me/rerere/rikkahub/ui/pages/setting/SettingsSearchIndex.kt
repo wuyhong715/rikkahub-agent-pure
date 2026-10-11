@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.ui.pages.setting
 
 import androidx.annotation.StringRes
+import me.rerere.rikkahub.Brand
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 
@@ -83,12 +84,6 @@ fun settingsSearchIndex(developerMode: Boolean, currentAssistantId: String = "")
             descriptionRes = R.string.setting_page_tts_service_desc,
             groupRes = R.string.setting_page_group_models,
             route = Screen.SettingSpeech,
-        ),
-        SettingsSearchEntry(
-            titleRes = R.string.setting_page_embedding_model,
-            descriptionRes = R.string.setting_page_embedding_model_missing,
-            groupRes = R.string.setting_page_group_models,
-            route = Screen.AssistantMemory(id = currentAssistantId),
         ),
         SettingsSearchEntry(
             titleRes = R.string.setting_page_preferences_network,
@@ -239,6 +234,18 @@ fun settingsSearchIndex(developerMode: Boolean, currentAssistantId: String = "")
             route = Screen.SettingAbout,
         ),
     )
+
+    // Moxw only: the pure line has no embedding model, so there is nothing for this row to open.
+    if (Brand.isMoxw) {
+        entries.add(
+            SettingsSearchEntry(
+                titleRes = R.string.setting_page_embedding_model,
+                descriptionRes = R.string.setting_page_embedding_model_missing,
+                groupRes = R.string.setting_page_group_models,
+                route = Screen.AssistantMemory(id = currentAssistantId),
+            )
+        )
+    }
 
     if (developerMode) {
         entries.add(

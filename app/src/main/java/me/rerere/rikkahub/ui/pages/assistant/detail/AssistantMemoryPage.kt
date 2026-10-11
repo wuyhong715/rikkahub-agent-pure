@@ -50,6 +50,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.llamacpp.EmbeddingFocus
 import me.rerere.llamacpp.EmbeddingTier
 import me.rerere.llamacpp.LlamaCppEmbeddingEntry
+import me.rerere.rikkahub.Brand
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.model.Assistant
@@ -425,278 +426,284 @@ private fun AssistantMemoryContent(
             }
         }
 
-        // Moxw P4 — the file library. Sits next to cold memory because it is the same kind of
-        // thing: a directory the user points at, indexed in the background, searched by meaning.
-        // What differs is what it will read, and that is why the directory is picked explicitly
-        // rather than assumed - a workspace can hold anything.
-        CardGroup {
-            item(
-                headlineContent = { Text(stringResource(R.string.assistant_page_library)) },
-                supportingContent = { Text(stringResource(R.string.assistant_page_library_desc)) },
-                trailingContent = {
-                    Switch(
-                        checked = assistant.libraryEnabled,
-                        onCheckedChange = { enabled ->
-                            // Seeded and created exactly like cold memory, for the same reason: a
-                            // picker that can only select an existing folder would leave the
-                            // feature impossible to switch on.
-                            val workspace = libraryWorkspace
-                            val seed = enabled && assistant.libraryDir.isBlank() && workspace != null
-                            val updated = if (seed) {
-                                assistant.copy(
-                                    libraryEnabled = true,
-                                    libraryDir = DEFAULT_LIBRARY_DIR_ABSOLUTE,
-                                )
-                            } else {
-                                assistant.copy(libraryEnabled = enabled)
+        // Moxw only — the pure line has no vector index to show.
+        if (Brand.isMoxw) {
+            // Moxw P4 — the file library. Sits next to cold memory because it is the same kind of
+            // thing: a directory the user points at, indexed in the background, searched by meaning.
+            // What differs is what it will read, and that is why the directory is picked explicitly
+            // rather than assumed - a workspace can hold anything.
+            CardGroup {
+                item(
+                    headlineContent = { Text(stringResource(R.string.assistant_page_library)) },
+                    supportingContent = { Text(stringResource(R.string.assistant_page_library_desc)) },
+                    trailingContent = {
+                        Switch(
+                            checked = assistant.libraryEnabled,
+                            onCheckedChange = { enabled ->
+                                // Seeded and created exactly like cold memory, for the same reason: a
+                                // picker that can only select an existing folder would leave the
+                                // feature impossible to switch on.
+                                val workspace = libraryWorkspace
+                                val seed = enabled && assistant.libraryDir.isBlank() && workspace != null
+                                val updated = if (seed) {
+                                    assistant.copy(
+                                        libraryEnabled = true,
+                                        libraryDir = DEFAULT_LIBRARY_DIR_ABSOLUTE,
+                                    )
+                                } else {
+                                    assistant.copy(libraryEnabled = enabled)
+                                }
+                                onUpdateAssistant(updated)
+                                if (seed && workspace != null) {
+                                    scope.launch {
+                                        runCatching {
+                                            workspaceRepository.createDirectory(
+                                                workspace.id,
+                                                WorkspaceStorageArea.FILES,
+                                                DEFAULT_LIBRARY_DIR_RELATIVE,
+                                            )
+                                        }
+                                    }
+                                }
+                                // Same as cold memory: switching it on is the moment to build, not some
+                                // later conversation.
+                                libraryIndex.requestSync(updated, minIntervalMs = 0L)
                             }
-                            onUpdateAssistant(updated)
-                            if (seed && workspace != null) {
-                                scope.launch {
-                                    runCatching {
-                                        workspaceRepository.createDirectory(
-                                            workspace.id,
-                                            WorkspaceStorageArea.FILES,
-                                            DEFAULT_LIBRARY_DIR_RELATIVE,
+                        )
+                    }
+                )
+                if (assistant.libraryEnabled) {
+                    if (libraryWorkspace == null) {
+                        item(
+                            headlineContent = {
+                                Text(stringResource(R.string.assistant_page_library_no_workspace))
+                            },
+                            supportingContent = {
+                                Text(stringResource(R.string.assistant_page_library_no_workspace_desc))
+                            },
+                        )
+                    } else {
+                        item(
+                            headlineContent = { Text(stringResource(R.string.assistant_page_library_dir)) },
+                            supportingContent = {
+                                Text(
+                                    text = assistant.libraryDir.ifBlank {
+                                        DEFAULT_LIBRARY_DIR_ABSOLUTE
+                                    }
+                                )
+                            },
+                            trailingContent = {
+                                Icon(
+                                    imageVector = HugeIcons.ArrowRight01,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            },
+                            onClick = { showLibraryDirPicker = true },
+                        )
+                        val visionModel = settings.findModelById(settings.ocrModelId)
+                        val visionCanSee =
+                            visionModel?.inputModalities?.contains(Modality.IMAGE) == true
+                        item(
+                            headlineContent = {
+                                Text(stringResource(R.string.assistant_page_library_image_summary))
+                            },
+                            supportingContent = {
+                                val name = visionModel?.displayName?.ifBlank { visionModel.modelId }.orEmpty()
+                                Text(
+                                    when {
+                                        visionModel == null -> stringResource(
+                                            R.string.assistant_page_library_image_summary_no_model
+                                        )
+
+                                        !visionCanSee -> stringResource(
+                                            R.string.assistant_page_library_image_summary_not_vision,
+                                            name,
+                                        )
+
+                                        settings.libraryImageSummary -> stringResource(
+                                            R.string.assistant_page_library_image_summary_on,
+                                            name,
+                                        )
+
+                                        else -> stringResource(
+                                            R.string.assistant_page_library_image_summary_off,
+                                            name,
                                         )
                                     }
-                                }
-                            }
-                            // Same as cold memory: switching it on is the moment to build, not some
-                            // later conversation.
-                            libraryIndex.requestSync(updated, minIntervalMs = 0L)
-                        }
-                    )
-                }
-            )
-            if (assistant.libraryEnabled) {
-                if (libraryWorkspace == null) {
-                    item(
-                        headlineContent = {
-                            Text(stringResource(R.string.assistant_page_library_no_workspace))
-                        },
-                        supportingContent = {
-                            Text(stringResource(R.string.assistant_page_library_no_workspace_desc))
-                        },
-                    )
-                } else {
-                    item(
-                        headlineContent = { Text(stringResource(R.string.assistant_page_library_dir)) },
-                        supportingContent = {
-                            Text(
-                                text = assistant.libraryDir.ifBlank {
-                                    DEFAULT_LIBRARY_DIR_ABSOLUTE
-                                }
-                            )
-                        },
-                        trailingContent = {
-                            Icon(
-                                imageVector = HugeIcons.ArrowRight01,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        },
-                        onClick = { showLibraryDirPicker = true },
-                    )
-                    val visionModel = settings.findModelById(settings.ocrModelId)
-                    val visionCanSee =
-                        visionModel?.inputModalities?.contains(Modality.IMAGE) == true
-                    item(
-                        headlineContent = {
-                            Text(stringResource(R.string.assistant_page_library_image_summary))
-                        },
-                        supportingContent = {
-                            val name = visionModel?.displayName?.ifBlank { visionModel.modelId }.orEmpty()
-                            Text(
-                                when {
-                                    visionModel == null -> stringResource(
-                                        R.string.assistant_page_library_image_summary_no_model
-                                    )
+                                )
+                            },
+                            trailingContent = {
+                                Switch(
+                                    checked = settings.libraryImageSummary && visionCanSee,
+                                    enabled = visionCanSee,
+                                    onCheckedChange = { on ->
+                                        scope.launch {
+                                            settingsStore.update { it.copy(libraryImageSummary = on) }
+                                        }
+                                        // Turned on, the pictures already in the library are worth
+                                        // describing now rather than in five minutes.
+                                        libraryIndex.requestSync(assistant, minIntervalMs = 0L)
+                                    },
+                                )
+                            },
+                        )
+                        item(
+                            headlineContent = { Text(stringResource(R.string.assistant_page_library_index)) },
+                            supportingContent = {
+                                val report = libraryIndexStatus.lastReport
+                                Text(
+                                    when {
+                                        libraryIndexStatus.running -> stringResource(
+                                            R.string.assistant_page_index_running
+                                        )
 
-                                    !visionCanSee -> stringResource(
-                                        R.string.assistant_page_library_image_summary_not_vision,
-                                        name,
-                                    )
+                                        libraryIndexStatus.lastError != null -> stringResource(
+                                            R.string.assistant_page_index_error,
+                                            libraryIndexStatus.lastError.orEmpty(),
+                                        )
 
-                                    settings.libraryImageSummary -> stringResource(
-                                        R.string.assistant_page_library_image_summary_on,
-                                        name,
-                                    )
+                                        report != null -> stringResource(
+                                            R.string.assistant_page_library_index_report,
+                                            report.indexedTotal,
+                                            report.candidates,
+                                            report.deferred,
+                                        )
 
-                                    else -> stringResource(
-                                        R.string.assistant_page_library_image_summary_off,
-                                        name,
-                                    )
-                                }
-                            )
-                        },
-                        trailingContent = {
-                            Switch(
-                                checked = settings.libraryImageSummary && visionCanSee,
-                                enabled = visionCanSee,
-                                onCheckedChange = { on ->
-                                    scope.launch {
-                                        settingsStore.update { it.copy(libraryImageSummary = on) }
+                                        else -> stringResource(R.string.assistant_page_library_index_idle)
                                     }
-                                    // Turned on, the pictures already in the library are worth
-                                    // describing now rather than in five minutes.
-                                    libraryIndex.requestSync(assistant, minIntervalMs = 0L)
-                                },
-                            )
-                        },
-                    )
-                    item(
-                        headlineContent = { Text(stringResource(R.string.assistant_page_library_index)) },
-                        supportingContent = {
-                            val report = libraryIndexStatus.lastReport
-                            Text(
-                                when {
-                                    libraryIndexStatus.running -> stringResource(
-                                        R.string.assistant_page_index_running
-                                    )
-
-                                    libraryIndexStatus.lastError != null -> stringResource(
-                                        R.string.assistant_page_index_error,
-                                        libraryIndexStatus.lastError.orEmpty(),
-                                    )
-
-                                    report != null -> stringResource(
-                                        R.string.assistant_page_library_index_report,
-                                        report.indexedTotal,
-                                        report.candidates,
-                                        report.deferred,
-                                    )
-
-                                    else -> stringResource(R.string.assistant_page_library_index_idle)
+                                )
+                            },
+                            trailingContent = {
+                                TextButton(
+                                    onClick = { libraryIndex.requestSync(assistant, minIntervalMs = 0L) },
+                                    enabled = !libraryIndexStatus.running &&
+                                        assistant.libraryEnabled && libraryWorkspace != null,
+                                ) {
+                                    Text(stringResource(R.string.assistant_page_index_rebuild_action))
                                 }
-                            )
-                        },
-                        trailingContent = {
-                            TextButton(
-                                onClick = { libraryIndex.requestSync(assistant, minIntervalMs = 0L) },
-                                enabled = !libraryIndexStatus.running &&
-                                    assistant.libraryEnabled && libraryWorkspace != null,
-                            ) {
-                                Text(stringResource(R.string.assistant_page_index_rebuild_action))
-                            }
-                        },
-                    )
+                            },
+                        )
+                    }
                 }
+            }
+
+            // P5 — history search. A row of its own rather than a line under the model, because it is
+            // the one index whose absence is not a missing convenience: the keyword search it replaced
+            // needed no model, so with none installed this feature does not exist.
+            CardGroup {
+                item(
+                    headlineContent = { Text(stringResource(R.string.assistant_page_history_index)) },
+                    supportingContent = {
+                        val report = conversationIndexStatus.lastReport
+                        Text(
+                            when {
+                                conversationIndexStatus.running -> stringResource(
+                                    R.string.assistant_page_index_running
+                                )
+
+                                conversationIndexStatus.lastError != null -> stringResource(
+                                    R.string.assistant_page_index_error,
+                                    conversationIndexStatus.lastError.orEmpty(),
+                                )
+
+                                embeddingInstalled.isEmpty() -> stringResource(
+                                    R.string.assistant_page_history_index_no_model
+                                )
+
+                                report != null -> stringResource(
+                                    R.string.assistant_page_history_index_report,
+                                    report.indexedTotal,
+                                    report.read,
+                                    report.deferred,
+                                )
+
+                                else -> stringResource(R.string.assistant_page_history_index_idle)
+                            }
+                        )
+                    },
+                    trailingContent = {
+                        TextButton(
+                            onClick = { conversationIndex.requestSync(minIntervalMs = 0L) },
+                            enabled = !conversationIndexStatus.running,
+                        ) {
+                            Text(stringResource(R.string.assistant_page_index_rebuild_action))
+                        }
+                    },
+                )
             }
         }
 
-        // P5 — history search. A row of its own rather than a line under the model, because it is
-        // the one index whose absence is not a missing convenience: the keyword search it replaced
-        // needed no model, so with none installed this feature does not exist.
-        CardGroup {
-            item(
-                headlineContent = { Text(stringResource(R.string.assistant_page_history_index)) },
-                supportingContent = {
-                    val report = conversationIndexStatus.lastReport
-                    Text(
-                        when {
-                            conversationIndexStatus.running -> stringResource(
-                                R.string.assistant_page_index_running
-                            )
-
-                            conversationIndexStatus.lastError != null -> stringResource(
-                                R.string.assistant_page_index_error,
-                                conversationIndexStatus.lastError.orEmpty(),
-                            )
-
-                            embeddingInstalled.isEmpty() -> stringResource(
-                                R.string.assistant_page_history_index_no_model
-                            )
-
-                            report != null -> stringResource(
-                                R.string.assistant_page_history_index_report,
-                                report.indexedTotal,
-                                report.read,
-                                report.deferred,
-                            )
-
-                            else -> stringResource(R.string.assistant_page_history_index_idle)
+        // Moxw only — the pure line has no vector index to show.
+        if (Brand.isMoxw) {
+            CardGroup {
+                item(
+                    headlineContent = { Text(stringResource(R.string.assistant_page_embedding_model)) },
+                    supportingContent = {
+                        Text(
+                            text = EmbeddingReadiness.label(settings).ifEmpty {
+                                stringResource(R.string.assistant_page_embedding_model_auto)
+                            }
+                        )
+                    },
+                    trailingContent = {
+                        Icon(
+                            imageVector = HugeIcons.ArrowRight01,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    },
+                    onClick = {
+                        embeddingVm.refresh()
+                        showEmbeddingModelPicker = true
+                    },
+                )
+                item(
+                    headlineContent = { Text(stringResource(R.string.assistant_page_index_rebuild)) },
+                    supportingContent = { Text(indexStatusText) },
+                    trailingContent = {
+                        TextButton(
+                            onClick = {
+                                // Zero interval: an explicit rebuild means now, not "unless one ran
+                                // in the last five minutes".
+                                memoryIndex.requestSync(assistant, minIntervalMs = 0L)
+                            },
+                            enabled = !indexStatus.running && assistant.coldMemoryEnabled &&
+                                assistant.workspaceId != null,
+                        ) {
+                            Text(stringResource(R.string.assistant_page_index_rebuild_action))
                         }
-                    )
-                },
-                trailingContent = {
-                    TextButton(
-                        onClick = { conversationIndex.requestSync(minIntervalMs = 0L) },
-                        enabled = !conversationIndexStatus.running,
-                    ) {
-                        Text(stringResource(R.string.assistant_page_index_rebuild_action))
-                    }
-                },
-            )
-        }
-
-        CardGroup {
-            item(
-                headlineContent = { Text(stringResource(R.string.assistant_page_embedding_model)) },
-                supportingContent = {
-                    Text(
-                        text = EmbeddingReadiness.label(settings).ifEmpty {
-                            stringResource(R.string.assistant_page_embedding_model_auto)
+                    },
+                )
+                // The catalogue's own index. There is no longer a mode where it would be beside the
+                // point — every turn is built from it now.
+                item(
+                    headlineContent = { Text(stringResource(R.string.assistant_page_tool_index_title)) },
+                    supportingContent = {
+                        Text(
+                            text = when {
+                                toolIndexStatus.total == 0 ->
+                                    stringResource(R.string.assistant_page_tool_index_never)
+                                !toolIndexStatus.hasVector ->
+                                    stringResource(R.string.assistant_page_tool_index_off)
+                                else -> stringResource(
+                                    R.string.assistant_page_tool_index_ready,
+                                    toolIndexStatus.cached,
+                                    toolIndexStatus.total,
+                                )
+                            },
+                        )
+                    },
+                    trailingContent = {
+                        TextButton(
+                            onClick = { scope.launch { toolVectors.rebuild() } },
+                            enabled = toolIndexStatus.total > 0,
+                        ) {
+                            Text(stringResource(R.string.assistant_page_index_rebuild_action))
                         }
-                    )
-                },
-                trailingContent = {
-                    Icon(
-                        imageVector = HugeIcons.ArrowRight01,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                },
-                onClick = {
-                    embeddingVm.refresh()
-                    showEmbeddingModelPicker = true
-                },
-            )
-            item(
-                headlineContent = { Text(stringResource(R.string.assistant_page_index_rebuild)) },
-                supportingContent = { Text(indexStatusText) },
-                trailingContent = {
-                    TextButton(
-                        onClick = {
-                            // Zero interval: an explicit rebuild means now, not "unless one ran
-                            // in the last five minutes".
-                            memoryIndex.requestSync(assistant, minIntervalMs = 0L)
-                        },
-                        enabled = !indexStatus.running && assistant.coldMemoryEnabled &&
-                            assistant.workspaceId != null,
-                    ) {
-                        Text(stringResource(R.string.assistant_page_index_rebuild_action))
-                    }
-                },
-            )
-            // The catalogue's own index. There is no longer a mode where it would be beside the
-            // point — every turn is built from it now.
-            item(
-                headlineContent = { Text(stringResource(R.string.assistant_page_tool_index_title)) },
-                supportingContent = {
-                    Text(
-                        text = when {
-                            toolIndexStatus.total == 0 ->
-                                stringResource(R.string.assistant_page_tool_index_never)
-                            !toolIndexStatus.hasVector ->
-                                stringResource(R.string.assistant_page_tool_index_off)
-                            else -> stringResource(
-                                R.string.assistant_page_tool_index_ready,
-                                toolIndexStatus.cached,
-                                toolIndexStatus.total,
-                            )
-                        },
-                    )
-                },
-                trailingContent = {
-                    TextButton(
-                        onClick = { scope.launch { toolVectors.rebuild() } },
-                        enabled = toolIndexStatus.total > 0,
-                    ) {
-                        Text(stringResource(R.string.assistant_page_index_rebuild_action))
-                    }
-                },
-            )
+                    },
+                )
+            }
         }
 
         CardGroup {

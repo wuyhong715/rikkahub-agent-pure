@@ -67,6 +67,7 @@ android {
             versionName = "2.5.3-pure.7"
             resValue("string", "app_name", "RikkaHub Agent")
             buildConfigField("String", "BRAND_NAME", "\"RikkaHub\"")
+            buildConfigField("String", "BRAND_ID", "\"pure\"")
             buildConfigField("String", "VERSION_NAME", "\"2.5.3-pure.7\"")
             buildConfigField("String", "VERSION_CODE", "\"203\"")
             buildConfigField("String", "UPDATE_API_URL", "\"\"")
@@ -78,6 +79,7 @@ android {
             versionName = "0.1.0"
             resValue("string", "app_name", "Moxw Agent")
             buildConfigField("String", "BRAND_NAME", "\"Moxw\"")
+            buildConfigField("String", "BRAND_ID", "\"moxw\"")
             buildConfigField("String", "VERSION_NAME", "\"0.1.0\"")
             buildConfigField("String", "VERSION_CODE", "\"1\"")
             buildConfigField("String", "UPDATE_API_URL", "\"\"")

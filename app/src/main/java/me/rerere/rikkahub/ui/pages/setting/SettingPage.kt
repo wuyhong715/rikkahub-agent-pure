@@ -240,26 +240,30 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         supportingContent = { Text(stringResource(R.string.setting_page_tts_service_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_tts_service)) },
                     )
-                    item(
-                        onClick = {
-                            navController.navigate(
-                                Screen.AssistantMemory(id = settings.getCurrentAssistant().id.toString())
-                            )
-                        },
-                        leadingContent = { Icon(HugeIcons.Cpu, null) },
-                        supportingContent = {
-                            Text(
-                                if (embeddingReady) {
-                                    EmbeddingReadiness.label(settings).ifBlank {
-                                        stringResource(R.string.setting_page_embedding_model_ready_auto)
+                    // Moxw only: the pure line has no embedding model to install, and the whole
+                    // retrieval stack this row leads to does not exist there.
+                    if (Brand.isMoxw) {
+                        item(
+                            onClick = {
+                                navController.navigate(
+                                    Screen.AssistantMemory(id = settings.getCurrentAssistant().id.toString())
+                                )
+                            },
+                            leadingContent = { Icon(HugeIcons.Cpu, null) },
+                            supportingContent = {
+                                Text(
+                                    if (embeddingReady) {
+                                        EmbeddingReadiness.label(settings).ifBlank {
+                                            stringResource(R.string.setting_page_embedding_model_ready_auto)
+                                        }
+                                    } else {
+                                        stringResource(R.string.setting_page_embedding_model_missing)
                                     }
-                                } else {
-                                    stringResource(R.string.setting_page_embedding_model_missing)
-                                }
-                            )
-                        },
-                        headlineContent = { Text(stringResource(R.string.setting_page_embedding_model)) },
-                    )
+                                )
+                            },
+                            headlineContent = { Text(stringResource(R.string.setting_page_embedding_model)) },
+                        )
+                    }
                     item(
                         onClick = { navController.navigate(Screen.SettingPreferencesNetwork) },
                         leadingContent = { Icon(HugeIcons.Internet, null) },

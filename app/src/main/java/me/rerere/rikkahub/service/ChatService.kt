@@ -67,6 +67,7 @@ import me.rerere.rikkahub.CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID
 import me.rerere.rikkahub.RouteActivity
 import me.rerere.rikkahub.utils.cancelNotification
 import me.rerere.rikkahub.utils.sendNotification
+import me.rerere.rikkahub.Brand
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.AssistantResolver
 import me.rerere.rikkahub.data.vector.MemoryIndexCoordinator
@@ -881,11 +882,14 @@ class ChatService(
             runCatching {
                 AssistantResolver.byId(settingsStore.settingsFlow.value, conversation.assistantId)
             }.getOrNull()?.let { assistant ->
-                memoryIndex.requestSync(assistant)
-                // P4 — the file library, on the same trigger and the same debounce. A round reads
-                // only what its budget allows, so the first pass over a large library is one
-                // background round rather than a stall, and the next conversation continues it.
-                libraryIndex.requestSync(assistant)
+                // Moxw only: the pure line has no vectors, so there is nothing to keep in sync.
+                if (Brand.isMoxw) {
+                    memoryIndex.requestSync(assistant)
+                    // P4 — the file library, on the same trigger and the same debounce. A round
+                    // reads only what its budget allows, so the first pass over a large library is
+                    // one background round rather than a stall, and the next continues it.
+                    libraryIndex.requestSync(assistant)
+                }
             }
         } else {
             // A send can race this asynchronous initialization for a brand-new conversation.
@@ -2379,7 +2383,10 @@ class ChatService(
             // P5 — the turn that just finished should be searchable by the time the user asks
             // about it. Debounced inside, so a burst of messages costs one round rather than one
             // per message, and it only ever touches this conversation's slice of the index.
-            conversationIndex.requestSyncOf(conversationId)
+            // Moxw only: the pure line searches history by keyword, with no index behind it.
+            if (Brand.isMoxw) {
+                conversationIndex.requestSyncOf(conversationId)
+            }
 
             launchAuxJob(conversationId, AuxJobKind.TITLE) {
                 generateTitle(conversationId, finalConversation)
@@ -2466,15 +2473,18 @@ class ChatService(
 
         // Moxw - semantic search joins the two exact-name tools. Registration does not depend on a
         // model being installed: the tool reports that state itself, which is how the model finds
-        // out to fall back to memory_index rather than to stop looking for its notes.
-        tools += buildMemorySearchTool(
-            dirLabel = if (dir.isEmpty()) {
-                ColdMemoryRules.WORKSPACE_PREFIX
-            } else {
-                "${ColdMemoryRules.WORKSPACE_PREFIX}/$dir"
-            },
-            search = { query, limit -> memoryIndex.search(dir, query, limit) },
-        )
+        // out to fall back to memory_index rather than to stop looking for its notes. The pure line
+        // has no vectors, so it never sees this tool.
+        if (Brand.isMoxw) {
+            tools += buildMemorySearchTool(
+                dirLabel = if (dir.isEmpty()) {
+                    ColdMemoryRules.WORKSPACE_PREFIX
+                } else {
+                    "${ColdMemoryRules.WORKSPACE_PREFIX}/$dir"
+                },
+                search = { query, limit -> memoryIndex.search(dir, query, limit) },
+            )
+        }
         return tools
     }
 
@@ -2491,6 +2501,7 @@ class ChatService(
      * `workspace_*` family: the library keeps working when the rootfs was never installed.
      */
     private suspend fun createLibraryToolsIfConfigured(assistant: Assistant): List<Tool> {
+        if (!Brand.isMoxw) return emptyList()
         val dirLabel = libraryIndex.dirLabelOf(assistant) ?: return emptyList()
         val workspaceId = assistant.workspaceId?.toString() ?: return emptyList()
         if (workspaceRepository.getById(workspaceId) == null) return emptyList()

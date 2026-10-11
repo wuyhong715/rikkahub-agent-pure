@@ -44,6 +44,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.ai.provider.ModelType
+import me.rerere.rikkahub.Brand
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.model.Assistant
@@ -767,7 +768,9 @@ internal fun AssistantBasicContent(
             // is not a "smaller tool list" warning: an unrankable catalogue yields no tools at all,
             // and the trip to the one page that can fix it is the difference between a prerequisite
             // and a dead end.
-            if (!embeddingReady) {
+            // Moxw only: the pure line has no embedding model, and its tool surface does not
+            // depend on one.
+            if (Brand.isMoxw && !embeddingReady) {
                 FormItem(
                     modifier = Modifier.padding(8.dp),
                     label = {
