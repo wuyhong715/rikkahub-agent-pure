@@ -10,6 +10,8 @@ import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.Brand
+import me.rerere.rikkahub.data.db.fts.MessageSearchSort
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.vector.ConversationIndexCoordinator
 import me.rerere.rikkahub.data.vector.ConversationSearchEnvelope
@@ -69,7 +71,14 @@ fun createConversationTools(
     ),
     Tool(
         name = "conversation_search",
-        description = """
+        description = if (!Brand.isMoxw) {
+            """
+            Full-text search across the user's past conversations to recall specific information they mentioned before.
+            Use focused keywords. Run multiple searches with different keywords if needed.
+            Each result includes the conversation title, a snippet with matched keywords wrapped in [brackets], and the date.
+            """.trimIndent()
+        } else {
+            """
             Search the user's past conversations by meaning, and get back the passages that match,
             with the conversation and the date each one came from - including what was said in the
             current conversation a moment ago.
@@ -86,7 +95,8 @@ fun createConversationTools(
 
             If it reports that semantic search is unavailable, no embedding model is installed.
             Say so to the user rather than retrying - there is no keyword fallback any more.
-        """.trimIndent(),
+            """.trimIndent()
+        },
         parameters = {
             InputSchema.Obj(
                 properties = buildJsonObject {
@@ -116,6 +126,24 @@ fun createConversationTools(
             // learn something the maximum already tells it.
             val limit = (params["limit"]?.jsonPrimitive?.intOrNull ?: DEFAULT_SEARCH_LIMIT)
                 .coerceIn(1, MAX_SEARCH_LIMIT)
+            // The pure line searches history with the keyword index it has always used; the
+            // vector index this tool reads on Moxw does not exist there.
+            if (!Brand.isMoxw) {
+                val results = conversationRepo
+                    .searchMessages(query, MessageSearchSort.RELEVANCE, assistantId)
+                    .take(limit)
+                val payload = buildJsonArray {
+                    results.forEach { result ->
+                        add(buildJsonObject {
+                            put("conversation_id", result.conversationId)
+                            put("title", result.title.ifBlank { "Untitled" })
+                            put("snippet", result.snippet)
+                            put("date", result.updateAt.toLocalDate())
+                        })
+                    }
+                }
+                return@Tool listOf(UIMessagePart.Text(JsonInstantPretty.encodeToString(payload)))
+            }
             val response = conversationIndex.search(query, limit)
             val body = if (response.available) {
                 ConversationSearchEnvelope.hits(
