@@ -47,6 +47,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEach
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import me.rerere.llamacpp.EmbeddingFocus
+import me.rerere.llamacpp.EmbeddingTier
+import me.rerere.llamacpp.LlamaCppEmbeddingEntry
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.model.Assistant
@@ -173,6 +176,9 @@ private fun AssistantMemoryContent(
     val toolIndexStatus by toolVectors.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var showEmbeddingModelPicker by remember { mutableStateOf(false) }
+    // Set when a download large enough to matter is about to start on a metered connection: the
+    // dialog it opens is the last chance to say no before the bytes are spent.
+    var pendingDownload by remember { mutableStateOf<LlamaCppEmbeddingEntry?>(null) }
     val embeddingVm: EmbeddingModelViewModel = koinViewModel()
     val embeddingInstalled by embeddingVm.installed.collectAsStateWithLifecycle()
     val embeddingDownload by embeddingVm.download.collectAsStateWithLifecycle()
@@ -900,15 +906,20 @@ private fun AssistantMemoryContent(
                         }
 
                         // The curated models, for a fresh install: pasting a HuggingFace URL into the
-                        // local-model page works, but it asks the user to know one.
-                        val downloadable = embeddingVm.downloadable
-                        if (downloadable.isNotEmpty()) {
+                        // local-model page works, but it asks the user to know one. They are listed
+                        // in grid order - rung by rung, and the model this phone should have first -
+                        // so the list reads as a choice rather than as a catalogue, and each row
+                        // carries the two things that decide it: which rung it is, and whether the
+                        // disk can take it.
+                        val offers = embeddingVm.offers
+                        if (offers.isNotEmpty()) {
                             Text(
                                 text = stringResource(R.string.assistant_page_embedding_suggested),
                                 style = MaterialTheme.typography.labelMedium,
                                 modifier = Modifier.padding(top = 10.dp),
                             )
-                            downloadable.forEach { entry ->
+                            offers.forEach { offer ->
+                                val entry = offer.entry
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -921,6 +932,14 @@ private fun AssistantMemoryContent(
                                                 text = entry.displayName,
                                                 style = MaterialTheme.typography.bodyMedium,
                                             )
+                                            offer.focus?.let { focus ->
+                                                Text(
+                                                    text = laneLabel(focus),
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.secondary,
+                                                    modifier = Modifier.padding(start = 6.dp),
+                                                )
+                                            }
                                             if (entry == embeddingVm.recommended) {
                                                 Text(
                                                     text = stringResource(
@@ -934,21 +953,37 @@ private fun AssistantMemoryContent(
                                         }
                                         Text(
                                             text = stringResource(
-                                                R.string.assistant_page_embedding_size_mb,
+                                                R.string.assistant_page_embedding_size_tier,
+                                                tierLabel(offer.tier),
                                                 (entry.sizeBytes / 1_000_000L).toInt(),
                                                 entry.dim,
                                                 entry.contextLabel,
                                             ),
                                             style = MaterialTheme.typography.bodySmall,
                                         )
+                                        if (!offer.fits) {
+                                            Text(
+                                                text = stringResource(
+                                                    R.string.assistant_page_embedding_no_room
+                                                ),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.error,
+                                            )
+                                        }
                                     }
                                     TextButton(
                                         onClick = {
-                                            embeddingVm.download(entry) {
-                                                memoryIndex.requestSync(assistant, minIntervalMs = 0L)
+                                            if (embeddingVm.onMeteredNetwork &&
+                                                entry.sizeBytes >= LARGE_DOWNLOAD_BYTES
+                                            ) {
+                                                pendingDownload = entry
+                                            } else {
+                                                embeddingVm.download(entry) {
+                                                    memoryIndex.requestSync(assistant, minIntervalMs = 0L)
+                                                }
                                             }
                                         },
-                                        enabled = embeddingDownload == null,
+                                        enabled = embeddingDownload == null && offer.fits,
                                     ) {
                                         Text(stringResource(R.string.assistant_page_embedding_download))
                                     }
@@ -998,6 +1033,42 @@ private fun AssistantMemoryContent(
         )
     }
 
+    // A model is hundreds of megabytes, and this is the one place in the app where a single tap
+    // spends that much of somebody's data plan. Asked only on a metered connection and only above
+    // [LARGE_DOWNLOAD_BYTES]: interrupting a 26 MB download over Wi-Fi is noise, and noise is how
+    // a warning gets dismissed without being read.
+    pendingDownload?.let { entry ->
+        AlertDialog(
+            onDismissRequest = { pendingDownload = null },
+            title = { Text(stringResource(R.string.assistant_page_embedding_metered_title)) },
+            text = {
+                Text(
+                    stringResource(
+                        R.string.assistant_page_embedding_metered_desc,
+                        (entry.sizeBytes / 1_000_000L).toInt(),
+                    )
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pendingDownload = null
+                        embeddingVm.download(entry) {
+                            memoryIndex.requestSync(assistant, minIntervalMs = 0L)
+                        }
+                    }
+                ) {
+                    Text(stringResource(R.string.assistant_page_embedding_download))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDownload = null }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
+
     RikkaConfirmDialog(
         show = pendingDeleteMemory != null,
         title = stringResource(R.string.confirm_delete),
@@ -1017,6 +1088,40 @@ private fun AssistantMemoryContent(
         }
     )
 }
+
+/**
+ * The rung a row belongs to, as the label it shows.
+ *
+ * "Extra" rather than a rung name for a model the grid does not place: it is still curated and
+ * still installable, it is just not what the ladder is recommending.
+ */
+@Composable
+private fun tierLabel(tier: EmbeddingTier?): String = stringResource(
+    when (tier) {
+        EmbeddingTier.LIGHT -> R.string.assistant_page_embedding_tier_light
+        EmbeddingTier.STANDARD -> R.string.assistant_page_embedding_tier_standard
+        EmbeddingTier.TOP -> R.string.assistant_page_embedding_tier_top
+        null -> R.string.assistant_page_embedding_tier_extra
+    }
+)
+
+/** Which corpus the model is tuned for - the one thing that decides between two rows of a rung. */
+@Composable
+private fun laneLabel(focus: EmbeddingFocus): String = stringResource(
+    if (focus == EmbeddingFocus.CHINESE) {
+        R.string.assistant_page_embedding_lane_chinese
+    } else {
+        R.string.assistant_page_embedding_lane_multilingual
+    }
+)
+
+/**
+ * Downloads at or above this are worth confirming on a metered connection.
+ *
+ * 100 MB: under it a download is over before the dialog could be read, over it the user has a
+ * right to know before it starts.
+ */
+private const val LARGE_DOWNLOAD_BYTES = 100_000_000L
 
 @Composable
 private fun EmbeddingChoiceRow(

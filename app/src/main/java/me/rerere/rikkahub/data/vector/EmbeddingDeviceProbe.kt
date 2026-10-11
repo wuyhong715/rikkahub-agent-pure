@@ -2,6 +2,7 @@ package me.rerere.rikkahub.data.vector
 
 import android.app.ActivityManager
 import android.content.Context
+import android.net.ConnectivityManager
 import android.os.StatFs
 import java.util.Locale
 
@@ -45,4 +46,17 @@ object EmbeddingDeviceProbe {
      */
     private fun prefersChinese(): Boolean =
         Locale.getDefault().language.equals("zh", ignoreCase = true)
+
+    /**
+     * Whether the network this phone is on bills per byte.
+     *
+     * Asked once, at the moment a download is about to start, rather than watched: the question is
+     * only ever "should this one be confirmed first", and a stale answer to it costs one dialog.
+     * A device that cannot answer is treated as unmetered, because the alternative - refusing to
+     * download on a phone whose network type is unknown - fails closed on a working connection.
+     */
+    fun isMetered(context: Context): Boolean = runCatching {
+        val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        manager.isActiveNetworkMetered
+    }.getOrDefault(false)
 }
