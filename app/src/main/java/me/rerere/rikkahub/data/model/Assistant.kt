@@ -40,6 +40,14 @@ data class Assistant(
     val customHeaders: List<CustomHeader> = emptyList(),
     val customBodies: List<CustomBody> = emptyList(),
     val mcpServers: Set<Uuid> = emptySet(),
+    // Moxw - redefined: this used to be the set of local-tool GROUPS this assistant had enabled.
+    // It is now the set of GATED groups the user turned on. Every other group is unconditional
+    // (see LocalToolGates), because a tool catalogue that feeds an embedding model does not get
+    // smaller in any way the model notices - the ranking, not the size, decides what a turn sees.
+    // The union happens once, in ToolSurfaceResolver.resolve; this field is only ever read through
+    // LocalToolGates.effective() for surface purposes. A payload from before the redefinition
+    // still decodes: its non-gated entries are simply no longer meaningful, and its gated entries
+    // (none, in practice) would be honoured.
     @Serializable(with = LenientLocalToolListSerializer::class)
     val localTools: List<LocalToolOption> = listOf(LocalToolOption.TimeInfo),
     val enableWebSearch: Boolean = false, // 网络搜索开关(每个助手独立)

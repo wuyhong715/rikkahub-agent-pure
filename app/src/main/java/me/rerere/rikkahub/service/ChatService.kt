@@ -89,6 +89,7 @@ import me.rerere.rikkahub.data.ai.tools.ToolCatalog
 import me.rerere.rikkahub.data.ai.tools.ToolCatalogEntry
 import me.rerere.rikkahub.data.ai.tools.ToolCatalogSource
 import me.rerere.rikkahub.data.ai.tools.ToolRankFusion
+import me.rerere.rikkahub.data.ai.tools.LocalToolGates
 import me.rerere.rikkahub.data.ai.tools.LocalToolPalette
 import me.rerere.rikkahub.data.ai.tools.buildToolCatalogTools
 import me.rerere.rikkahub.data.ai.tools.ChatToolFactory
@@ -1739,13 +1740,13 @@ class ChatService(
             // MCP servers and external web search, so an assistant whose tools are all on-device
             // got no warning at all.
             //
-            // Deliberately once per conversation: Assistant.localTools defaults to time_info, so
-            // nearly every assistant has something to advertise, and an unguarded warning would
-            // fire on every single turn.
+            // Deliberately once per conversation: Moxw has every non-gated local-tool group on
+            // unconditionally (see LocalToolGates), so nearly every assistant has something to
+            // advertise, and an unguarded warning would fire on every single turn.
             if (!model.abilities.contains(ModelAbility.TOOL)) {
                 val advertisesTools = useExternalWebSearch ||
                     mcpManager.getAllAvailableTools().isNotEmpty() ||
-                    assistant.localTools.isNotEmpty()
+                    LocalToolGates.effective(assistant.localTools).isNotEmpty()
                 if (advertisesTools && toolUnavailableWarned.add(conversationId)) {
                     addError(
                         IllegalStateException(context.getString(R.string.tools_warning)),

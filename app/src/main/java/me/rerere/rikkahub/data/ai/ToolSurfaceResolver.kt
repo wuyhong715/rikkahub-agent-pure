@@ -3,6 +3,7 @@ package me.rerere.rikkahub.data.ai
 import me.rerere.ai.core.Tool
 import me.rerere.ai.provider.Modality
 import me.rerere.ai.provider.Model
+import me.rerere.rikkahub.data.ai.tools.LocalToolGates
 import me.rerere.rikkahub.data.ai.tools.LocalTools
 import me.rerere.rikkahub.data.ai.tools.ToolInvocationContext
 import me.rerere.rikkahub.data.ai.tools.ToolInvocationContexts
@@ -49,7 +50,14 @@ object ToolSurfaceResolver {
         assistant: Assistant,
         context: ToolInvocationContext,
     ): List<Tool> = localTools.getTools(
-        options = assistant.localTools,
+        // Moxw - the ONE place the local-tool semantics live, so a call site cannot be wrong
+        // about them. `assistant.localTools` no longer means "the groups this assistant has on";
+        // it means "the gated groups the user turned on". Every other group is unconditional,
+        // which is the whole point of the redefinition: the catalogue feeds the embedding
+        // model, so hiding a group never hid it from the model — it only made the catalogue
+        // smaller, and the ranking, not the size, is what picks. LocalToolGates holds the rule
+        // and explains the criterion for the groups that kept their switch.
+        options = LocalToolGates.effective(assistant.localTools),
         invocationContext = context,
         // P2-02 - the per-tool deny-list rides along with the option list it refines.
         disabledToolNames = assistant.disabledLocalTools,

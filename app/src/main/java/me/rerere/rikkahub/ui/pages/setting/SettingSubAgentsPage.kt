@@ -590,10 +590,22 @@ private fun ToolPaletteRow(
  * adding a tool group to the build fails the build here instead of silently rendering a blank row
  * (the same reason [LocalToolGroups.all] is explicit). The resources are the ones the assistant's
  * own local-tools page uses, so the two screens name a group identically.
+ *
+ * `internal` (not `private`) because the assistant's tool page reuses it for the same reason: one
+ * mapping, so the expert sheet and the assistant page can never disagree about a group's name.
  */
 @Composable
-private fun localToolTitle(option: LocalToolOption): String = stringResource(
-    when (option) {
+internal fun localToolTitle(option: LocalToolOption): String = stringResource(localToolTitleRes(option))
+
+/**
+ * [localToolTitle] without the composition — the `R.string` id itself.
+ *
+ * Split out for callers that resolve many titles at once (the assistant's tool page builds a
+ * group → name map so its search box can match a group by name): reading `R.string` through
+ * `Context.getString` is fine outside a `@Composable`, and doing it there keeps the mapping in
+ * exactly one place instead of a second `when` that could drift.
+ */
+internal fun localToolTitleRes(option: LocalToolOption): Int = when (option) {
         LocalToolOption.JavascriptEngine -> R.string.assistant_page_local_tools_javascript_engine_title
         LocalToolOption.TimeInfo -> R.string.assistant_page_local_tools_time_info_title
         LocalToolOption.Clipboard -> R.string.assistant_page_local_tools_clipboard_title
@@ -655,8 +667,7 @@ private fun localToolTitle(option: LocalToolOption): String = stringResource(
         LocalToolOption.AppLauncher -> R.string.assistant_page_local_tools_app_launcher_title
         LocalToolOption.Termux -> R.string.assistant_page_local_tools_termux_title
         LocalToolOption.KeyboardControl -> R.string.assistant_page_local_tools_keyboard_title
-    },
-)
+}
 
 /**
  * D10b - one titled card per concern in the edit sheet (identity, model, prompt, surface), so a

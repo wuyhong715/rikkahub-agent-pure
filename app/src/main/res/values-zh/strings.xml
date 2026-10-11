@@ -11,11 +11,14 @@
   <string name="asr_button_stop">停止</string>
   <string name="assistant_detail_basic_desc">配置名称、头像、模型和参数</string>
   <string name="assistant_detail_extensions_desc">管理提示词注入、世界书和技能等扩展</string>
-  <string name="assistant_detail_local_tools_desc">启用本地工具（如 JavaScript 引擎）</string>
+  <string name="assistant_detail_local_tools_desc">选择常驻工具（其余工具按需检索）</string>
   <string name="assistant_detail_mcp_desc">为助手配置 MCP 服务器工具</string>
   <string name="assistant_detail_memory_desc">管理助手记忆和最近的聊天引用</string>
   <string name="assistant_detail_prompt_desc">设置系统提示、消息模板和正则规则</string>
   <string name="assistant_detail_request_desc">配置自定义请求头和正文参数</string>
+  <string name="assistant_detail_group_identity">身份与对话</string>
+  <string name="assistant_detail_group_capability">能力与工具</string>
+  <string name="assistant_detail_group_context">上下文与记忆</string>
   <string name="assistant_extensions_page_empty_lorebooks">没有世界书，前往提示词管理创建</string>
   <string name="assistant_extensions_page_empty_mode_injections">没有模式注入，前往提示词管理创建</string>
   <string name="assistant_extensions_page_empty_quick_messages">暂无快捷消息，请在扩展中创建</string>
@@ -2591,6 +2594,14 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_page_local_tools_pin">常驻</string>
   <string name="assistant_page_local_tools_pinned">已常驻</string>
   <string name="assistant_page_local_tools_pin_desc">渐进模式下，工具只在当前请求检索到它时才附带给模型。把你想让它永远可用的工具钉住——例如屏幕自动化那一组。</string>
+  <string name="assistant_page_local_tools_intro">本地工具全部开启，并且全部进入模型检索的向量索引。这里只决定哪些工具「常驻」：常驻工具每一轮都会直接交给模型，不必等检索命中。</string>
+  <string name="assistant_page_local_tools_section_gated">需要先设置</string>
+  <string name="assistant_page_local_tools_gated_hint">这些分组必须依赖外部应用、系统服务、硬件或令牌才能真正工作，所以保留开关；关闭后它们会整个退出工具表。其余本地工具一律开启，普通权限在「设置 → 权限」中授予。</string>
+  <string name="assistant_page_local_tools_section_resident">常驻工具</string>
+  <string name="assistant_page_local_tools_resident_desc">可以整组常驻，也可以展开后逐个常驻。常驻工具每一轮都会附带；其余工具仍由向量检索按需取用。</string>
+  <string name="assistant_page_local_tools_search_hint">搜索工具</string>
+  <string name="assistant_page_local_tools_resident_count">已常驻 %1$d / %2$d</string>
+  <string name="assistant_page_local_tools_no_match">没有匹配的工具。</string>
   <string name="assistant_page_tool_retry">重试偶发的工具失败</string>
   <string name="assistant_page_tool_retry_desc">当只读工具（网页抓取、文件列举、搜索）因一次性网络或超时错误失败时，以较短的指数退避再重试最多两次，然后把失败上报给模型。只有每次调用都是纯读取的工具才会重试——任何会写入、发送或执行命令的操作绝不重试，因此重试永远不会重复产生副作用。默认关闭。</string>
   <!-- Statistics: overview section header -->
