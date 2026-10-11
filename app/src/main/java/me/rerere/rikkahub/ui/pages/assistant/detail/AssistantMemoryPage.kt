@@ -216,14 +216,10 @@ private fun AssistantMemoryContent(
         )
     }
 
-    // What the GPU switch *shows*, which is not always what it stores: an unanswered switch follows
-    // the model (the GPU is where the vision tower gains), so the row has to display the resolved
-    // value - and a user who turns it off is then making a real choice rather than repeating a
-    // default they never saw.
-    val embeddingGpuInEffect = EmbeddingAcceleratorRules.useGpu(
-        explicit = settings.embeddingUseGpu,
-        embedsImages = embeddingReadsImages,
-    )
+    // What the GPU switch *shows*, which is not always what it stores: an unanswered switch reads as
+    // off, and a user who turns it on is making a real choice rather than repeating a default they
+    // never saw.
+    val embeddingGpuInEffect = EmbeddingAcceleratorRules.useGpu(settings.embeddingUseGpu)
     val indexStatusText = when {
         indexStatus.running -> stringResource(R.string.assistant_page_index_running)
         indexStatus.lastError != null ->

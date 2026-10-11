@@ -4,6 +4,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -49,9 +50,14 @@ class LitertLmEmbedderTest {
         private val dim: Int = 768,
         private val failOpen: Throwable? = null,
         private val failEmbed: Throwable? = null,
+        /** The backend whose `open` throws, as the GPU delegate does on real hardware. */
+        private val failOpenOn: LitertEmbedBackend? = null,
     ) : LitertEmbedNative {
         val opened = mutableListOf<String>()
         val sessions = mutableListOf<FakeSession>()
+
+        /** Every backend an open was attempted on, successful or not. */
+        val attempted = mutableListOf<LitertEmbedBackend>()
         var lastSignature: Int? = null
         var lastBackend: LitertEmbedBackend? = null
 
@@ -62,6 +68,10 @@ class LitertLmEmbedderTest {
             cacheDir: String?,
             signature: Int,
         ): LitertEmbedSession {
+            attempted += backend
+            if (backend == failOpenOn) {
+                throw IllegalStateException("Failed to modify graph with delegate")
+            }
             failOpen?.let { throw it }
             opened += modelPath
             lastSignature = signature
@@ -110,6 +120,65 @@ class LitertLmEmbedderTest {
             "gpu",
             gpu.load("/models/a.litertlm", signature = 512, backend = LitertEmbedBackend.GPU)
                 .accelerator,
+        )
+    }
+
+    @Test
+    fun `an accelerator that cannot open the file is retried on the CPU`() = runBlocking {
+        // Not hypothetical: on a Snapdragon 8 Elite the GPU delegate cannot build this model's
+        // graph - `Failed to modify graph with delegate` - and `initialize()` builds every graph at
+        // once, so the whole engine fails. Without the retry a *speed* preference would take
+        // semantic search with it: cold memory, the file library, history and the tool catalogue
+        // are all behind this engine.
+        val native = FakeNative(failOpenOn = LitertEmbedBackend.GPU)
+        val embedder = LitertLmEmbedder(native = native)
+
+        val info = embedder.load(
+            "/models/a.litertlm",
+            signature = 512,
+            backend = LitertEmbedBackend.GPU,
+        )
+
+        assertEquals("cpu", info.accelerator)
+        assertTrue(embedder.isLoaded)
+        assertEquals(
+            listOf(LitertEmbedBackend.GPU, LitertEmbedBackend.CPU),
+            native.attempted,
+        )
+    }
+
+    @Test
+    fun `an accelerator that failed once is not attempted again`() = runBlocking {
+        // The failure costs seconds and would otherwise be paid on every round of indexing, forever.
+        val native = FakeNative(failOpenOn = LitertEmbedBackend.GPU)
+        val embedder = LitertLmEmbedder(native = native)
+
+        embedder.load("/models/a.litertlm", signature = 512, backend = LitertEmbedBackend.GPU)
+        embedder.unload()
+        embedder.load("/models/a.litertlm", signature = 512, backend = LitertEmbedBackend.GPU)
+
+        assertEquals(1, native.attempted.count { it == LitertEmbedBackend.GPU })
+    }
+
+    @Test
+    fun `a CPU open that fails is still a failure`() = runBlocking {
+        // The downgrade is for a *backend* that will not work, not a blanket retry: with nothing
+        // left to fall back to, the error has to reach the caller.
+        val native = FakeNative(failOpen = IllegalStateException("no engine"))
+        val embedder = LitertLmEmbedder(native = native)
+
+        var thrown: Throwable? = null
+        try {
+            embedder.load("/models/a.litertlm", signature = 512, backend = LitertEmbedBackend.GPU)
+        } catch (t: Throwable) {
+            thrown = t
+        }
+
+        assertNotNull(thrown)
+        assertTrue(!embedder.isLoaded)
+        assertEquals(
+            listOf(LitertEmbedBackend.GPU, LitertEmbedBackend.CPU),
+            native.attempted,
         )
     }
 

@@ -91,20 +91,17 @@ class RealLitertEmbedNative : LitertEmbedNative {
             EmbeddingEngineConfig(
                 modelPath = modelPath,
                 backend = accelerator,
-                // Vision follows the text backend, because the vision tower is the half that has
-                // anything to gain: an image costs ~2.1s against ~60ms for a text. Pinning it to
-                // the CPU while the text encoder ran on the GPU would be the wrong half of the
-                // swap. Both towers on the CPU is still one switch away -
-                // `Settings.embeddingUseGpu` off - which is why this follows rather than adding a
-                // knob of its own.
-                visionBackend = when (backend) {
-                    LitertEmbedBackend.GPU -> Backend.GPU()
-                    // NPU falls here rather than following: `visionBackend` accepts any backend,
-                    // but an NPU text tower with an NPU vision tower is a combination nothing has
-                    // run, and the failure mode would be silent. The parts that were measured stay
-                    // where they were measured.
-                    else -> Backend.CPU()
-                },
+                // Vision is pinned to the CPU, and this is now measured rather than reasoned about:
+                // on a Snapdragon 8 Elite (SM8750 / Adreno 830, 2026-10-11) asking for
+                // `visionBackend = Backend.GPU()` makes `EmbeddingEngine.initialize()` fail
+                // outright - `Failed to modify graph with delegate`, from
+                // `embedding_engine_impl.cc:391` - and takes the *whole* engine down with it, text
+                // tower included. Per-processor backends would be finer-grained, but there is no
+                // fallback inside the SDK for a graph a delegate cannot take, so the only two
+                // states available are "both towers on the CPU" and "no embedding at all".
+                // The text tower still follows the switch; see [LitertLmEmbedder.load] for the
+                // downgrade that keeps a bad turn of that switch from costing semantic search.
+                visionBackend = Backend.CPU(),
                 cacheDir = cacheDir,
                 // Picks which of the file's input signatures to load -- see the comment on
                 // [LitertEmbedInfo.signature]. Omitting it makes the engine load the largest one
@@ -159,6 +156,16 @@ class LitertLmEmbedder(
     private var info: LitertEmbedInfo? = null
     private var loadedPath: String? = null
 
+    /**
+     * Accelerators that have already failed to open an engine on this device, lower-case.
+     *
+     * Remembered for the life of the process so that a delegate which cannot take a graph costs one
+     * failed attempt rather than one per index round - the failure takes seconds and would happen
+     * on every sync, forever. Not persisted: whether a graph can be built is a property of this
+     * run's driver and memory, and a stale "it failed once" should not survive a reboot.
+     */
+    private val failedBackends = mutableSetOf<String>()
+
     val isLoaded: Boolean get() = session != null
 
     val loadedFile: String? get() = loadedPath
@@ -167,15 +174,24 @@ class LitertLmEmbedder(
      * Opens [path] on [backend] and returns what it reports about itself.
      *
      * The accelerator is an argument rather than a constructor field because it is decided per load,
-     * by the service that resolved the file: a multimodal model defaults to the GPU (the vision
-     * tower is the half that gains) unless the user has said otherwise, and the setting has to be
-     * read at load time for a change to take effect without a restart. Opening the engine and
-     * reporting its accelerator are therefore one act, and the caller's identity for the vectors
-     * cannot disagree with the engine that produced them.
+     * by the service that resolved the file, and has to be re-read for a settings change to take
+     * effect without a restart. Opening the engine and reporting its accelerator are therefore one
+     * act, and the caller's identity for the vectors cannot disagree with the engine that produced
+     * them.
      *
      * Loading a file that is already open is a no-op for the *same* path and *same* backend, so the
      * service's per-round `ensureLoaded` does not tear the engine down and rebuild it - but a switch
      * that changes the accelerator does rebuild, because the two do not produce the same vectors.
+     *
+     * ## A backend that cannot open the file is not the end of the file
+     *
+     * `EmbeddingEngine.initialize()` builds every graph at once, so one delegate that cannot take
+     * its graph fails the whole engine - which on this hardware is exactly what the GPU does
+     * (`Failed to modify graph with delegate`, measured 2026-10-11). That response is out of all
+     * proportion to the cause: a preference about *speed* would otherwise turn semantic search off
+     * completely, taking cold memory, the file library, history search and the tool catalogue with
+     * it. So a failed non-CPU open is retried once on the CPU and the engine that actually opened is
+     * what gets reported - and remembered, so the next round does not pay for the same failure.
      */
     suspend fun load(
         path: String,
@@ -186,6 +202,41 @@ class LitertLmEmbedder(
 
         unloadLocked()
 
+        val preferred = if (backend.name.lowercase() in failedBackends) {
+            LitertEmbedBackend.CPU
+        } else {
+            backend
+        }
+        val opened = try {
+            openAndMeasure(path, signature, preferred)
+        } catch (t: Throwable) {
+            if (preferred == LitertEmbedBackend.CPU) throw t
+            failedBackends += preferred.name.lowercase()
+            openAndMeasure(path, signature, LitertEmbedBackend.CPU)
+        }
+
+        session = opened.session
+        loadedPath = path
+        LitertEmbedInfo(
+            dim = opened.dim,
+            signature = signature,
+            accelerator = opened.backend.name.lowercase(),
+        ).also { info = it }
+    }
+
+    /**
+     * Opens the engine and proves it can embed, or throws.
+     *
+     * The width is *measured* rather than declared: a `.litertlm` does not expose one before it
+     * runs, and the service refuses a vector whose width does not match what it recorded. That
+     * probe doubles as the check that the file works on this backend at all - a session that cannot
+     * embed is not published, so the next call retries instead of failing forever.
+     */
+    private suspend fun openAndMeasure(
+        path: String,
+        signature: Int,
+        backend: LitertEmbedBackend,
+    ): Opened {
         val opened = native.open(
             modelPath = path,
             backend = backend,
@@ -193,9 +244,6 @@ class LitertLmEmbedder(
             cacheDir = cacheDir(),
             signature = signature,
         )
-
-        // Measure the width before publishing the session: a session that cannot embed is not
-        // loaded, and leaving it in the field would make the next call fail instead of retrying.
         val measured = try {
             opened.embed(listOf(" ")).firstOrNull()
                 ?: throw IllegalStateException("the embedding engine returned nothing")
@@ -203,15 +251,15 @@ class LitertLmEmbedder(
             runCatching { opened.close() }
             throw t
         }
-
-        session = opened
-        loadedPath = path
-        LitertEmbedInfo(
-            dim = measured.size,
-            signature = signature,
-            accelerator = backend.name.lowercase(),
-        ).also { info = it }
+        return Opened(opened, measured.size, backend)
     }
+
+    /** One successful open: the session, the width it measured, and the backend that did it. */
+    private data class Opened(
+        val session: LitertEmbedSession,
+        val dim: Int,
+        val backend: LitertEmbedBackend,
+    )
 
     /**
      * Embeds one text, L2-normalised.

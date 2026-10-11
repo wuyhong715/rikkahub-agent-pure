@@ -1,43 +1,33 @@
 package me.rerere.rikkahub.data.vector
 
-import me.rerere.locallm.litert.LitertEmbeddingCatalog
-
 /**
- * Which accelerator a local embedding model should run on when the user has not said.
+ * Which accelerator a local embedding model runs on when the user has not said.
  *
- * The default is deliberately not a constant. The two accelerators do not compute the same function
- * (cosine 0.9997 on the same sentence), so asking for a rebuild is the cost of switching, and only
- * one of the two has anything to gain from it: the text encoder measures within noise on this
- * hardware (~57 ms on the CPU against ~63 ms on the GPU), while an image costs ~2.1 s because of the
- * vision tower. A model that embeds images is therefore the case worth defaulting to the GPU, and a
- * text-only one is the case where the GPU buys nothing and costs a rebuild.
+ * The CPU, and this is a measurement rather than a preference. On a Snapdragon 8 Elite (SM8750 /
+ * Adreno 830) the LiteRT GPU backend cannot build this model's graph at all: `initialize()` fails
+ * with `Failed to modify graph with delegate`, the engine never comes up, and what the user loses is
+ * not a faster index but *any* index - cold memory, the file library, history search and the tool
+ * catalogue all sit behind it (measured 2026-10-11, on a release build, from `logcat`).
  *
- * Pure, so the whole policy fits in a unit test - which matters more than usual here, because the
- * alternative is discovering the default on a device that has already indexed something.
+ * So "not chosen" cannot mean "the faster one", and it cannot mean "ask the device" either: the SDK
+ * offers no way to find out without opening an engine, and the first thing a user would see for the
+ * trouble is everything they came for being unavailable. The switch stays, and
+ * [me.rerere.locallm.litert.LitertLmEmbedder.load] keeps a bad turn of it from costing the feature -
+ * a non-CPU open that fails is retried on the CPU - but this is what happens when nobody has turned
+ * it.
+ *
+ * Nothing is given up by it. For text the two are within noise here (~57 ms on the CPU against
+ * ~63 ms on the GPU), and the vision tower - the one part that would have gained - is pinned to the
+ * CPU for exactly the same reason, because `visionBackend` is built into the same graph.
  */
 object EmbeddingAcceleratorRules {
 
     /**
-     * Whether to use the GPU, given the user's preference and what the model does.
+     * Whether to use the GPU, given what the user chose.
      *
-     * [explicit] is tri-state on purpose: `null` means "not chosen yet" and follows [embedsImages],
-     * while a boolean is a decision the user made and is never second-guessed. That is what keeps a
-     * default from being a trap - the switch is a real switch, and a user who has answered it once
-     * keeps their answer even when the model changes.
+     * `null` is "not chosen", and the answer is no. A boolean is a decision, and is never
+     * second-guessed: a user who turns it on gets the GPU attempt, and the retry in the loader is
+     * what stands between that attempt failing and semantic search being gone.
      */
-    fun useGpu(explicit: Boolean?, embedsImages: Boolean): Boolean = explicit ?: embedsImages
-
-    /**
-     * Whether a selected file embeds images as images, for the default above.
-     *
-     * Only the curated `.litertlm` entries know this - a GGUF here is text-only, an uncurated
-     * `.litertlm` is refused at load time, and a cloud model's pictures are its provider's business.
-     * So an unknown file is `false`, which lands on the CPU: the safe direction, because it costs
-     * nothing a user can notice, while defaulting an unknown model to the GPU would spend a rebuild
-     * on a model that may not even load on it.
-     */
-    fun selectedModelEmbedsImages(fileName: String?): Boolean {
-        val name = fileName?.takeIf { it.isNotBlank() } ?: return false
-        return LitertEmbeddingCatalog.entryFor(name)?.vision == true
-    }
+    fun useGpu(explicit: Boolean?): Boolean = explicit == true
 }

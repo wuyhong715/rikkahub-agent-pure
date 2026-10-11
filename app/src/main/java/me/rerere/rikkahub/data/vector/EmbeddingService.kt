@@ -73,9 +73,8 @@ class EmbeddingService(
     /**
      * The user's accelerator preference for a `.litertlm`, or null when they have not expressed one.
      *
-     * Null rather than a boolean because the default is not a constant: a model that embeds images
-     * defaults to the GPU - the vision tower is the half that gains - while a text-only one defaults
-     * to the CPU. See [EmbeddingAcceleratorRules].
+     * Null rather than a boolean so "not chosen" survives a restart: the default is the CPU, and a
+     * user who has answered keeps their answer. See [EmbeddingAcceleratorRules].
      */
     private val configuredGpu: suspend () -> Boolean? = { null },
     /**
@@ -320,9 +319,10 @@ class EmbeddingService(
         val signature = configuredSignature()
             ?.takeIf { it in LitertEmbeddingCatalog.SIGNATURES }
             ?: entry.signature
-        // GPU by default for a model that embeds images - the vision tower is the half that gains -
-        // and either way an explicit choice from the user wins over that default.
-        val accelerator = if (EmbeddingAcceleratorRules.useGpu(configuredGpu(), entry.vision)) {
+        // CPU unless the user asked for the GPU. The loader downgrades even that if the engine will
+        // not open on it, so the accelerator recorded here describes what ran, not what was asked
+        // for - see EmbeddingAcceleratorRules and LitertLmEmbedder.load.
+        val accelerator = if (EmbeddingAcceleratorRules.useGpu(configuredGpu())) {
             LitertEmbedBackend.GPU
         } else {
             LitertEmbedBackend.CPU
