@@ -589,6 +589,20 @@ class RikkaHubApp : Application() {
     }
 }
 
+/**
+ * The application-wide scope.
+ *
+ * **Its dispatcher is `Dispatchers.Main`**, which is why every call site in this file writes
+ * `get<AppScope>().launch(Dispatchers.IO)` explicitly. Anything launched here that can block --
+ * a directory walk, a file read, the embedding model -- has to name its own dispatcher; a bare
+ * `scope.launch {}` is a main-thread stall.
+ *
+ * That is not hypothetical. The four vector-index coordinators (memory, library, history, tool
+ * catalogue) are handed this scope from `DataSourceModule`, and their `scope.launch {}` ran their
+ * entire sync on the main thread until 2026-10-11 (see `EmbeddingService.onWorker`): opening a
+ * conversation embedded the cold-memory directory inline and the platform killed `RouteActivity`
+ * with "Waited 5000ms for MotionEvent".
+ */
 class AppScope : CoroutineScope by CoroutineScope(
     SupervisorJob()
         + Dispatchers.Main
