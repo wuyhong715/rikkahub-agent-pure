@@ -4,6 +4,8 @@ import java.io.File
 import me.rerere.locallm.LocalRuntime
 import me.rerere.locallm.ModelInstall
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -53,15 +55,61 @@ class EmbeddingModelFilesTest {
     }
 
     @Test
-    fun `only gguf files count, and the list is sorted`() {
+    fun `only model files count, and the list is sorted`() {
         val base = base()
         val dir = EmbeddingModelFiles.dir(base)
         File(dir, "b-model.gguf").writeText("x")
         File(dir, "a-model.gguf").writeText("x")
+        File(dir, "c-model.litertlm").writeText("x")
         File(dir, "notes.txt").writeText("x")
         File(dir, "subdir").mkdirs()
 
-        assertEquals(listOf("a-model.gguf", "b-model.gguf"), EmbeddingModelFiles.installedFiles(base))
+        assertEquals(
+            listOf("a-model.gguf", "b-model.gguf", "c-model.litertlm"),
+            EmbeddingModelFiles.installedFiles(base),
+        )
+    }
+
+    @Test
+    fun `a litertlm lives in its own directory and is found there`() {
+        val base = base()
+        val written = ModelInstall.targetFile(
+            base,
+            LocalRuntime.LiteRT,
+            "embeddinggemma-2-text-vision-440m.litertlm",
+        )
+        written.parentFile?.mkdirs()
+        written.writeText("not really a litertlm, but a file")
+
+        // The two runtimes must not share a directory: a GGUF and a .litertlm are looked up by
+        // name across both, and a download writing one into the other's directory is the kind of
+        // thing that only shows up as "the model I installed is not there".
+        assertNotEquals(EmbeddingModelFiles.dir(base), EmbeddingModelFiles.litertDir(base))
+        assertEquals(written.parentFile, EmbeddingModelFiles.litertDir(base))
+        assertEquals(
+            listOf("embeddinggemma-2-text-vision-440m.litertlm"),
+            EmbeddingModelFiles.installedFiles(base),
+        )
+        assertEquals(
+            written,
+            EmbeddingModelFiles.fileFor(base, "embeddinggemma-2-text-vision-440m.litertlm"),
+        )
+    }
+
+    @Test
+    fun `both runtimes are listed together, and fileFor finds either`() {
+        val base = base()
+        val gguf = ModelInstall.targetFile(base, LocalRuntime.LlamaCpp, "a.gguf")
+        gguf.parentFile?.mkdirs()
+        gguf.writeText("x")
+        val litert = ModelInstall.targetFile(base, LocalRuntime.LiteRT, "b.litertlm")
+        litert.parentFile?.mkdirs()
+        litert.writeText("x")
+
+        assertEquals(listOf("a.gguf", "b.litertlm"), EmbeddingModelFiles.installedFiles(base))
+        assertEquals(gguf, EmbeddingModelFiles.fileFor(base, "a.gguf"))
+        assertEquals(litert, EmbeddingModelFiles.fileFor(base, "b.litertlm"))
+        assertNull(EmbeddingModelFiles.fileFor(base, "missing.gguf"))
     }
 
     @Test

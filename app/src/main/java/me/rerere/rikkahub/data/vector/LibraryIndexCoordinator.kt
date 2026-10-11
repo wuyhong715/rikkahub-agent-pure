@@ -55,6 +55,14 @@ class LibraryIndexCoordinator(
      */
     private val visionSummary: suspend (path: String, sizeBytes: Long, file: File) -> String? =
         { _, _, _ -> null },
+    /**
+     * Whether the library may hand an image to the embedding model itself.
+     *
+     * Asked per round rather than captured, so turning the switch off takes effect on the next
+     * sync instead of the next launch. Defaults to true, which is what a switch that is on by
+     * default has to mean for the tests and for any caller that predates it.
+     */
+    private val nativeImagesEnabled: () -> Boolean = { true },
 ) {
 
     /** What the settings screen shows, and what a log line is written from. */
@@ -192,8 +200,9 @@ class LibraryIndexCoordinator(
 
             val docs = mutableListOf<WorkspaceLibrarySource.Doc>()
             var failed = 0
+            val nativeImages = NativeImageBudget(WorkspaceLibraryRules.MAX_NATIVE_IMAGES_PER_ROUND)
             for (candidate in round.take) {
-                val doc = readDoc(workspaceId, candidate)
+                val doc = readDoc(workspaceId, candidate, nativeImages)
                 if (doc == null) {
                     failed++
                 } else {
@@ -316,11 +325,56 @@ class LibraryIndexCoordinator(
      * recognition and are indexed as the words they contain - see [ImageTextExtractor]. The cap is
      * applied after extraction, because that is where the cost is.
      */
+    /**
+     * How many images this round may hand to the vision encoder.
+     *
+     * A tiny mutable counter rather than a static limit, because the number that matters is how
+     * many *embeddings* a round performs, and only the walk knows how many images it is about to
+     * offer. See [WorkspaceLibraryRules.MAX_NATIVE_IMAGES_PER_ROUND] for why it is so much smaller
+     * than the recognition cap.
+     */
+    private class NativeImageBudget(private var left: Int) {
+        fun take(): Boolean = if (left > 0) {
+            left--
+            true
+        } else {
+            false
+        }
+    }
+
+    /**
+     * The model's own vector for [file], or null when it cannot produce one.
+     *
+     * Null covers three situations on purpose - the model in effect cannot see, this round has
+     * spent its image budget, or the engine failed - because the caller does the same thing in all
+     * three: fall back to what recognition and description can make of the picture. Failing to
+     * embed one image must never fail the file, so this logs and answers null rather than throwing.
+     */
+    private suspend fun nativeImageVector(
+        file: File,
+        budget: NativeImageBudget,
+    ): FloatArray? {
+        if (!nativeImagesEnabled()) return null
+        if (!embeddings.canEmbedImages()) return null
+        if (!budget.take()) return null
+        return try {
+            val bytes = withContext(Dispatchers.IO) { file.readBytes() }
+            embeddings.embedImage(bytes)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.d(TAG, "cannot embed the image in '${file.name}': ${e.message}")
+            null
+        }
+    }
+
     private suspend fun readDoc(
         workspaceId: String,
         candidate: WorkspaceLibraryRules.Candidate,
+        nativeImages: NativeImageBudget,
     ): WorkspaceLibrarySource.Doc? {
         val relative = candidate.path.removePrefix("${ColdMemoryRules.WORKSPACE_PREFIX}/")
+        var imageVector: FloatArray? = null
         return try {
             val text = when (candidate.kind) {
                 LibraryFileKind.DOCUMENT -> {
@@ -340,14 +394,26 @@ class LibraryIndexCoordinator(
                         WorkspaceStorageArea.FILES,
                         relative,
                     )
-                    val recognised = withContext(Dispatchers.IO) { imageText.extract(file) }
-                    // The second opinion, when the user turned it on: what the picture *is*, which
-                    // is what a search for it usually has in mind and what recognition alone cannot
-                    // produce. Both halves are indexed as one passage, and when neither produced
-                    // anything the file's own name is - an image the index never records is one the
-                    // next round reads first, and now that it can be described, uploads first.
-                    val described = visionSummary(candidate.path, candidate.sizeBytes, file)
-                    ImageSummaryRules.compose(recognised, described, candidate.name)
+                    // The model's own reading of the picture first, when it has one. Recognition
+                    // and description both exist to turn an image into words a text-only embedder
+                    // can take; running them under a model that can see would pay twice for an
+                    // answer the vector does not use, and would cap what the image is searched *by*
+                    // at whatever the reader happened to notice.
+                    val native = nativeImageVector(file, nativeImages)
+                    if (native != null) {
+                        imageVector = native
+                        WorkspaceLibraryRules.placeholderForImage(candidate.name)
+                    } else {
+                        val recognised = withContext(Dispatchers.IO) { imageText.extract(file) }
+                        // The second opinion, when the user turned it on: what the picture *is*,
+                        // which is what a search for it usually has in mind and what recognition
+                        // alone cannot produce. Both halves are indexed as one passage, and when
+                        // neither produced anything the file's own name is - an image the index
+                        // never records is one the next round reads first, and now that it can be
+                        // described, uploads first.
+                        val described = visionSummary(candidate.path, candidate.sizeBytes, file)
+                        ImageSummaryRules.compose(recognised, described, candidate.name)
+                    }
                 }
 
                 else -> workspaceRepository.readText(workspaceId, relative)
@@ -358,6 +424,7 @@ class LibraryIndexCoordinator(
                 path = candidate.path,
                 text = capped,
                 chunkMode = WorkspaceLibraryRules.chunkModeOf(candidate.kind, candidate.name),
+                vector = imageVector,
             )
         } catch (e: CancellationException) {
             throw e

@@ -69,6 +69,18 @@ object WorkspaceLibraryRules {
     const val ESTIMATED_CHARS_PER_IMAGE = 1_200
 
     /**
+     * How many images one round may hand to the *vision* encoder.
+     *
+     * Two orders of magnitude below [MAX_IMAGES_PER_ROUND], and for a different reason: recognising
+     * text in a picture is on-device and cheap, while embedding the picture itself runs the vision
+     * tower - measured at ~2.1s per image against ~60ms for a text on a Snapdragon 8 Elite. A round
+     * is a background job on a phone, so this cap is what keeps the first pass over a folder of
+     * photographs from turning into a stove. A deferred image keeps its place like any other file,
+     * so a large library still converges - just over more rounds.
+     */
+    const val MAX_NATIVE_IMAGES_PER_ROUND = 4
+
+    /**
      * How many images one round may recognise.
      *
      * Recognition costs on the order of a tenth of a second per image, where a text file costs

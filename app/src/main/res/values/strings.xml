@@ -127,6 +127,7 @@
   <string name="assistant_page_embedding_tier_extra">Extra</string>
   <string name="assistant_page_embedding_lane_chinese">Chinese</string>
   <string name="assistant_page_embedding_lane_multilingual">Multilingual</string>
+  <string name="assistant_page_embedding_lane_multimodal">Reads images</string>
   <string name="assistant_page_embedding_no_room">Not enough free space on this phone</string>
   <string name="assistant_page_embedding_metered_title">Download over mobile data?</string>
   <string name="assistant_page_embedding_metered_desc">This model is %1$d MB and you are not on Wi-Fi.</string>
@@ -142,6 +143,19 @@
   <string name="assistant_page_library">File library</string>
   <string name="assistant_page_library_desc">Search a directory inside this workspace by meaning: code, notes, documents (PDF, Word, PowerPoint, EPUB) and images (screenshots and photos, read by on-device text recognition). It is indexed in the background and the model gets a library_search tool that reads their contents, not just their names.</string>
   <string name="assistant_page_library_image_summary">Describe images with a model</string>
+  <string name="assistant_page_embedding_native_images">Index images with the model itself</string>
+  <string name="assistant_page_embedding_litert_size">%1$d MB \\u00b7 %2$d-dim \\u00b7 %3$d-token window \\u00b7 reads images</string>
+  <string name="assistant_page_embedding_facts">%1$d-dim \\u00b7 %2$d-token window</string>
+  <string name="assistant_page_embedding_facts_vision">%1$d-dim \\u00b7 %2$d-token window \\u00b7 reads images</string>
+  <string name="assistant_page_embedding_gpu">GPU acceleration</string>
+  <string name="assistant_page_embedding_gpu_off">On the CPU. Turning this on hands the model to the GPU; the two do not compute identical vectors, so the index is rebuilt.</string>
+  <string name="assistant_page_embedding_gpu_on">On the GPU. Vectors differ very slightly from the CPU\\u2019s, so this applies to one model at a time and changes rebuild the index.</string>
+  <string name="assistant_page_embedding_window">Input window</string>
+  <string name="assistant_page_embedding_window_auto">Automatic (as curated)</string>
+  <string name="assistant_page_embedding_window_value">%1$d tokens</string>
+  <string name="assistant_page_library_image_summary_not_needed">Not needed: the embedding model reads images itself, so a description could only add a worse answer beside a better one.</string>
+  <string name="assistant_page_embedding_native_images_desc">An image is embedded as an image, so it is found by what it shows \\u2014 no text recognition and no description in between. Around two seconds per image, spread over background rounds.</string>
+  <string name="assistant_page_embedding_native_images_not_vision">The embedding model in use cannot see images \\u2014 install EmbeddingGemma 2 440M (text + vision) to turn this on.</string>
   <string name="assistant_page_library_image_summary_on">Images in this library are sent to %1$s to be described.</string>
   <string name="assistant_page_library_image_summary_off">Off. Turning this on sends each image of this library to %1$s once, so that it can be found by what it shows.</string>
   <string name="assistant_page_library_image_summary_no_model">Choose a vision model first \u2014 Settings \u2192 Models \u2192 OCR model.</string>

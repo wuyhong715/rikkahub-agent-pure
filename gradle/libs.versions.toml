@@ -76,14 +76,21 @@ cronUtils = "9.2.1"
 # instead (see ShizukuManager.kt).
 shizuku = "13.1.5"
 genaiPrompt = "1.0.0-beta2"
-# Pinned below 0.14.0 deliberately. 0.14.0 drops libLiteRtClGlAccelerator.so and moves
-# the GPU backend from OpenCL/GLES to Dawn/WebGPU-on-Vulkan, which Adreno 6xx rejects:
-# every CreateComputePipelines call returns VK_ERROR_UNKNOWN, the delegate keeps
-# submitting the resulting invalid command buffers, and the native execution thread
-# SIGSEGVs. That is unrecoverable from Kotlin, so the accelerator fallback cannot catch
-# it. 0.13.1 has an identical public API (same classes, same tool-calling surface,
-# getTokenCount/getBenchmarkInfo/cancelProcess all present) and a working GPU path.
-litertlm = "0.13.1"
+# 0.17.1: the first line that carries `EmbeddingEngine` (the on-device embedding API this app now
+# needs) while KEEPING `Capabilities`, which `LiteRtRuntime` imports -- 0.18.0 deletes that class
+# and would force a migration we do not otherwise need. Verified with `javap` against the published
+# AARs: 0.13.1-0.16.1 have no EmbeddingEngine; 0.17.0/0.17.1 have both; 0.18.0 has EmbeddingEngine
+# but not Capabilities.
+#
+# The old note here claimed 0.14.0 "moves the GPU backend from OpenCL/GLES to Dawn/WebGPU-on-Vulkan".
+# That was wrong: in LiteRT-LM's source WebGPU is an opt-in build (`--config=android_webgpu`,
+# `-DLITERT_USE_WEBGPU_ACCELERATOR`), and `strings` on the Android .so shows OpenCL is still there
+# and still the default. The observation that briefly replaced it - "this device's Adreno 830 spins
+# at 100% CPU on the GPU path" - is wrong as well: the GPU backend has since run the embedding model
+# on this very device (SM8750 / Adreno 830, 2026-10-11) with no problem at all. GPU here is an
+# ordinary user-facing switch (`Settings.embeddingUseGpu`), not a guarded experiment. What remains
+# true is only that the 0.14.0 changelog claim was wrong, so the reason to stay below 0.14 is gone.
+litertlm = "0.17.1"
 snakeyaml = "2.6"
 # Vico — Compose-native charts, used by the statistics page's daily usage chart.
 vico = "3.3.1"

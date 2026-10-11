@@ -2561,6 +2561,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_page_embedding_tier_extra">更多</string>
   <string name="assistant_page_embedding_lane_chinese">中文</string>
   <string name="assistant_page_embedding_lane_multilingual">多语言</string>
+  <string name="assistant_page_embedding_lane_multimodal">会看图</string>
   <string name="assistant_page_embedding_no_room">本机可用空间不足</string>
   <string name="assistant_page_embedding_metered_title">要用移动网络下载吗？</string>
   <string name="assistant_page_embedding_metered_desc">该模型 %1$d MB，当前不在 Wi-Fi 下。</string>
@@ -2576,6 +2577,19 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_page_library">文件库</string>
   <string name="assistant_page_library_desc">对工作区里的某个目录做语义检索：代码、笔记、文档（PDF、Word、PPT、EPUB）和图片（截图、带文字的照片，由端侧文字识别读出）。后台建立索引，模型会得到一个 library_search 工具，按内容而不是按文件名去找。</string>
   <string name="assistant_page_library_image_summary">用视觉模型描述图片</string>
+  <string name="assistant_page_embedding_native_images">用模型本身索引图片</string>
+  <string name="assistant_page_embedding_litert_size">%1$d MB · %2$d 维 · %3$d token 窗口 · 可读图片</string>
+  <string name="assistant_page_embedding_facts">%1$d 维 · %2$d token 窗口</string>
+  <string name="assistant_page_embedding_facts_vision">%1$d 维 · %2$d token 窗口 · 可读图片</string>
+  <string name="assistant_page_embedding_gpu">GPU 加速</string>
+  <string name="assistant_page_embedding_gpu_off">当前跑在 CPU 上。开启后交给 GPU；两者算出的向量并非完全相同，所以索引会重建。</string>
+  <string name="assistant_page_embedding_gpu_on">当前跑在 GPU 上。它的向量与 CPU 有极小差异，所以同一份索引只用一个后端，切换会重建。</string>
+  <string name="assistant_page_embedding_window">载入窗口</string>
+  <string name="assistant_page_embedding_window_auto">自动（按策展默认）</string>
+  <string name="assistant_page_embedding_window_value">%1$d token</string>
+  <string name="assistant_page_library_image_summary_not_needed">不需要了：嵌入模型自己就能看图，生成描述只会在更好的答案旁边添一个更差的。</string>
+  <string name="assistant_page_embedding_native_images_desc">图片直接以图片嵌入，按画面内容就能搜到 —— 中间不再需要文字识别或描述。每张约 2 秒，分摊在多轮后台索引里。</string>
+  <string name="assistant_page_embedding_native_images_not_vision">当前嵌入模型不能看图 —— 装上 EmbeddingGemma 2 440M（文本 + 视觉）即可开启。</string>
   <string name="assistant_page_library_image_summary_on">文件库里的图片会发送到 %1$s 生成描述。</string>
   <string name="assistant_page_library_image_summary_off">关闭中。开启后，文件库里的每张图片会发送到 %1$s 一次，以便按画面内容被搜到。</string>
   <string name="assistant_page_library_image_summary_no_model">先选一个能看图的模型：设置 → 模型 → OCR 模型。</string>

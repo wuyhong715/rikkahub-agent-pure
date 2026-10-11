@@ -31,4 +31,16 @@ object EmbeddingModelRules {
      * it would invalidate the entire index on every release.
      */
     fun modelIdOf(fileName: String): String = fileName.substringAfterLast('/')
+
+    /** The extension that means LiteRT-LM, and therefore a different engine behind the same door. */
+    const val LITERT_EXTENSION = ".litertlm"
+
+    /**
+     * Which engine runs the file.
+     *
+     * By extension rather than by a setting, because the installed file is the fact and a setting
+     * could disagree with it: two engines cannot both be the answer for one file name, and the
+     * identity written on every index row is that name.
+     */
+    fun isLitert(fileName: String): Boolean = fileName.endsWith(LITERT_EXTENSION, ignoreCase = true)
 }

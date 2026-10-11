@@ -14,6 +14,8 @@ import me.rerere.llamacpp.EmbeddingTier
 import me.rerere.llamacpp.LlamaCppEmbeddingCatalog
 import me.rerere.llamacpp.LlamaCppEmbeddingEntry
 import me.rerere.locallm.ModelInstall
+import me.rerere.locallm.litert.LitertEmbeddingCatalog
+import me.rerere.locallm.litert.LitertEmbeddingEntry
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.vector.EmbeddingDeviceFacts
 import me.rerere.rikkahub.data.vector.EmbeddingDeviceProbe
@@ -53,8 +55,8 @@ class EmbeddingModelViewModel(
     val installed: StateFlow<List<String>> = _installed.asStateFlow()
 
     /**
-     * One curated model as the picker shows it: the file, the cell of the grid it occupies (null
-     * for a model the grid does not place), and whether this phone has room for it.
+     * One curated GGUF as the picker shows it: the file, the cell of the grid it occupies (null for
+     * a model the grid does not place), and whether this phone has room for it.
      *
      * The picker needs all three at once - what to call it, which rung and lane it belongs to, and
      * whether the download button is an offer or a mistake - and computing them together is what
@@ -109,6 +111,23 @@ class EmbeddingModelViewModel(
                 )
             }
 
+    /**
+     * The curated `.litertlm` files that are not on disk yet, with whether this phone can take
+     * them.
+     *
+     * A second list rather than more [Offer]s, because the two runtimes' entries are different
+     * types on purpose - a GGUF carries a pooling rule, a `.litertlm` one carries an input signature
+     * and says whether the model can see - and each downloads into its own directory. The screen
+     * renders them in one list; the type is what keeps a `.gguf` out of the litert directory.
+     */
+    val litertOffers: List<LitertOffer>
+        get() = LitertEmbeddingCatalog.ENTRIES
+            .filter { it.file !in _installed.value }
+            .map { entry -> LitertOffer(entry, EmbeddingTierRules.fits(entry.sizeBytes, facts)) }
+
+    /** One curated `.litertlm` as the picker shows it: the file, and whether it fits this phone. */
+    data class LitertOffer(val entry: LitertEmbeddingEntry, val fits: Boolean)
+
     private var job: Job? = null
 
     /** Re-reads the directory. Called when the picker opens - the user may have just installed. */
@@ -137,17 +156,47 @@ class EmbeddingModelViewModel(
      * one as if it could is a trap; the embedding lookup finds them by listing the directory, so
      * nothing else needs to know they exist.
      */
-    fun download(entry: LlamaCppEmbeddingEntry, onInstalled: () -> Unit = {}) {
+    fun download(entry: LlamaCppEmbeddingEntry, onInstalled: () -> Unit = {}) =
+        downloadInto(
+            fileName = entry.file,
+            sizeBytes = entry.sizeBytes,
+            url = entry.resolveUrl(),
+            target = File(EmbeddingModelFiles.dir(context), entry.file),
+            onInstalled = onInstalled,
+        )
+
+    /**
+     * The same thing for a `.litertlm`, which goes into its own directory.
+     *
+     * A separate entry point rather than a common one over a union type, because the two entries
+     * share exactly three fields and everything else about them - the pooling rule, the input
+     * signature, whether the model can see - is meaningful for one runtime only.
+     */
+    fun download(entry: LitertEmbeddingEntry, onInstalled: () -> Unit = {}) =
+        downloadInto(
+            fileName = entry.file,
+            sizeBytes = entry.sizeBytes,
+            url = entry.resolveUrl(),
+            target = File(EmbeddingModelFiles.litertDir(context), entry.file),
+            onInstalled = onInstalled,
+        )
+
+    private fun downloadInto(
+        fileName: String,
+        sizeBytes: Long,
+        url: String,
+        target: File,
+        onInstalled: () -> Unit,
+    ) {
         if (job?.isActive == true) return
         _error.value = null
-        _download.value = Download(entry.file, 0, 0L, entry.sizeBytes)
+        _download.value = Download(fileName, 0, 0L, sizeBytes)
         job = viewModelScope.launch {
-            val target = File(EmbeddingModelFiles.dir(context), entry.file)
             try {
-                ModelInstall.download(httpClient, entry.resolveUrl(), target).collect { progress ->
+                ModelInstall.download(httpClient, url, target).collect { progress ->
                     when (progress) {
                         is ModelInstall.Progress.Started ->
-                            _download.value = Download(entry.file, 0, 0L, progress.totalBytes)
+                            _download.value = Download(fileName, 0, 0L, progress.totalBytes)
 
                         is ModelInstall.Progress.Tick -> {
                             val total = progress.totalBytes
@@ -157,13 +206,13 @@ class EmbeddingModelViewModel(
                                 } else {
                                     0
                                 }
-                            _download.value = Download(entry.file, percent, progress.bytesRead, total)
+                            _download.value = Download(fileName, percent, progress.bytesRead, total)
                         }
 
                         is ModelInstall.Progress.Done -> {
                             _download.value = null
                             refresh()
-                            settingsStore.update { it.copy(embeddingModelFile = entry.file) }
+                            settingsStore.update { it.copy(embeddingModelFile = fileName) }
                             // The caller builds the index with it: a model that has just been
                             // waited for should not need a conversation to be opened before
                             // anything happens.

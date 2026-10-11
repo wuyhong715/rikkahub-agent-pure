@@ -85,7 +85,17 @@ object EmbeddingTierRules {
      * whether the file on that rung is worth starting a download for.
      */
     fun fits(entry: LlamaCppEmbeddingEntry, facts: EmbeddingDeviceFacts): Boolean =
-        facts.availableDiskBytes >= entry.sizeBytes * DISK_HEADROOM
+        fits(entry.sizeBytes, facts)
+
+    /**
+     * The same question for a file rather than an entry.
+     *
+     * The `.litertlm` catalogue has its own entry type - different fields, same cost - and the
+     * picker has to be able to say "not enough room" for both without knowing which runtime a row
+     * came from.
+     */
+    fun fits(sizeBytes: Long, facts: EmbeddingDeviceFacts): Boolean =
+        facts.availableDiskBytes >= sizeBytes * DISK_HEADROOM
 
     /** The lane this phone is offered, from the only hint available before anything is indexed. */
     fun focusOf(facts: EmbeddingDeviceFacts): EmbeddingFocus =

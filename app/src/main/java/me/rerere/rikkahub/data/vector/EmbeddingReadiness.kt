@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.data.vector
 
 import me.rerere.llamacpp.LlamaCppEmbeddingCatalog
+import me.rerere.locallm.litert.LitertEmbeddingCatalog
 import me.rerere.rikkahub.data.datastore.Settings
 
 /**
@@ -42,12 +43,29 @@ object EmbeddingReadiness {
         EmbeddingModelRules.pick(
             configured = settings.embeddingModelFile.takeIf { it.isNotBlank() },
             installed = installedLocalFiles,
-            curatedOrder = LlamaCppEmbeddingCatalog.curatedOrder,
+            curatedOrder = EmbeddingCatalog.curatedOrder,
         )
 
     /** Whether a vector can be produced at all. */
     fun isReady(settings: Settings, installedLocalFiles: List<String>): Boolean =
         cloudModel(settings) != null || localModelFile(settings, installedLocalFiles) != null
+
+    /**
+     * Whether the embedding model in effect reads pictures itself.
+     *
+     * The switch that turns native image embedding on only *means* something when this is true, so
+     * the screen that offers it is disabled otherwise rather than hiding a control whose effect
+     * would be invisible. False for a cloud backend whatever the local files are: a provider's
+     * embedding endpoint takes text, so an image there still has to become words first.
+     *
+     * Pure, and here rather than in the screen, because it is the same question the coordinator
+     * asks before choosing a path - and the two must not be able to disagree.
+     */
+    fun localModelReadsImages(settings: Settings, installedLocalFiles: List<String>): Boolean {
+        if (cloudModel(settings) != null) return false
+        val file = localModelFile(settings, installedLocalFiles) ?: return false
+        return LitertEmbeddingCatalog.entryFor(file)?.vision == true
+    }
 
     /**
      * What to show as the model in use: the cloud model's name, or whatever the user configured

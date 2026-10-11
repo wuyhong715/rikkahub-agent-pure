@@ -29,10 +29,16 @@ class EmbeddingServiceTest {
     private class RecordingNative(private val dim: Int) : LlamaCppEmbedNative {
         val embedded = mutableListOf<String>()
 
+        /** Every model path the embedder was asked to open, so a reload is observable. */
+        val loaded = mutableListOf<String>()
+
         /** The thread each [embed] call ran on; the main-thread test at the bottom reads this. */
         val threads = mutableListOf<Thread>()
 
-        override fun loadModel(path: String): Long = MODEL
+        override fun loadModel(path: String): Long {
+            loaded += path
+            return MODEL
+        }
         override fun freeModel(handle: Long) = Unit
         override fun modelInfo(handle: Long): String = """{"weights_bytes":1000}"""
         override fun createEmbedContext(modelHandle: Long, nCtx: Int, nThreads: Int): Long = ENGINE
@@ -73,7 +79,7 @@ class EmbeddingServiceTest {
         val dir = temp.newFolder("llamacpp")
         File(dir, file).writeText("not really a gguf")
         return EmbeddingService(
-            modelsDir = { dir },
+            modelDirs = { listOf(dir) },
             configuredFileName = { file },
             embedder = LlamaCppEmbedder(native),
             curatedOrder = listOf(file),
@@ -166,7 +172,7 @@ class EmbeddingServiceTest {
 
     private fun cloudService(caller: CloudEmbeddingCaller, candidate: CloudEmbeddingCandidate = cloudCandidate()) =
         EmbeddingService(
-            modelsDir = { temp.newFolder("cloud-models") },
+            modelDirs = { listOf(temp.newFolder("cloud-models")) },
             configuredFileName = { null },
             cloudChoice = { candidate },
             cloud = caller,
@@ -179,7 +185,7 @@ class EmbeddingServiceTest {
         val dir = temp.newFolder("both")
         File(dir, ASYMMETRIC_FILE).writeText("not really a gguf")
         val service = EmbeddingService(
-            modelsDir = { dir },
+            modelDirs = { listOf(dir) },
             configuredFileName = { ASYMMETRIC_FILE },
             embedder = LlamaCppEmbedder(native),
             curatedOrder = listOf(ASYMMETRIC_FILE),
@@ -237,9 +243,9 @@ class EmbeddingServiceTest {
      * `ChatService.initializeConversation` fires the memory and library syncs from there on every
      * conversation *open*. The native call used to happen inline, so opening a conversation ahead
      * of the five-minute debounce embedded the whole memory directory on the main thread and the
-     * system killed `RouteActivity`: "Waited 5000ms for MotionEvent" (captured as
-     * `data_app_anr` in dropbox, 2026-10-11 19:28). [EmbeddingService.onWorker] is now the only
-     * way in, and this is what keeps it that way.
+     * system killed `RouteActivity`: "Waited 5000ms for MotionEvent" (captured as `data_app_anr`
+     * in dropbox, 2026-10-11 19:28). [EmbeddingService.onWorker] is now the only way in, and this
+     * is what keeps it that way.
      */
     @Test
     fun `an embedding never runs on the calling thread`() = runBlocking {
@@ -254,6 +260,71 @@ class EmbeddingServiceTest {
         assertTrue(
             "the model ran on the caller's thread: ${native.threads.map { it.name }}",
             native.threads.none { it === caller },
+        )
+    }
+
+    /**
+     * The accelerator is part of what a vector *is*.
+     *
+     * LiteRT's two accelerators do not compute the same function - the same sentence comes back
+     * with cosine 0.9997 between them - so an index that mixed them would rank slightly worse for
+     * everything embedded before the switch, and would report nothing. Every staleness check in
+     * this package is a comparison of `modelId`, which is why the accelerator has to be inside it:
+     * that is what makes flipping the GPU switch rebuild rather than mix.
+     */
+    @Test
+    fun `a LiteRT model's identity carries the accelerator it ran on`() {
+        val cpu = EmbeddingService.ActiveModel(
+            fileName = "eg2.litertlm",
+            dim = 768,
+            contextTokens = 512,
+            accelerator = "cpu",
+        )
+        val gpu = cpu.copy(accelerator = "gpu")
+
+        assertEquals("eg2.litertlm#cpu", cpu.modelId)
+        assertEquals("eg2.litertlm#gpu", gpu.modelId)
+
+        // A GGUF has one implementation, so its identity is exactly what it always was - an index
+        // built before this existed must not be invalidated by it.
+        val gguf = EmbeddingService.ActiveModel(fileName = "a.gguf", dim = 768, contextTokens = 8192)
+        assertEquals("a.gguf", gguf.modelId)
+    }
+
+    /**
+     * What the engine is loaded *from* is re-answered on every [EmbeddingService.ensureLoaded].
+     *
+     * The failure this guards is silent in the worst way. `loadLocked` used to return the resident
+     * model without re-reading anything, so a model picked in the picker, a GPU switch flipped or
+     * the cloud backend turned on took effect at the next *launch* rather than the next round of
+     * indexing - and in the meantime the index was rebuilt with the old engine while its rows were
+     * stamped with the new identity. Changing the configured file between two calls is the cheapest
+     * way to see whether the second call actually re-opens.
+     */
+    @Test
+    fun `a model chosen after the engine is loaded replaces it`() = runBlocking {
+        val native = RecordingNative(DIM)
+        val dir = temp.newFolder("llamacpp")
+        val first = "first-q8_0.gguf"
+        val second = "second-q8_0.gguf"
+        File(dir, first).writeText("not really a gguf")
+        File(dir, second).writeText("not really a gguf")
+        var configured: String? = first
+
+        val service = EmbeddingService(
+            modelDirs = { listOf(dir) },
+            configuredFileName = { configured },
+            embedder = LlamaCppEmbedder(native),
+            curatedOrder = listOf(first, second),
+        )
+
+        service.embedDocuments(listOf("alpha"))
+        configured = second
+        service.embedDocuments(listOf("beta"))
+
+        assertEquals(
+            listOf(first, second),
+            native.loaded.map { it.substringAfterLast('/') },
         )
     }
 

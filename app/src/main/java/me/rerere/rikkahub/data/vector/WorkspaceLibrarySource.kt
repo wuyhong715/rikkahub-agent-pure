@@ -22,8 +22,19 @@ class WorkspaceLibrarySource(
      * One file of the library, already read. [chunkMode] travels with the text because it is
      * decided from the file name (see [WorkspaceLibraryRules.chunkModeOf]) while the text is what
      * the walk managed to extract.
+     *
+     * [vector] is set only when the embedding model read the file *itself* - today that means a
+     * vision `.litertlm` and an image. It rides on the document rather than being looked up later
+     * because the read and the embedding are the same operation in that case, and doing it twice
+     * would run the vision tower twice. When it is set, [text] is for display and for the chunk's
+     * fingerprint; the vector is what the file is searched by.
      */
-    data class Doc(val path: String, val text: String, val chunkMode: ChunkingMode)
+    data class Doc(
+        val path: String,
+        val text: String,
+        val chunkMode: ChunkingMode,
+        val vector: FloatArray? = null,
+    )
 
     data class SyncReport(
         val documents: Int,
@@ -72,7 +83,15 @@ class WorkspaceLibrarySource(
         var embedded = 0
 
         for (doc in docs) {
-            val fresh = TextChunker.chunk(doc.text, ChunkSpec(mode = doc.chunkMode).fitting(model.contextTokens))
+            val precomputed = doc.vector
+            // A file the model read itself is ONE chunk. Cutting a picture into pieces would only
+            // produce fragments of a meaning that was never in the text in the first place, and
+            // the vector we already have describes the whole of it.
+            val fresh = if (precomputed != null) {
+                listOf(TextChunk(0, doc.text, ContentHash.of(doc.text)))
+            } else {
+                TextChunker.chunk(doc.text, ChunkSpec(mode = doc.chunkMode).fitting(model.contextTokens))
+            }
             if (fresh.isEmpty()) {
                 skipped++
                 continue
@@ -83,7 +102,7 @@ class WorkspaceLibrarySource(
                 continue
             }
             val written = store.apply(source, doc.path, plan, model.modelId, nowMs) { texts ->
-                embeddings.embedDocuments(texts)
+                if (precomputed != null) listOf(precomputed) else embeddings.embedDocuments(texts)
             }
             plan as SyncPlan.Replace
             chunks += written
