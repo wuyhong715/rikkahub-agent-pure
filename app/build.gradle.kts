@@ -48,30 +48,15 @@ android {
         }
     }
 
-    // Two products ship out of one tree. They differ in *identity* (applicationId,
-    // display name, version line), not in code, so they are modelled as a flavor
-    // dimension rather than a branch-of-truth per variant:
+    // This branch ships exactly one product: Moxw Agent. The `brand` dimension is
+    // kept because the flavour source set (`app/src/moxw/res`) carries the name, the
+    // icon and the localised strings — but with a single flavour it describes an
+    // identity rather than a choice.
     //
-    //  · pure — RikkaHub Agent · Pure. Keeps the historical ".debug"
-    //    applicationId on purpose: devices already running the debug-signed
-    //    build upgrade in place. Shipped unsigned, re-signed on the VPS.
-    //  · moxw — Moxw Agent. A standalone brand (own applicationId so it can
-    //    coexist with pure on one device) carrying the local-vector work.
-    //    Its version line is independent (0.x), see cold-memory M21.
+    //  · moxw — Moxw Agent. A standalone brand, with its own applicationId and an
+    //    independent version line (0.x), see cold-memory M21.
     flavorDimensions += "brand"
     productFlavors {
-        create("pure") {
-            dimension = "brand"
-            applicationId = "excp.rikkahub.debug"
-            versionCode = 203
-            versionName = "2.5.3-pure.7"
-            resValue("string", "app_name", "RikkaHub Agent")
-            buildConfigField("String", "BRAND_NAME", "\"RikkaHub\"")
-            buildConfigField("String", "BRAND_ID", "\"pure\"")
-            buildConfigField("String", "VERSION_NAME", "\"2.5.3-pure.7\"")
-            buildConfigField("String", "VERSION_CODE", "\"203\"")
-            buildConfigField("String", "UPDATE_API_URL", "\"\"")
-        }
         create("moxw") {
             dimension = "brand"
             applicationId = "com.moxw.agent"
@@ -225,8 +210,8 @@ composeCompiler {
 }
 
 tasks.register("buildAll") {
-    dependsOn("assemblePureRelease", "bundlePureRelease")
-    description = "Build the Pure APK and AAB"
+    dependsOn("assembleMoxwRelease", "bundleMoxwRelease")
+    description = "Build the Moxw APK and AAB"
 }
 
 ksp {
