@@ -2630,6 +2630,13 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_page_local_tools_gated_hint">这些分组必须依赖外部应用、系统服务、硬件或令牌才能真正工作，所以保留开关；关闭后它们会整个退出工具表。其余本地工具一律开启，普通权限在「设置 → 权限」中授予。</string>
   <string name="assistant_page_local_tools_section_resident">常驻工具</string>
   <string name="assistant_page_local_tools_resident_desc">可以整组常驻，也可以展开后逐个常驻。常驻工具每一轮都会附带；其余工具仍由向量检索按需取用。</string>
+  <string name="assistant_page_local_tools_pure_intro">打开一个分组把它交给模型；再展开这个分组，就能逐个关掉其中不想给的工具。</string>
+  <string name="assistant_page_local_tools_group_count">%1$d 个工具</string>
+  <string name="assistant_page_local_tools_group_count_off">%1$d 个工具 · %2$d 个已关</string>
+  <string name="assistant_page_local_tools_expand">展开工具</string>
+  <string name="assistant_page_local_tools_collapse">收起工具</string>
+  <string name="assistant_page_local_tools_tool_on">开启</string>
+  <string name="assistant_page_local_tools_tool_off">已关闭</string>
   <string name="assistant_page_local_tools_search_hint">搜索工具</string>
   <string name="assistant_page_local_tools_resident_count">已常驻 %1$d / %2$d</string>
   <string name="assistant_page_local_tools_no_match">没有匹配的工具。</string>

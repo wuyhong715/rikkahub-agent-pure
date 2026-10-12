@@ -3,6 +3,7 @@ package me.rerere.rikkahub.data.ai
 import me.rerere.ai.core.Tool
 import me.rerere.ai.provider.Modality
 import me.rerere.ai.provider.Model
+import me.rerere.rikkahub.Brand
 import me.rerere.rikkahub.data.ai.tools.LocalToolGates
 import me.rerere.rikkahub.data.ai.tools.LocalTools
 import me.rerere.rikkahub.data.ai.tools.ToolInvocationContext
@@ -57,7 +58,7 @@ object ToolSurfaceResolver {
         // model, so hiding a group never hid it from the model — it only made the catalogue
         // smaller, and the ranking, not the size, is what picks. LocalToolGates holds the rule
         // and explains the criterion for the groups that kept their switch.
-        options = LocalToolGates.effective(assistant.localTools),
+        options = LocalToolGates.surfaceOptions(assistant.localTools, unconditioned = Brand.isMoxw),
         invocationContext = context,
         // P2-02 - the per-tool deny-list rides along with the option list it refines.
         disabledToolNames = assistant.disabledLocalTools,

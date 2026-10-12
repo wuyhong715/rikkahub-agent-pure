@@ -196,6 +196,13 @@
   <string name="assistant_page_local_tools_gated_hint">These groups only do anything once their prerequisite exists — an external app, a system service, hardware or a token — so they keep a switch. Switched off, they leave the tool table entirely. Everything else is always on; ordinary permissions are granted in Settings → Permissions.</string>
   <string name="assistant_page_local_tools_section_resident">Resident tools</string>
   <string name="assistant_page_local_tools_resident_desc">Pin a whole group, or open it and pin a single tool. A resident tool is attached to every turn; the rest are still reached by semantic search when a request calls for them.</string>
+  <string name="assistant_page_local_tools_pure_intro">Switch a group on to give its tools to the model, then open it to turn individual tools inside it off.</string>
+  <string name="assistant_page_local_tools_group_count">%1$d tools</string>
+  <string name="assistant_page_local_tools_group_count_off">%1$d tools · %2$d off</string>
+  <string name="assistant_page_local_tools_expand">Show tools</string>
+  <string name="assistant_page_local_tools_collapse">Hide tools</string>
+  <string name="assistant_page_local_tools_tool_on">On</string>
+  <string name="assistant_page_local_tools_tool_off">Off</string>
   <string name="assistant_page_local_tools_search_hint">Search tools</string>
   <string name="assistant_page_local_tools_resident_count">%1$d / %2$d pinned</string>
   <string name="assistant_page_local_tools_no_match">No tool matches that.</string>

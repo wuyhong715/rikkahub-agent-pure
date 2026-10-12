@@ -1753,7 +1753,8 @@ class ChatService(
             if (!model.abilities.contains(ModelAbility.TOOL)) {
                 val advertisesTools = useExternalWebSearch ||
                     mcpManager.getAllAvailableTools().isNotEmpty() ||
-                    LocalToolGates.effective(assistant.localTools).isNotEmpty()
+                    LocalToolGates.surfaceOptions(assistant.localTools, unconditioned = Brand.isMoxw)
+                        .isNotEmpty()
                 if (advertisesTools && toolUnavailableWarned.add(conversationId)) {
                     addError(
                         IllegalStateException(context.getString(R.string.tools_warning)),

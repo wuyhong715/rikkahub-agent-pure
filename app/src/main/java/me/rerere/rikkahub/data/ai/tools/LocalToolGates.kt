@@ -94,6 +94,20 @@ object LocalToolGates {
         LocalToolGroups.order(alwaysOn + stored)
 
     /**
+     * The groups a surface is assembled from, for the product line this build is.
+     *
+     * [unconditioned] is Moxw (`Brand.isMoxw`): there every group is part of the catalogue no
+     * matter what is stored ([effective]). On the pure line it is false, and the stored list is
+     * the answer verbatim — that product hands the model exactly the schemas its groups produce,
+     * so a group the user switched off is a group the model never sees.
+     *
+     * Takes the flag rather than reading `Brand` itself, so this file stays free of Android and of
+     * build config, and `LocalToolGatesTest` keeps running on a bare JVM.
+     */
+    fun surfaceOptions(stored: Collection<LocalToolOption>, unconditioned: Boolean): List<LocalToolOption> =
+        if (unconditioned) effective(stored) else LocalToolGroups.order(stored)
+
+    /**
      * The stored list reduced to the choices that still mean something — the gated groups. Used by
      * the tool page so a payload full of pre-redefinition, non-gated entries reads as "nothing to
      * switch" rather than as fifty stale switches that appear on.

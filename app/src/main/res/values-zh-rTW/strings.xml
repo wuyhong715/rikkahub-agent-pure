@@ -1230,6 +1230,13 @@
   <string name="assistant_page_local_tools_gated_hint">這些分組必須依賴外部應用、系統服務、硬體或權杖才能真正運作，因此保留開關；關閉後它們會整個退出工具表。其餘本機工具一律開啟，一般權限在「設定 → 權限」中授予。</string>
   <string name="assistant_page_local_tools_section_resident">常駐工具</string>
   <string name="assistant_page_local_tools_resident_desc">可以整組常駐，也可以展開後逐個常駐。常駐工具每一輪都會附帶；其餘工具仍由向量檢索按需取用。</string>
+  <string name="assistant_page_local_tools_pure_intro">打開一個分組把它交給模型；再展開這個分組，就能逐個關掉其中不想給的工具。</string>
+  <string name="assistant_page_local_tools_group_count">%1$d 個工具</string>
+  <string name="assistant_page_local_tools_group_count_off">%1$d 個工具 · %2$d 個已關</string>
+  <string name="assistant_page_local_tools_expand">展開工具</string>
+  <string name="assistant_page_local_tools_collapse">收起工具</string>
+  <string name="assistant_page_local_tools_tool_on">開啟</string>
+  <string name="assistant_page_local_tools_tool_off">已關閉</string>
   <string name="assistant_page_local_tools_search_hint">搜尋工具</string>
   <string name="assistant_page_local_tools_resident_count">已常駐 %1$d / %2$d</string>
   <string name="assistant_page_local_tools_no_match">沒有符合的工具。</string>
