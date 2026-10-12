@@ -10,7 +10,6 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.rikkahub.data.ai.tools.LenientLocalToolListSerializer
 import me.rerere.rikkahub.data.ai.tools.LocalToolOption
-import me.rerere.rikkahub.data.ai.tools.ToolSurfaceMode
 import me.rerere.rikkahub.utils.SimpleCache
 import java.util.concurrent.TimeUnit
 import kotlin.uuid.Uuid
@@ -178,13 +177,6 @@ data class Assistant(
     // pointing it at a whole workspace survivable.
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val libraryDir: String = "",
-    // How tools are surfaced to the model. The Moxw line always runs the retrieval-driven surface
-    // and ignores this (see `Brand.isMoxw`); the pure line keeps the DIRECT / PROGRESSIVE_CATALOG
-    // choice it has always had. @EncodeDefault(NEVER) keeps an assistant that never touched it
-    // byte-identical in the store.
-    // Appended last on purpose: a new field may never shift the position of an existing one.
-    @EncodeDefault(EncodeDefault.Mode.NEVER)
-    val toolSurfaceMode: ToolSurfaceMode = ToolSurfaceMode.DIRECT,
 )
 
 @Serializable

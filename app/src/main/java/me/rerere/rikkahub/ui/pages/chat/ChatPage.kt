@@ -78,7 +78,6 @@ import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.LeftToRightListBullet
 import me.rerere.hugeicons.stroke.Menu03
 import me.rerere.hugeicons.stroke.MessageAdd01
-import me.rerere.rikkahub.Brand
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.findProvider
@@ -124,12 +123,9 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     val scope = rememberCoroutineScope()
 
     val setting by vm.settings.collectAsStateWithLifecycle()
-    // Moxw — an install with no embedding model is an app with no retrieval at all, and the first
-    // chat is where a new install actually is. Shown once; see the gate itself. The pure line has
-    // no embedding model at all, so it has nothing to be nagged about.
-    if (Brand.isMoxw) {
-        EmbeddingModelGate(setting)
-    }
+    // An install with no embedding model is an app with no retrieval at all, and the first chat is
+    // where a new install actually is. Shown once; see the gate itself.
+    EmbeddingModelGate(setting)
     val conversation by vm.conversation.collectAsStateWithLifecycle()
     val loadingJob by vm.conversationJob.collectAsStateWithLifecycle()
     val processingStatus by vm.processingStatus.collectAsStateWithLifecycle()

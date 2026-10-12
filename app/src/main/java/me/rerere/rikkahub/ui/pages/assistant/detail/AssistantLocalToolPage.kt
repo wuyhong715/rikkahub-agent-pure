@@ -48,7 +48,6 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowDown01
 import me.rerere.hugeicons.stroke.ArrowRight01
 import me.rerere.hugeicons.stroke.Search01
-import me.rerere.rikkahub.Brand
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.agentdef.LocalToolGroups
 import me.rerere.rikkahub.data.ai.tools.LocalToolGates
@@ -99,41 +98,23 @@ fun AssistantLocalToolPage(id: String) {
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         containerColor = CustomColors.topBarColors.containerColor,
     ) { innerPadding ->
-        // The two product lines genuinely differ here, so the page forks rather than pretending the
-        // same controls mean the same thing:
-        //
-        //  - Moxw feeds every group into one embedding-ranked catalogue, so the group switch could
-        //    only ever shrink that catalogue — see `MoxwLocalToolContent`.
-        //  - pure hands the model exactly the schemas its groups produce, so the group switch is the
-        //    switch, and the tools inside an enabled group are configurable one by one — see
-        //    `PureLocalToolContent`.
-        //
-        // Both paths take the same transform-based update: each tap runs inside
-        // SettingsStore.update's mutex against the genuinely-current Assistant, so rapid taps
-        // (especially through a permission-grant round-trip to system Settings) all serialise
-        // against the actual current state instead of whatever stale snapshot the recomposition
-        // was holding.
+        // Each tap runs inside SettingsStore.update's mutex against the genuinely-current
+        // Assistant, so rapid taps (especially through a permission-grant round-trip to system
+        // Settings) all serialise against the actual current state instead of whatever stale
+        // snapshot the recomposition was holding.
         val onUpdateAssistant: ((Assistant) -> Assistant) -> Unit = { transform ->
             vm.updateAssistant(transform)
         }
-        if (Brand.isMoxw) {
-            MoxwLocalToolContent(
-                modifier = Modifier.padding(innerPadding),
-                assistant = assistant,
-                onUpdateAssistant = onUpdateAssistant,
-            )
-        } else {
-            PureLocalToolContent(
-                modifier = Modifier.padding(innerPadding),
-                assistant = assistant,
-                onUpdateAssistant = onUpdateAssistant,
-            )
-        }
+        LocalToolContent(
+            modifier = Modifier.padding(innerPadding),
+            assistant = assistant,
+            onUpdateAssistant = onUpdateAssistant,
+        )
     }
 }
 
 /**
- * Moxw — the local-tool page, rebuilt around the two questions it can actually answer.
+ * The local-tool page, rebuilt around the two questions it can actually answer.
  *
  * ## What changed, and why
  *
@@ -161,7 +142,7 @@ fun AssistantLocalToolPage(id: String) {
  * tools"), or open it and pin one tool inside it ("only `read_file`").
  */
 @Composable
-private fun MoxwLocalToolContent(
+private fun LocalToolContent(
     modifier: Modifier = Modifier,
     assistant: Assistant,
     onUpdateAssistant: ((Assistant) -> Assistant) -> Unit,

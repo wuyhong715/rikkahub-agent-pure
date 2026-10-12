@@ -78,33 +78,15 @@ class LocalToolGatesTest {
     }
 
     @Test
-    fun `a pure surface is exactly what is stored`() {
-        val stored = listOf(LocalToolOption.Battery, LocalToolOption.TimeInfo)
-        assertEquals(
-            LocalToolGroups.order(stored),
-            LocalToolGates.surfaceOptions(stored, unconditioned = false),
-        )
-        // The point of the pure branch: a group the user switched off is a group the model does
-        // not see. On Moxw the same input would still contain every always-on group.
-        assertEquals(
-            listOf(LocalToolOption.TimeInfo),
-            LocalToolGates.surfaceOptions(listOf(LocalToolOption.TimeInfo), unconditioned = false),
-        )
-    }
-
-    @Test
-    fun `an unconditioned surface ignores the stored list`() {
-        // The Moxw rule stated as the test: the union happens at assembly, so a stored list can
-        // only *add* a gated group — it can never take an always-on one away. (It does not add the
-        // gated groups the list omits, which is exactly what their switch is for.)
+    fun `a surface is the always-on groups plus whatever is stored`() {
+        // The union happens at assembly, so a stored list can only *add* a gated group — it can
+        // never take an always-on one away. (It does not add the gated groups the list omits,
+        // which is exactly what their switch is for.)
         assertEquals(
             LocalToolGates.alwaysOn,
-            LocalToolGates.surfaceOptions(emptyList(), unconditioned = true),
+            LocalToolGates.effective(emptyList()),
         )
-        val withTermux = LocalToolGates.surfaceOptions(
-            listOf(LocalToolOption.Termux),
-            unconditioned = true,
-        )
+        val withTermux = LocalToolGates.effective(listOf(LocalToolOption.Termux))
         assertEquals(
             (LocalToolGates.alwaysOn + LocalToolOption.Termux).toSet(),
             withTermux.toSet(),

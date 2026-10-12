@@ -310,27 +310,6 @@ class ToolCatalogTest {
     }
 
     @Test
-    fun `a lexical caller falls back to keyword ranking rather than reporting unavailable`() = runBlocking {
-        // The pure line keeps the keyword channel: an unrankable catalogue is not a dead end
-        // there, so the same `Unavailable` answer that Moxw relays becomes a keyword search.
-        val catalog = catalogOf("mcp__vps__compute", "mcp__vps__file")
-        val tools = buildToolCatalogTools(
-            catalog = catalog,
-            activation = ToolActivationState(),
-            lexicalOnly = true,
-            semanticSearch = { query ->
-                ToolSearchAnswer.Unavailable("no embedding model is installed ($query)")
-            },
-        )
-        val search = tools.first { it.name == "tool_search" }
-        val text = (search.execute(buildJsonObject { put("query", "compute") }).single() as UIMessagePart.Text).text
-        val parsed = kotlinx.serialization.json.Json.parseToJsonElement(text).jsonObject
-        assertEquals(1, parsed["total"]?.jsonPrimitive?.content?.toInt())
-        val results = parsed["results"] as JsonArray
-        assertEquals("mcp__vps__compute", results.single().jsonObject["name"]?.jsonPrimitive?.content)
-    }
-
-    @Test
     fun `tool_search reports an unrankable catalogue instead of guessing`() = runBlocking {
         val catalog = catalogOf("mcp__vps__compute")
         val tools = buildToolCatalogTools(catalog, ToolActivationState()) { query ->

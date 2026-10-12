@@ -21,24 +21,13 @@ internal const val TOOL_CATALOG_MAX_OPEN_PER_CALL = 4
 internal const val TOOL_CATALOG_MAX_ACTIVE_SCHEMAS = 6
 internal const val TOOL_CATALOG_MAX_SUMMARY_CHARS = 180
 
-/**
- * How tools are surfaced to the model.
- *
- * [DIRECT] injects every tool's schema up front; [PROGRESSIVE_CATALOG] injects only the
- * search/open pair, so the request stays small until the model explicitly opts in.
- *
- * The Moxw line always runs the catalogue (see `Brand.isMoxw`) and ignores this value; the pure
- * line keeps the choice it has always had, which is why the field still exists.
- */
-enum class ToolSurfaceMode { DIRECT, PROGRESSIVE_CATALOG }
-
 /** Where a catalogued entry comes from; used for scoring and serialized in search hits. */
 enum class ToolCatalogSource { LOCAL, MCP, SKILL }
 
 /**
  * What the vector channel could answer for one `tool_search` query.
  *
- * Moxw searches the catalogue by meaning or not at all — the lexical path this file once fell back
+ * The catalogue is searched by meaning or not at all — the lexical path this file once fell back
  * to is gone, so "nothing can be ranked right now" is a first-class answer rather than a silent
  * downgrade to keyword matching. It is reported to the model verbatim, including what to do about
  * it, because that is the only way the user ever learns the embedding model is missing.
@@ -248,35 +237,17 @@ fun buildToolCatalogTools(
      * How `tool_search` ranks. A parameter rather than something this file reaches for, because
      * [ToolCatalog] stays pure and model-free and the chat path owns the decision to embed.
      *
-     * Moxw — **required, and vector-only.** This product is built around a local embedding model
-     * being installed, so there is no lexical fallback left to take: an unrankable query yields
+     * **Required, and vector-only.** This product is built around a local embedding model being
+     * installed, so there is no lexical fallback left to take: an unrankable query yields
      * [ToolSearchAnswer.Unavailable], never a keyword pass. That is exactly the case that used to
      * fail silently — a request written in Chinese shares no characters with `scrape_web`, and a
      * keyword ranking returns nothing at all for it.
      */
-    /**
-     * pure — the catalogue is matched by keyword, and `tool_search` says so. The Moxw line
-     * searches by meaning and reports an unrankable catalogue instead of guessing at one, so the
-     * wording has to differ; the ranking itself is still supplied by [semanticSearch].
-     *
-     * Declared before [semanticSearch] on purpose: that parameter is a function type, and callers
-     * pass it as a trailing lambda.
-     */
-    lexicalOnly: Boolean = false,
     semanticSearch: suspend (String) -> ToolSearchAnswer,
 ): List<Tool> = listOf(
     Tool(
         name = "tool_search",
-        description = if (lexicalOnly) {
-            """
-            Search the tool catalog by keyword and return matching tool names with short
-            summaries. Use this whenever you are unsure which tools exist. It returns
-            names and summaries ONLY — never schemas or parameters. To actually call a
-            tool, first activate it with tool_open; activation takes effect on your NEXT
-            turn, not the current one.
-            """.trimIndent()
-        } else {
-            """
+        description = """
             Search the tool catalog by meaning and return matching tool names with short
             summaries. Use this whenever you are unsure which tools exist. Describe what you want
             to do in your own words and in any language: the catalog is matched semantically, so a
@@ -288,8 +259,7 @@ fun buildToolCatalogTools(
             If it reports that semantic search is unavailable, the embedding model is missing or
             still warming up. Say so to the user and stop rather than retrying with other words:
             searching again cannot fix it.
-            """.trimIndent()
-        },
+            """.trimIndent(),
         parameters = {
             InputSchema.Obj(
                 properties = buildJsonObject {
@@ -303,15 +273,14 @@ fun buildToolCatalogTools(
         },
         execute = {
             val query = it.jsonObject["query"]?.jsonPrimitive?.contentOrNull.orEmpty()
-            // Moxw — one channel, and it is the vector one. Every entry comes from this catalogue,
-            // so a returned name can be handed straight back to `tool_open` whichever branch ran.
-            // An `Unavailable` answer is passed to the model verbatim, install instructions and
-            // all: the exact-but-blind keyword ranking it replaces is what this product removed.
-            // The pure line still keeps that ranking, which is why [lexicalOnly] exists.
+            // One channel, and it is the vector one. Every entry comes from this catalogue, so a
+            // returned name can be handed straight back to `tool_open`. An `Unavailable` answer is
+            // passed to the model verbatim, install instructions and all: a keyword ranking would
+            // be guessing at a match that was never made.
             val answer = semanticSearch(query)
             val entries = when (answer) {
                 is ToolSearchAnswer.Ranked -> answer.entries
-                is ToolSearchAnswer.Unavailable -> if (lexicalOnly) catalog.matchAll(query) else null
+                is ToolSearchAnswer.Unavailable -> null
             }
             val body = if (entries == null) {
                 ToolSearchOutcome.unavailable((answer as ToolSearchAnswer.Unavailable).note)

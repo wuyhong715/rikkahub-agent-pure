@@ -67,7 +67,6 @@ import me.rerere.rikkahub.CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID
 import me.rerere.rikkahub.RouteActivity
 import me.rerere.rikkahub.utils.cancelNotification
 import me.rerere.rikkahub.utils.sendNotification
-import me.rerere.rikkahub.Brand
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.AssistantResolver
 import me.rerere.rikkahub.data.vector.MemoryIndexCoordinator
@@ -93,8 +92,6 @@ import me.rerere.rikkahub.data.ai.tools.ToolRankFusion
 import me.rerere.rikkahub.data.ai.tools.LocalToolGates
 import me.rerere.rikkahub.data.ai.tools.LocalToolPalette
 import me.rerere.rikkahub.data.ai.tools.buildToolCatalogTools
-import me.rerere.rikkahub.data.ai.tools.matchAll
-import me.rerere.rikkahub.data.ai.tools.ToolSurfaceMode
 import me.rerere.rikkahub.data.ai.tools.ToolSearchAnswer
 import me.rerere.rikkahub.data.ai.tools.ChatToolFactory
 import me.rerere.rikkahub.data.ai.tools.InvalidMcpServerNamesException
@@ -885,14 +882,11 @@ class ChatService(
             runCatching {
                 AssistantResolver.byId(settingsStore.settingsFlow.value, conversation.assistantId)
             }.getOrNull()?.let { assistant ->
-                // Moxw only: the pure line has no vectors, so there is nothing to keep in sync.
-                if (Brand.isMoxw) {
-                    memoryIndex.requestSync(assistant)
-                    // P4 — the file library, on the same trigger and the same debounce. A round
-                    // reads only what its budget allows, so the first pass over a large library is
-                    // one background round rather than a stall, and the next continues it.
-                    libraryIndex.requestSync(assistant)
-                }
+                memoryIndex.requestSync(assistant)
+                // P4 — the file library, on the same trigger and the same debounce. A round
+                // reads only what its budget allows, so the first pass over a large library is
+                // one background round rather than a stall, and the next continues it.
+                libraryIndex.requestSync(assistant)
             }
         } else {
             // A send can race this asynchronous initialization for a brand-new conversation.
@@ -1747,14 +1741,13 @@ class ChatService(
             // MCP servers and external web search, so an assistant whose tools are all on-device
             // got no warning at all.
             //
-            // Deliberately once per conversation: Moxw has every non-gated local-tool group on
+            // Deliberately once per conversation: every non-gated local-tool group is on
             // unconditionally (see LocalToolGates), so nearly every assistant has something to
             // advertise, and an unguarded warning would fire on every single turn.
             if (!model.abilities.contains(ModelAbility.TOOL)) {
                 val advertisesTools = useExternalWebSearch ||
                     mcpManager.getAllAvailableTools().isNotEmpty() ||
-                    LocalToolGates.surfaceOptions(assistant.localTools, unconditioned = Brand.isMoxw)
-                        .isNotEmpty()
+                    LocalToolGates.effective(assistant.localTools).isNotEmpty()
                 if (advertisesTools && toolUnavailableWarned.add(conversationId)) {
                     addError(
                         IllegalStateException(context.getString(R.string.tools_warning)),
@@ -1971,22 +1964,12 @@ class ChatService(
                             appPlaybook = coldMemoryPlaybookReader(surfaceAssistant),
                         ),
                     )
-                    // P3-03 — on the Moxw line that resolved face is not attached. It becomes
-                    // the bulk of the catalogue instead, offered through `tool_search` /
-                    // `tool_open`. Resolved once, here, so nothing can be activated that the
-                    // assistant's own tool options did not already allow. Moxw has no other mode
-                    // left: there is nowhere that attaches the whole surface, which is what makes
-                    // the embedding model a prerequisite there rather than an enhancement.
-                    //
-                    // The pure line keeps the choice it has always had. DIRECT attaches the whole
-                    // surface; even its PROGRESSIVE_CATALOG — which on that line only ever covered
-                    // MCP tools — attaches these local tools directly, exactly as it always did.
-                    val progressiveSurface = Brand.isMoxw ||
-                        surfaceAssistant.toolSurfaceMode == ToolSurfaceMode.PROGRESSIVE_CATALOG
-                    val catalogCoversLocalTools = Brand.isMoxw
-                    if (!catalogCoversLocalTools) {
-                        addAll(localSurface)
-                    }
+                    // P3-03 — that resolved face is not attached. It becomes the bulk of the
+                    // catalogue instead, offered through `tool_search` / `tool_open`. Resolved
+                    // once, here, so nothing can be activated that the assistant's own tool
+                    // options did not already allow. There is no other mode: nothing attaches the
+                    // whole surface, which is what makes the embedding model a prerequisite rather
+                    // than an enhancement.
                     addAll(createWorkspaceToolsIfReady(surfaceAssistant.workspaceId?.toString(), conversation.workspaceCwd))
                     // T-06 / (7) - cold memory, mirroring the regenerate path above.
                     addAll(createColdMemoryToolsIfConfigured(surfaceAssistant))
@@ -2099,11 +2082,8 @@ class ChatService(
                     // lists the skill, which is the only way the model can find it. Auto-load
                     // skills are left out because their bodies are inlined into the system
                     // prompt anyway — there is nothing about them to retrieve.
-                    // Moxw catalogues skills so their names can be retrieved by the turn.
-                    // The pure line lists every enabled skill, which is what it always did.
-                    val skillEntries: List<ToolCatalogEntry> = if (!Brand.isMoxw) {
-                        emptyList()
-                    } else useSkillTool?.let { skillTool ->
+                    // Skills are catalogued so their names can be retrieved by the turn.
+                    val skillEntries: List<ToolCatalogEntry> = useSkillTool?.let { skillTool ->
                         enabledSkillList
                             .filterNot { it.autoLoad }
                             .map { skill ->
@@ -2115,22 +2095,16 @@ class ChatService(
                                 )
                             }
                     }.orEmpty()
-                    if (!progressiveSurface) {
-                        // The pure line's DIRECT surface: every tool attached, with no
-                        // catalogue in the way.
-                        allMcpTools.forEach { (serverId, serverName, tool) ->
-                            add(buildMcpTool(serverId, serverName, tool))
-                        }
-                    } else {
+                    run {
                         val catalog = ToolCatalog(
-                            entries = (if (catalogCoversLocalTools) localSurface.map { tool ->
+                            entries = localSurface.map { tool ->
                                 ToolCatalogEntry(
                                     name = tool.name,
                                     summary = LocalToolPalette.summarize(tool),
                                     source = ToolCatalogSource.LOCAL,
                                     tool = tool,
                                 )
-                            } else emptyList()) + allMcpTools.map { (serverId, serverName, tool) ->
+                            } + allMcpTools.map { (serverId, serverName, tool) ->
                                 ToolCatalogEntry(
                                     name = me.rerere.rikkahub.data.ai.mcp.buildMcpToolName(
                                         serverId = serverId,
@@ -2148,25 +2122,21 @@ class ChatService(
                         // then the ranking is normally ready. A search that arrives before that
                         // waits a bounded moment rather than answering without vectors (see
                         // ToolVectorIndex.answer).
-                        if (Brand.isMoxw) toolVectors.prewarm(catalog.entries)
+                        toolVectors.prewarm(catalog.entries)
                         val activation = toolActivationFor(conversationId)
                         // Drop names whose server/tool disappeared since the last turn so a
                         // stale activation can never attempt to inject a schema that no longer
                         // exists (which would 400 the request).
                         activation.retain(catalog.entries.mapTo(mutableSetOf()) { it.name })
-                        // Moxw ranks by meaning; the pure line keeps its keyword ranking, which is
-                        // what `lexicalOnly` tells the tool's own description to say as well.
-                        val semanticSearch: suspend (String) -> ToolSearchAnswer = if (Brand.isMoxw) {
-                            { query -> toolVectors.answer(query, catalog) }
-                        } else {
-                            { query -> ToolSearchAnswer.Ranked(catalog.matchAll(query)) }
+                        // Ranking is by meaning, and the tool's own description says so.
+                        val semanticSearch: suspend (String) -> ToolSearchAnswer = { query ->
+                            toolVectors.answer(query, catalog)
                         }
                         addAll(
                             buildToolCatalogTools(
                                 catalog = catalog,
                                 activation = activation,
                                 semanticSearch = semanticSearch,
-                                lexicalOnly = !Brand.isMoxw,
                             )
                         )
                         // P3-03 - what this turn gets without asking: what the user pinned, what
@@ -2176,9 +2146,9 @@ class ChatService(
                         // ToolRankFusion.attachedForTurn; an unrankable catalogue yields an empty
                         // ranking rather than a keyword guess, so such a turn carries only what was
                         // pinned or opened and reaches the rest through `tool_search`.
-                        // Only the Moxw line has vectors to guess with; the pure line attaches
-                        // exactly what was pinned or opened.
-                        val ranked = if (Brand.isMoxw && lastUserText.isNotBlank()) {
+                        // What the user's own words retrieved. Without vectors this yields
+                        // nothing, and the turn carries exactly what was pinned or opened.
+                        val ranked = if (lastUserText.isNotBlank()) {
                             toolVectors.ranking(lastUserText, catalog)
                         } else {
                             emptyList()
@@ -2204,10 +2174,8 @@ class ChatService(
                             budget = ToolRankFusion.DEFAULT_TURN_SKILL_BUDGET,
                             isOfSource = { isSkill(it) },
                         )
-                        // Moxw decides which skills the listing may show, from what this turn
-                        // retrieved. The pure line has no retrieval, so it keeps listing every
-                        // enabled skill — `visibleSkillNames` stays null, which means "all".
-                        if (Brand.isMoxw) visibleSkillNames = attachedSkills.toSet()
+                        // The listing shows what this turn retrieved.
+                        visibleSkillNames = attachedSkills.toSet()
                         attachedTools.forEach { name ->
                             catalog.entry(name)?.let { entry -> add(entry.tool) }
                         }
@@ -2422,10 +2390,7 @@ class ChatService(
             // P5 — the turn that just finished should be searchable by the time the user asks
             // about it. Debounced inside, so a burst of messages costs one round rather than one
             // per message, and it only ever touches this conversation's slice of the index.
-            // Moxw only: the pure line searches history by keyword, with no index behind it.
-            if (Brand.isMoxw) {
-                conversationIndex.requestSyncOf(conversationId)
-            }
+            conversationIndex.requestSyncOf(conversationId)
 
             launchAuxJob(conversationId, AuxJobKind.TITLE) {
                 generateTitle(conversationId, finalConversation)
@@ -2510,20 +2475,17 @@ class ChatService(
             },
         ).toMutableList()
 
-        // Moxw - semantic search joins the two exact-name tools. Registration does not depend on a
-        // model being installed: the tool reports that state itself, which is how the model finds
-        // out to fall back to memory_index rather than to stop looking for its notes. The pure line
-        // has no vectors, so it never sees this tool.
-        if (Brand.isMoxw) {
-            tools += buildMemorySearchTool(
-                dirLabel = if (dir.isEmpty()) {
-                    ColdMemoryRules.WORKSPACE_PREFIX
-                } else {
-                    "${ColdMemoryRules.WORKSPACE_PREFIX}/$dir"
-                },
-                search = { query, limit -> memoryIndex.search(dir, query, limit) },
-            )
-        }
+        // Semantic search joins the two exact-name tools. Registration does not depend on a model
+        // being installed: the tool reports that state itself, which is how the model finds out to
+        // fall back to memory_index rather than to stop looking for its notes.
+        tools += buildMemorySearchTool(
+            dirLabel = if (dir.isEmpty()) {
+                ColdMemoryRules.WORKSPACE_PREFIX
+            } else {
+                "${ColdMemoryRules.WORKSPACE_PREFIX}/$dir"
+            },
+            search = { query, limit -> memoryIndex.search(dir, query, limit) },
+        )
         return tools
     }
 
@@ -2540,7 +2502,6 @@ class ChatService(
      * `workspace_*` family: the library keeps working when the rootfs was never installed.
      */
     private suspend fun createLibraryToolsIfConfigured(assistant: Assistant): List<Tool> {
-        if (!Brand.isMoxw) return emptyList()
         val dirLabel = libraryIndex.dirLabelOf(assistant) ?: return emptyList()
         val workspaceId = assistant.workspaceId?.toString() ?: return emptyList()
         if (workspaceRepository.getById(workspaceId) == null) return emptyList()

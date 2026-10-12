@@ -2,7 +2,6 @@ package me.rerere.rikkahub.ui.pages.search
 
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Refresh01
-import me.rerere.hugeicons.stroke.Sorting01
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,10 +15,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -47,20 +43,13 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.res.stringResource
-import me.rerere.rikkahub.Brand
 import me.rerere.rikkahub.R
-import me.rerere.rikkahub.data.db.fts.MessageSearchResult
-import me.rerere.rikkahub.data.db.fts.MessageSearchSort
 import me.rerere.rikkahub.data.vector.ConversationSearchResult
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.navigateToChatPage
-import me.rerere.rikkahub.utils.toLocalDateTime
 import org.koin.androidx.compose.koinViewModel
 import kotlin.uuid.Uuid
 
@@ -104,14 +93,6 @@ fun SearchPage(vm: SearchVM = koinViewModel()) {
                 navigationIcon = { BackButton() },
                 title = { Text(stringResource(R.string.search_page_title)) },
                 actions = {
-                    if (!Brand.isMoxw) {
-                        // The pure line's keyword index yields an order, so the user picks one.
-                        // Vectors produce exactly one order, which is why Moxw has no such control.
-                        SortMenuButton(
-                            current = vm.sortOrder,
-                            onSortChange = { vm.onSortChange(it) },
-                        )
-                    }
                     IconButton(
                         onClick = { showRebuildDialog = true },
                         enabled = !vm.isRebuilding,
@@ -189,12 +170,7 @@ fun SearchPage(vm: SearchVM = koinViewModel()) {
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = if (Brand.isMoxw) {
-                                    stringResource(R.string.search_page_rebuilding_simple)
-                                } else {
-                                    val (current, total) = vm.rebuildProgress
-                                    stringResource(R.string.search_page_rebuilding, current, total)
-                                },
+                                text = stringResource(R.string.search_page_rebuilding_simple),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -228,8 +204,7 @@ fun SearchPage(vm: SearchVM = koinViewModel()) {
                         }
                     }
 
-                    (if (Brand.isMoxw) vm.results.isEmpty() else vm.ftsResults.isEmpty()) &&
-                        !vm.isLoading -> {
+                    vm.results.isEmpty() && !vm.isLoading -> {
                         Box(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
@@ -248,40 +223,21 @@ fun SearchPage(vm: SearchVM = koinViewModel()) {
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                             modifier = Modifier.fillMaxSize(),
                         ) {
-                            if (Brand.isMoxw) {
-                                items(vm.results) { result ->
-                                    SearchResultItem(
-                                        result = result,
-                                        onClick = {
-                                            navigateToChatPage(
-                                                navController,
-                                                chatId = Uuid.parse(result.conversationId),
-                                                // Empty when the message no longer sits in any
-                                                // node: open the conversation instead of refusing
-                                                // the tap.
-                                                nodeId = runCatching { Uuid.parse(result.nodeId) }
-                                                    .getOrNull(),
-                                            )
-                                        }
-                                    )
-                                }
-                            } else {
-                                items(vm.ftsResults) { result ->
-                                    FtsSearchResultItem(
-                                        result = result,
-                                        onClick = {
-                                            navigateToChatPage(
-                                                navController,
-                                                chatId = Uuid.parse(result.conversationId),
-                                                // Empty when the message no longer sits in any
-                                                // node: open the conversation instead of refusing
-                                                // the tap.
-                                                nodeId = runCatching { Uuid.parse(result.nodeId) }
-                                                    .getOrNull(),
-                                            )
-                                        }
-                                    )
-                                }
+                            items(vm.results) { result ->
+                                SearchResultItem(
+                                    result = result,
+                                    onClick = {
+                                        navigateToChatPage(
+                                            navController,
+                                            chatId = Uuid.parse(result.conversationId),
+                                            // Empty when the message no longer sits in any
+                                            // node: open the conversation instead of refusing
+                                            // the tap.
+                                            nodeId = runCatching { Uuid.parse(result.nodeId) }
+                                                .getOrNull(),
+                                        )
+                                    }
+                                )
                             }
                         }
                     }
@@ -337,118 +293,3 @@ private fun SearchResultItem(
  */
 private const val SEARCH_SNIPPET_CHARS = 400
 
-@Composable
-private fun SortMenuButton(
-    current: MessageSearchSort,
-    onSortChange: (MessageSearchSort) -> Unit,
-) {
-    var expanded by remember { mutableStateOf(false) }
-    Box {
-        IconButton(onClick = { expanded = true }) {
-            Icon(
-                HugeIcons.Sorting01,
-                contentDescription = stringResource(R.string.search_page_sort)
-            )
-        }
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-        ) {
-            MessageSearchSort.entries.forEach { sort ->
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            stringResource(
-                                when (sort) {
-                                    MessageSearchSort.RELEVANCE -> R.string.search_page_sort_relevance
-                                    MessageSearchSort.NEWEST_FIRST -> R.string.search_page_sort_newest
-                                    MessageSearchSort.OLDEST_FIRST -> R.string.search_page_sort_oldest
-                                }
-                            )
-                        )
-                    },
-                    leadingIcon = {
-                        RadioButton(
-                            selected = sort == current,
-                            onClick = null,
-                        )
-                    },
-                    onClick = {
-                        expanded = false
-                        onSortChange(sort)
-                    },
-                )
-            }
-        }
-    }
-}
-
-/**
- * A keyword hit — the pure line's result row, kept exactly as it was: the matched words are
- * highlighted inside the snippet, which is the one thing the keyword index knows that the vector
- * one cannot (it has no words to mark up).
- */
-@Composable
-private fun FtsSearchResultItem(
-    result: MessageSearchResult,
-    onClick: () -> Unit,
-) {
-    val highlightColor = MaterialTheme.colorScheme.tertiaryContainer
-    val untitled = stringResource(R.string.search_page_untitled)
-    val snippetText = buildAnnotatedString {
-        val snippet = result.snippet
-        var index = 0
-        while (index < snippet.length) {
-            val start = snippet.indexOf('[', index)
-            if (start == -1) {
-                append(snippet.substring(index))
-                break
-            }
-            if (start > index) {
-                append(snippet.substring(index, start))
-            }
-            val end = snippet.indexOf(']', start + 1)
-            if (end == -1) {
-                append(snippet.substring(start))
-                break
-            }
-            val matched = snippet.substring(start + 1, end)
-            withStyle(SpanStyle(background = highlightColor)) {
-                append(matched)
-            }
-            index = end + 1
-        }
-    }
-    val formattedTime = remember(result.updateAt) {
-        result.updateAt.toLocalDateTime()
-    }
-
-    Surface(
-        onClick = onClick,
-        color = CustomColors.listItemColors.containerColor,
-        shape = MaterialTheme.shapes.large,
-    ) {
-        Column(
-            modifier = Modifier
-                .padding(16.dp)
-                .fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Text(
-                text = result.title.ifBlank { untitled },
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Text(
-                text = snippetText,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Text(
-                text = formattedTime,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
