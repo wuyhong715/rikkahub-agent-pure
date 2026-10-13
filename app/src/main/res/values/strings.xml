@@ -1465,6 +1465,13 @@
   <string name="setting_page_tool_approvals_search">Search tools</string>
   <string name="setting_page_tool_approvals_add_recommended">Add common dangerous tools</string>
   <string name="setting_page_tool_approvals_no_match">No tools match.</string>
+  <string name="setting_page_tool_approvals_pinned_title">High-risk tools</string>
+  <string name="setting_page_tool_approvals_pinned_desc">Asks for approval before every run, by default</string>
+  <string name="setting_page_tool_approvals_unblacklist_dialog_title">Allow this tool to run without asking?</string>
+  <string name="setting_page_tool_approvals_unblacklist_dialog_body">%1$s runs shell commands as root (uid 0). Removing it from the blacklist lets the assistant run anything on this device without confirmation first — including while you are not watching.\n\nOnly continue if you understand the risk.</string>
+  <string name="setting_page_tool_approvals_unblacklist_dialog_wait">I understand (%1$d)</string>
+  <string name="setting_page_tool_approvals_unblacklist_dialog_confirm">I understand, allow</string>
+  <string name="setting_page_tool_approvals_unblacklist_dialog_cancel">Keep asking</string>
   <string name="setting_page_tool_approvals_load_failed">Couldn\'t load the tool list.</string>
   <string name="setting_page_telegram_token">Bot token</string>
   <string name="setting_page_telegram_token_desc">From @BotFather. The bot must be stopped to edit.</string>

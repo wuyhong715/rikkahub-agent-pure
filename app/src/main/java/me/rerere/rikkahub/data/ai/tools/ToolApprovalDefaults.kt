@@ -7,8 +7,10 @@ package me.rerere.rikkahub.data.ai.tools
  * into the build. Instead every tool is routed through the runtime decision
  * ([ToolApprovalPolicy.shouldAutoApprove] via `ChatService.isToolAutoApproved`) and the user
  * says which tools must ask by putting them on a **blacklist** (Settings → Tool approvals).
- * By default that blacklist is empty: nothing asks. Two things cannot be waived by leaving
- * them off the blacklist, because they are not the user's to waive at the call site:
+ * That blacklist starts out holding only [DEFAULT_BLACKLISTED] — the root tool — so the default
+ * posture is "nothing asks except the one tool that can do anything at all"; see the note on
+ * [DEFAULT_BLACKLISTED]. Two more things cannot be waived by leaving them off the blacklist,
+ * because they are not the user's to waive at the call site:
  *
  *  - [NO_ALWAYS_ALLOW] — a small, hard floor of privilege-escalation surfaces. Never
  *    auto-approved, cannot be removed from the asking set, no "always" shortcut.
@@ -33,6 +35,33 @@ object ToolApprovalDefaults {
     const val MCP_TOOL_PREFIX: String = "mcp__"
 
     /**
+     * The one root-capable tool. Named here so the approval, headless and palette rules can never
+     * drift apart on the spelling.
+     */
+    const val ROOT_EXEC_TOOL_NAME: String = "root_exec"
+
+    /**
+     * Tools that ship **on the blacklist**: out of the box they ask before every run.
+     *
+     * Distinct from [NO_ALWAYS_ALLOW]. The floor cannot be taken off at all; these *can* — they are
+     * simply on by default, because the safe state for a tool that runs arbitrary commands as uid 0
+     * is "ask", and the user should have to opt *out* deliberately rather than opt *in* before
+     * anything is safe. Taking one off goes through the risk confirmation on the Settings screen.
+     *
+     * The default is applied by [effectiveBlacklist] (union with whatever is stored) until the
+     * first explicit edit materialises it — see `ToolApprovalPreferences`. That keeps the Settings
+     * switch, the summary count and the runtime decision agreeing from a clean install without a
+     * write-on-open migration.
+     */
+    val DEFAULT_BLACKLISTED: Set<String> = setOf(ROOT_EXEC_TOOL_NAME)
+
+    /**
+     * Blacklisted-by-default tools that the Settings screen pins above the ordinary list, in
+     * display order, so a dangerous default is never buried among ~180 rows.
+     */
+    val PINNED_TOOLS: List<String> = listOf(ROOT_EXEC_TOOL_NAME)
+
+    /**
      * Curated set of tools worth blacklisting: everything side-effecting (writes to disk,
      * runs shell, controls hardware, posts to a remote service, manipulates UI) plus the
      * privacy-sensitive READS (contacts, sms, call log) — reading PII off the device into an
@@ -52,6 +81,9 @@ object ToolApprovalDefaults {
 
         // Shell via Shizuku (shell UID, no root)
         "shizuku_exec",
+        // Shell via Shizuku/Sui with the ROOT UID. On the blacklist by default (see
+        // [DEFAULT_BLACKLISTED]) and refused in headless runs (see HeadlessToolApprovalPolicy).
+        ROOT_EXEC_TOOL_NAME,
 
         // Remote shell (SSH)
         "ssh_exec",
@@ -338,4 +370,19 @@ object ToolApprovalDefaults {
      */
     fun isHardFloor(toolName: String): Boolean =
         toolName in NO_ALWAYS_ALLOW || toolName.startsWith(MCP_TOOL_PREFIX)
+
+    /**
+     * The blacklist as the app should treat it.
+     *
+     * Before the user has made any explicit edit (`seeded == false`) the [DEFAULT_BLACKLISTED]
+     * entries are included, so the Settings switch and the runtime decision agree from the first
+     * launch; the first edit materialises this same value into storage (see
+     * `ToolApprovalPreferences`). Once seeded, the stored set is the whole truth — which is what
+     * lets a user actually remove a default, and the reason this is a one-shot union rather than a
+     * permanent one.
+     *
+     * Pure, so the rule is unit-testable without DataStore.
+     */
+    fun effectiveBlacklist(stored: Set<String>, seeded: Boolean): Set<String> =
+        if (seeded) stored else stored + DEFAULT_BLACKLISTED
 }

@@ -868,6 +868,10 @@ class LocalTools(
         }
         if (options.contains(LocalToolOption.Shizuku)) {
             tools.add(me.rerere.rikkahub.data.ai.tools.local.shizukuExecTool(context))
+            // Same broker, uid 0. Registered alongside rather than replacing: which one is usable
+            // depends on how the user started Shizuku (or whether Sui is installed), and that is a
+            // runtime property the model cannot see until it asks.
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.rootExecTool(context))
         }
         if (options.contains(LocalToolOption.TelegramBot)) {
             tools.add(telegramSetTokenTool(telegramBotPreferences, telegramBotClient))

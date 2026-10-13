@@ -21,7 +21,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -35,6 +37,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.agentdef.LocalToolGroups
@@ -100,6 +103,21 @@ fun SettingToolApprovalsPage() {
                 TextButton(onClick = { pendingYoloEnable = false }) {
                     Text(stringResource(R.string.setting_page_tool_approvals_yolo_dialog_cancel))
                 }
+            },
+        )
+    }
+
+    // Taking a blacklisted-by-default tool off the blacklist (see ToolApprovalDefaults.PINNED_TOOLS).
+    // Not a plain switch flip: the confirmation below cannot be pressed for 5 seconds, because the
+    // thing being switched off is "ask me before you run arbitrary commands as root".
+    var pendingUnblacklist by remember { mutableStateOf<String?>(null) }
+    pendingUnblacklist?.let { toolName ->
+        RiskUnblacklistDialog(
+            toolName = toolName,
+            onCancel = { pendingUnblacklist = null },
+            onConfirm = {
+                pendingUnblacklist = null
+                scope.launch { prefs.setBlacklisted(toolName, needsApproval = false) }
             },
         )
     }
@@ -195,6 +213,51 @@ fun SettingToolApprovalsPage() {
                 }
             }
 
+            // Blacklisted-by-default tools, pinned above the list so a dangerous default is never
+            // buried among ~180 rows. Rendered from the same live catalogue as the groups below
+            // (LocalToolPalette), so the pinned row and the grouped row can never disagree about
+            // whether the tool exists.
+            if (toolPalette != null) {
+                val pinned = ToolApprovalDefaults.PINNED_TOOLS.mapNotNull { toolPalette.hit(it) }
+                if (pinned.isNotEmpty()) {
+                    item {
+                        CardGroup(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 8.dp),
+                            title = { Text(stringResource(R.string.setting_page_tool_approvals_pinned_title)) },
+                        ) {
+                            pinned.forEach { hit ->
+                                item(
+                                    headlineContent = { Text(hit.name) },
+                                    supportingContent = {
+                                        Text(
+                                            text = stringResource(R.string.setting_page_tool_approvals_pinned_desc),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    },
+                                    trailingContent = {
+                                        Switch(
+                                            checked = hit.name in blacklist,
+                                            onCheckedChange = { next ->
+                                                if (next) {
+                                                    scope.launch { prefs.setBlacklisted(hit.name, needsApproval = true) }
+                                                } else {
+                                                    // Goes through the 5-second risk dialog instead of
+                                                    // applying immediately.
+                                                    pendingUnblacklist = hit.name
+                                                }
+                                            },
+                                        )
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             item {
                 Column(
                     modifier = Modifier.padding(horizontal = 16.dp),
@@ -254,6 +317,9 @@ fun SettingToolApprovalsPage() {
                 // blacklist, so showing it a switch would be a lie.
                 val hits = (if (query.isBlank()) toolPalette.hits else toolPalette.matchAll(query))
                     .filterNot { it.name == ToolApprovalPolicy.ASK_USER_TOOL_NAME }
+                    // Pinned tools are rendered in their own card above; repeating them in a group
+                    // would give the same switch two homes (and two chances to disagree).
+                    .filterNot { it.name in ToolApprovalDefaults.PINNED_TOOLS }
                 if (hits.isEmpty()) {
                     item {
                         Text(
@@ -332,4 +398,66 @@ fun SettingToolApprovalsPage() {
             }
         }
     }
+}
+
+/** How long the confirm button of [RiskUnblacklistDialog] stays disabled. */
+private const val UNBLACKLIST_CONFIRM_SECONDS = 5
+
+/**
+ * Confirmation for taking a blacklisted-by-default tool off the blacklist.
+ *
+ * The confirm button is disabled for [UNBLACKLIST_CONFIRM_SECONDS] so the warning cannot be
+ * dismissed by muscle memory — the user has to read it and wait, which is the whole point of
+ * shipping the tool blacklisted. Cancelling is always available and instant.
+ */
+@Composable
+private fun RiskUnblacklistDialog(
+    toolName: String,
+    onCancel: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    var secondsLeft by remember(toolName) { mutableIntStateOf(UNBLACKLIST_CONFIRM_SECONDS) }
+    LaunchedEffect(toolName) {
+        while (secondsLeft > 0) {
+            delay(1_000)
+            secondsLeft -= 1
+        }
+    }
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = {
+            Text(
+                text = stringResource(R.string.setting_page_tool_approvals_unblacklist_dialog_title),
+                fontWeight = FontWeight.Bold,
+            )
+        },
+        text = {
+            Text(
+                stringResource(
+                    R.string.setting_page_tool_approvals_unblacklist_dialog_body,
+                    toolName,
+                )
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm, enabled = secondsLeft == 0) {
+                Text(
+                    text = if (secondsLeft > 0) {
+                        stringResource(
+                            R.string.setting_page_tool_approvals_unblacklist_dialog_wait,
+                            secondsLeft,
+                        )
+                    } else {
+                        stringResource(R.string.setting_page_tool_approvals_unblacklist_dialog_confirm)
+                    },
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onCancel) {
+                Text(stringResource(R.string.setting_page_tool_approvals_unblacklist_dialog_cancel))
+            }
+        },
+    )
 }

@@ -109,13 +109,14 @@ class HeadlessToolApprovalPolicyTest {
     }
 
     @Test
-    fun `the refused set is exactly the union of the five groups`() {
+    fun `the refused set is exactly the union of the six groups`() {
         assertEquals(
             HeadlessToolApprovalPolicy.PER_CALL_CONFIRM_TOOL_NAMES +
                 HeadlessToolApprovalPolicy.PRIVACY_SENSITIVE_TOOL_NAMES +
                 HeadlessToolApprovalPolicy.PRIVATE_DATA_TOOL_NAMES +
                 HeadlessToolApprovalPolicy.EXPERT_WRITE_TOOL_NAMES +
-                HeadlessToolApprovalPolicy.MODEL_WRITE_TOOL_NAMES,
+                HeadlessToolApprovalPolicy.MODEL_WRITE_TOOL_NAMES +
+                HeadlessToolApprovalPolicy.ROOT_TOOL_NAMES,
             HeadlessToolApprovalPolicy.REFUSED_TOOL_NAMES,
         )
         HeadlessToolApprovalPolicy.REFUSED_TOOL_NAMES.forEach { name ->
@@ -124,13 +125,14 @@ class HeadlessToolApprovalPolicyTest {
     }
 
     @Test
-    fun `the five groups do not overlap`() {
+    fun `the six groups do not overlap`() {
         val upstream = ToolApprovalDefaults.NO_ALWAYS_ALLOW
         val mic = HeadlessToolApprovalPolicy.PRIVACY_SENSITIVE_TOOL_NAMES
         val private = HeadlessToolApprovalPolicy.PRIVATE_DATA_TOOL_NAMES
         val expertWrites = HeadlessToolApprovalPolicy.EXPERT_WRITE_TOOL_NAMES
         val modelWrites = HeadlessToolApprovalPolicy.MODEL_WRITE_TOOL_NAMES
-        val groups = listOf(upstream, mic, private, expertWrites, modelWrites)
+        val rootTool = HeadlessToolApprovalPolicy.ROOT_TOOL_NAMES
+        val groups = listOf(upstream, mic, private, expertWrites, modelWrites, rootTool)
         groups.forEachIndexed { index, left ->
             groups.drop(index + 1).forEach { right ->
                 assertTrue("two headless-refusal groups overlap", (left intersect right).isEmpty())
@@ -156,6 +158,18 @@ class HeadlessToolApprovalPolicyTest {
             )
         }
         assertNull(HeadlessToolApprovalPolicy.refusalDetail("model_list"))
+    }
+
+    @Test
+    fun `the root tool is refused headless but still prompts normally`() {
+        // shizuku_exec is deliberately allowed unattended (a schedule has to be able to work);
+        // root_exec is not the same trade — uid 0 with nobody watching.
+        assertTrue(HeadlessToolApprovalPolicy.isRefused("root_exec"))
+        assertNotNull(HeadlessToolApprovalPolicy.refusalEnvelopeFor("root_exec", headless = true))
+        assertNull(HeadlessToolApprovalPolicy.refusalEnvelopeFor("root_exec", headless = false))
+        assertTrue(
+            HeadlessToolApprovalPolicy.refusalDetail("root_exec")!!.contains("root"),
+        )
     }
 
     // ------------------------------------------------------------- non-refusals

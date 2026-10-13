@@ -138,6 +138,17 @@ object HeadlessToolApprovalPolicy {
     )
 
     /**
+     * The root tool (`root_exec`).
+     *
+     * `shizuku_exec` is deliberately *allowed* unattended — a schedule has to be able to do its
+     * job, and the shell UID cannot read other apps' data or touch system partitions. `root_exec`
+     * is not the same trade: as uid 0 it can do anything on the device, and this conversation has
+     * no approval channel, so nobody can weigh that. Refused outright rather than left to the
+     * blacklist, which headless runs bypass by design.
+     */
+    val ROOT_TOOL_NAMES: Set<String> = setOf(ToolApprovalDefaults.ROOT_EXEC_TOOL_NAME)
+
+    /**
      * D5 - the install tools. A sub-agent MAY install, but the installed artifact lands
      * **disabled** and the user enables it from the UI. Refusing the install outright was
      * over-defensive: the risk is the artifact being *live*, not the bytes reaching disk.
@@ -162,11 +173,13 @@ object HeadlessToolApprovalPolicy {
     /**
      * Every tool this policy refuses in a headless run: the per-call-confirmation set
      * ([PER_CALL_CONFIRM_TOOL_NAMES]), [PRIVACY_SENSITIVE_TOOL_NAMES],
-     * [PRIVATE_DATA_TOOL_NAMES], [EXPERT_WRITE_TOOL_NAMES] and [MODEL_WRITE_TOOL_NAMES].
+     * [PRIVATE_DATA_TOOL_NAMES], [EXPERT_WRITE_TOOL_NAMES], [MODEL_WRITE_TOOL_NAMES] and
+     * [ROOT_TOOL_NAMES].
      */
     val REFUSED_TOOL_NAMES: Set<String> =
         PER_CALL_CONFIRM_TOOL_NAMES + PRIVACY_SENSITIVE_TOOL_NAMES +
-            PRIVATE_DATA_TOOL_NAMES + EXPERT_WRITE_TOOL_NAMES + MODEL_WRITE_TOOL_NAMES
+            PRIVATE_DATA_TOOL_NAMES + EXPERT_WRITE_TOOL_NAMES + MODEL_WRITE_TOOL_NAMES +
+            ROOT_TOOL_NAMES
 
     /**
      * Why [toolName] must not run in a headless conversation, or null when it may.
@@ -206,6 +219,11 @@ object HeadlessToolApprovalPolicy {
                     "later generation resolves against. This conversation has no approval " +
                     "channel, so the user cannot review the change. Ask the user to add, edit or " +
                     "remove models from the settings screen."
+            name in ROOT_TOOL_NAMES ->
+                "$name runs commands as root (uid 0). This conversation has no approval channel, " +
+                    "so nobody can take that risk on the user's behalf — an unattended run does " +
+                    "not get root. Run it from a conversation the user can approve, or use " +
+                    "shizuku_exec if the shell UID is enough."
             else -> null
         }
     }

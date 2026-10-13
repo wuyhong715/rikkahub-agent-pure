@@ -23,6 +23,9 @@ private const val MAX_TIMEOUT_MS = 300_000
  * permission granted from Settings -> Shizuku; the permission is never requested from this
  * tool or automatically, only from an explicit tap on that settings screen.
  *
+ * For a root-started broker use [rootExecTool] (`root_exec`), which shares this execution path
+ * but refuses unless the broker's UID is 0.
+ *
  * Approval-gated in [me.rerere.rikkahub.data.ai.tools.ToolApprovalDefaults] and its `command`
  * argument is checked against [me.rerere.rikkahub.data.ai.tools.HardlineCommandGuard] like
  * every other shell surface (SSH, Termux).
@@ -33,6 +36,7 @@ fun shizukuExecTool(context: Context): Tool = Tool(
         Run a shell command with Shizuku's privileges (the shell UID - the same level `adb
         shell` gets, no root). Returns stdout, stderr, and exit code. Requires the Shizuku app
         installed, its service running, and permission granted from Settings -> Shizuku.
+        If the broker is running as root and the command needs uid 0, use root_exec instead.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(

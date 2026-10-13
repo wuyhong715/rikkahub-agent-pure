@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.data.ai.tools
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -40,5 +41,52 @@ class ToolApprovalDefaultsTest {
         assertTrue("launch_activity" in ToolApprovalDefaults.DANGEROUS_TOOLS)
         assertTrue("termux_run_command" in ToolApprovalDefaults.DANGEROUS_TOOLS)
         assertTrue("write_text_file" in ToolApprovalDefaults.DANGEROUS_TOOLS)
+    }
+
+    // ------------------------------------------------------- blacklisted-by-default
+
+    @Test
+    fun `the root tool is blacklisted and pinned by default`() {
+        assertTrue(ToolApprovalDefaults.ROOT_EXEC_TOOL_NAME in ToolApprovalDefaults.DEFAULT_BLACKLISTED)
+        assertTrue(ToolApprovalDefaults.ROOT_EXEC_TOOL_NAME in ToolApprovalDefaults.PINNED_TOOLS)
+        assertTrue(ToolApprovalDefaults.ROOT_EXEC_TOOL_NAME in ToolApprovalDefaults.DANGEROUS_TOOLS)
+    }
+
+    @Test
+    fun `a default is blacklisted, not on the floor, so the user can take it off`() {
+        // The whole point of shipping root_exec blacklisted (rather than flooring it) is that the
+        // user *can* remove it, through the risk confirmation. If it ever moves onto the floor that
+        // becomes impossible and the Settings switch silently stops meaning anything.
+        ToolApprovalDefaults.DEFAULT_BLACKLISTED.forEach { name ->
+            assertFalse("$name must stay removable", ToolApprovalDefaults.isHardFloor(name))
+        }
+    }
+
+    @Test
+    fun `every pinned tool is blacklisted by default`() {
+        ToolApprovalDefaults.PINNED_TOOLS.forEach { name ->
+            assertTrue(
+                "$name is pinned in the UI but not blacklisted by default",
+                name in ToolApprovalDefaults.DEFAULT_BLACKLISTED,
+            )
+        }
+    }
+
+    @Test
+    fun `the defaults are unioned in until the first edit`() {
+        val unseeded = ToolApprovalDefaults.effectiveBlacklist(emptySet(), seeded = false)
+        assertTrue(ToolApprovalDefaults.ROOT_EXEC_TOOL_NAME in unseeded)
+        assertTrue("read_file" in ToolApprovalDefaults.effectiveBlacklist(setOf("read_file"), seeded = false))
+    }
+
+    @Test
+    fun `once seeded the stored set is the whole truth, so a removal sticks`() {
+        // This is what makes "take it off the blacklist" possible at all: after the first edit the
+        // defaults are not re-added on every read.
+        assertEquals(emptySet<String>(), ToolApprovalDefaults.effectiveBlacklist(emptySet(), seeded = true))
+        assertEquals(
+            setOf("read_file"),
+            ToolApprovalDefaults.effectiveBlacklist(setOf("read_file"), seeded = true),
+        )
     }
 }

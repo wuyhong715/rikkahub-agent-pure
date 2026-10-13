@@ -1709,6 +1709,13 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_page_tool_approvals_add_recommended">加入常见危险工具</string>
   <string name="setting_page_tool_approvals_no_match">没有匹配的工具。</string>
   <string name="setting_page_tool_approvals_load_failed">无法加载工具列表。</string>
+  <string name="setting_page_tool_approvals_pinned_title">高危工具</string>
+  <string name="setting_page_tool_approvals_pinned_desc">默认每次运行前都需要你审批</string>
+  <string name="setting_page_tool_approvals_unblacklist_dialog_title">允许该工具无需审批直接运行？</string>
+  <string name="setting_page_tool_approvals_unblacklist_dialog_body">%1$s 会以 root（uid 0）身份执行 shell 命令。将其移出黑名单后，助手可在不事先征求你同意的情况下在本设备上执行任何操作——包括你不在场的时候。\n\n请确认你理解该风险后再继续。</string>
+  <string name="setting_page_tool_approvals_unblacklist_dialog_wait">我已了解风险（%1$d）</string>
+  <string name="setting_page_tool_approvals_unblacklist_dialog_confirm">我已了解，仍然允许</string>
+  <string name="setting_page_tool_approvals_unblacklist_dialog_cancel">保持需要审批</string>
   <string name="setting_page_tool_approvals_yolo_dialog_body">每个工具 — 本地 shell、SSH、文件写入、屏幕自动化、Telegram 外发、MCP，以及黑名单里的全部工具 — 都将无需询问你直接运行。智能体可能发送消息、在远程主机上运行命令、拍照、写入文件、安排任务，全部无需确认。\n\nHARDLINE 保护仍然生效：rm -rf /、mkfs、shutdown / reboot、向块设备 dd、fork 炸弹、编码载荷管道 — 这些仍会被拦截。\n\n这是个危险操作。仅在你信任模型 + 助手配置 + 你自己的提示词会负责任地行事时才启用。</string>
   <string name="setting_page_tool_approvals_yolo_dialog_cancel">保持授权开启</string>
   <string name="setting_page_tool_approvals_yolo_dialog_confirm">是的，我很蠢，启用</string>

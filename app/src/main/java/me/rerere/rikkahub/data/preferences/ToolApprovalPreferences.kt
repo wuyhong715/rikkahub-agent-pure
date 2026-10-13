@@ -9,6 +9,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import me.rerere.rikkahub.data.ai.tools.ToolApprovalDefaults
 
 private const val TAG = "ToolApprovalPreferences"
 
@@ -36,8 +37,8 @@ internal fun migrateWorkspaceToolsFrom(stored: Set<String>): Pair<Set<String>, S
  * The approval decision's persisted inputs, read in one go so a single tool call does not pay
  * two DataStore round-trips.
  *
- * @property blacklist tools that require a fresh confirmation before running. Empty by default:
- *   nothing asks until the user says so.
+ * @property blacklist tools that require a fresh confirmation before running. Starts at
+ *   [ToolApprovalDefaults.DEFAULT_BLACKLISTED] and is whatever the user made of it afterwards.
  * @property yolo the "I AM STUPID" blanket consent toggle.
  */
 data class ToolApprovalSnapshot(
@@ -48,9 +49,11 @@ data class ToolApprovalSnapshot(
 /**
  * Persistent tool-approval prefs, blacklist era. Two pieces:
  *
- * 1. **Blacklist** — the user's list of tools that must ask before they run. Default empty, so
- *    out of the box nothing prompts. Configured from Settings → Tool approvals; each entry can
- *    be removed there to stop it asking. The non-waivable floor
+ * 1. **Blacklist** — the user's list of tools that must ask before they run. It starts as
+ *    [ToolApprovalDefaults.DEFAULT_BLACKLISTED] — the root tool, and nothing else — so the default
+ *    posture is "only the tool that can do anything asks". Configured from Settings → Tool
+ *    approvals; each entry can be removed there to stop it asking (a dangerous default goes
+ *    through an explicit confirmation first). The non-waivable floor
  *    ([me.rerere.rikkahub.data.ai.tools.ToolApprovalDefaults.isHardFloor]) and every opaque
  *    `mcp__*` tool ask regardless of this set.
  *
@@ -68,10 +71,25 @@ class ToolApprovalPreferences(private val context: Context) {
     private val K_BLACKLIST = stringSetPreferencesKey("tool_blacklist")
     private val K_GLOBAL_YOLO = booleanPreferencesKey("global_auto_approve_yolo")
 
+    /**
+     * Whether [ToolApprovalDefaults.DEFAULT_BLACKLISTED] has been merged into [K_BLACKLIST] yet.
+     *
+     * Until it has, every read unions the defaults in ([ToolApprovalDefaults.effectiveBlacklist]),
+     * so a clean install already shows the root tool as blacklisted in Settings and — more to the
+     * point — the runtime decision agrees with it. The first explicit edit materialises that view
+     * and flips this flag; from then on the stored set is the whole truth, which is what lets a
+     * user actually remove a default.
+     */
+    private val K_DEFAULT_BLACKLIST_SEEDED = booleanPreferencesKey("default_blacklist_seeded")
+
     // Filtered on every read: a stale workspace_-prefixed entry must never surface in the
-    // settings list or an approval check, even before any cleanup write happens.
-    val blacklistFlow: Flow<Set<String>> = store.data.map {
-        migrateWorkspaceToolsFrom(it[K_BLACKLIST].orEmpty()).first
+    // settings list or an approval check, even before any cleanup write happens. The
+    // blacklisted-by-default tools are unioned in until the first edit materialises them.
+    val blacklistFlow: Flow<Set<String>> = store.data.map { prefs ->
+        ToolApprovalDefaults.effectiveBlacklist(
+            migrateWorkspaceToolsFrom(prefs[K_BLACKLIST].orEmpty()).first,
+            prefs[K_DEFAULT_BLACKLIST_SEEDED] == true,
+        )
     }
 
     /** Live flow of the "I AM STUPID" global auto-approve flag. Default false. */
@@ -79,16 +97,29 @@ class ToolApprovalPreferences(private val context: Context) {
         it[K_GLOBAL_YOLO] ?: false
     }
 
-    suspend fun currentBlacklist(): Set<String> =
-        migrateWorkspaceToolsFrom(store.data.first()[K_BLACKLIST].orEmpty()).first
+    suspend fun currentBlacklist(): Set<String> = snapshot().blacklist
 
-    /** Blacklist + YOLO in one read, for the per-call auto-approval check. */
+    /**
+     * Blacklist + YOLO in one read, for the per-call auto-approval check.
+     *
+     * Also the one-shot point where the [ToolApprovalDefaults.DEFAULT_BLACKLISTED] entries get
+     * materialised: the first call after install merges them into storage once, so the runtime
+     * decision matches what the Settings screen already showed. Every later call is a plain read.
+     */
     suspend fun snapshot(): ToolApprovalSnapshot {
         val prefs = store.data.first()
-        return ToolApprovalSnapshot(
-            blacklist = migrateWorkspaceToolsFrom(prefs[K_BLACKLIST].orEmpty()).first,
-            yolo = prefs[K_GLOBAL_YOLO] ?: false,
+        val seeded = prefs[K_DEFAULT_BLACKLIST_SEEDED] == true
+        val blacklist = ToolApprovalDefaults.effectiveBlacklist(
+            migrateWorkspaceToolsFrom(prefs[K_BLACKLIST].orEmpty()).first,
+            seeded,
         )
+        if (!seeded) {
+            store.edit {
+                it[K_BLACKLIST] = blacklist
+                it[K_DEFAULT_BLACKLIST_SEEDED] = true
+            }
+        }
+        return ToolApprovalSnapshot(blacklist = blacklist, yolo = prefs[K_GLOBAL_YOLO] ?: false)
     }
 
     /** Snapshot read of the YOLO flag alone. */
@@ -108,20 +139,40 @@ class ToolApprovalPreferences(private val context: Context) {
             return
         }
         store.edit { prefs ->
-            val current = prefs[K_BLACKLIST].orEmpty()
-            prefs[K_BLACKLIST] = if (needsApproval) current + toolName else current - toolName
+            // Materialise the defaults we were already showing *before* applying the change, so
+            // removing one sticks: the stored set becomes authoritative from here on.
+            val base = ToolApprovalDefaults.effectiveBlacklist(
+                migrateWorkspaceToolsFrom(prefs[K_BLACKLIST].orEmpty()).first,
+                prefs[K_DEFAULT_BLACKLIST_SEEDED] == true,
+            )
+            prefs[K_BLACKLIST] = if (needsApproval) base + toolName else base - toolName
+            prefs[K_DEFAULT_BLACKLIST_SEEDED] = true
         }
     }
 
-    /** Drop every blacklist entry. The floor and `mcp__*` tools still ask. */
+    /**
+     * Drop every user-added blacklist entry. The floor and `mcp__*` tools still ask, and so do the
+     * [ToolApprovalDefaults.DEFAULT_BLACKLISTED] tools: a bulk clear must not be a shortcut around
+     * the per-tool risk confirmation that removing a dangerous default goes through.
+     */
     suspend fun clearBlacklist() {
-        store.edit { it.remove(K_BLACKLIST) }
+        store.edit {
+            it[K_BLACKLIST] = ToolApprovalDefaults.DEFAULT_BLACKLISTED
+            it[K_DEFAULT_BLACKLIST_SEEDED] = true
+        }
     }
 
     /** Add every name in [toolNames] (workspace tools filtered out) to the blacklist in one write. */
     suspend fun addAllToBlacklist(toolNames: Collection<String>) {
         val clean = toolNames.filterNot(::isWorkspaceToolName).toSet()
         if (clean.isEmpty()) return
-        store.edit { prefs -> prefs[K_BLACKLIST] = prefs[K_BLACKLIST].orEmpty() + clean }
+        store.edit { prefs ->
+            val base = ToolApprovalDefaults.effectiveBlacklist(
+                migrateWorkspaceToolsFrom(prefs[K_BLACKLIST].orEmpty()).first,
+                prefs[K_DEFAULT_BLACKLIST_SEEDED] == true,
+            )
+            prefs[K_BLACKLIST] = base + clean
+            prefs[K_DEFAULT_BLACKLIST_SEEDED] = true
+        }
     }
 }
