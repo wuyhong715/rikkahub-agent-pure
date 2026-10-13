@@ -2116,6 +2116,10 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_shizuku_status_permission">权限</string>
   <string name="setting_shizuku_status_permission_granted">已授权，点击重新请求</string>
   <string name="setting_shizuku_status_permission_missing">未授权，点击请求</string>
+  <string name="setting_shizuku_status_privilege">运行身份</string>
+  <string name="setting_shizuku_status_privilege_root">Root（uid 0）</string>
+  <string name="setting_shizuku_status_privilege_shell">Shell（uid 2000）</string>
+  <string name="setting_shizuku_status_privilege_unknown">未知</string>
   <string name="setting_shizuku_toast_permission_granted">权限已授予</string>
   <string name="setting_shizuku_toast_permission_denied">权限被拒绝</string>
   <string name="setting_shizuku_toast_service_not_running">Shizuku 服务未运行</string>

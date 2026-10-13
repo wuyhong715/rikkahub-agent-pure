@@ -143,6 +143,26 @@ object ShizukuManager {
     )
 
     /**
+     * The live broker's UID — 0 for a root-started Shizuku / Sui, 2000 for an ADB-started one —
+     * or null when there is no binder to ask.
+     *
+     * `Shizuku.getUid()` reads a value captured from the server during the binder handshake, so
+     * it requires a live binder (calling it without one throws, per the SDK contract); hence the
+     * [Shizuku.pingBinder] guard. The UID is the *server's*, but the user service we bind via
+     * [exec] runs as the same UID, see [PrivilegeLevel] for the on-device evidence.
+     */
+    fun uid(): Int? = runCatching {
+        if (Shizuku.pingBinder()) Shizuku.getUid() else null
+    }.getOrNull()
+
+    /**
+     * [uid] mapped to a [PrivilegeLevel] — the privilege the shell tools run with right now.
+     * [PrivilegeLevel.UNKNOWN] whenever there is no live broker (or the UID is one we do not
+     * model). Pure mapping lives in [PrivilegeLevel.fromUid] so it is unit-testable.
+     */
+    fun privilege(): PrivilegeLevel = PrivilegeLevel.fromUid(uid())
+
+    /**
      * Fires Shizuku's own consent flow. No-op if the binder isn't alive (there is nothing to
      * ask). The result arrives asynchronously via a registered
      * [Shizuku.OnRequestPermissionResultListener], not an Activity callback: callers must

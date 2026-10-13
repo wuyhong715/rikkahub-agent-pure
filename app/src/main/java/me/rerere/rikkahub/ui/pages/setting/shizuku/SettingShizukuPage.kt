@@ -31,6 +31,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.dokar.sonner.ToastType
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.shizuku.PrivilegeLevel
 import me.rerere.rikkahub.shizuku.ShizukuManager
 import me.rerere.rikkahub.shizuku.ShizukuStatus
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -58,8 +59,10 @@ fun SettingShizukuPage() {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     var status by remember { mutableStateOf(ShizukuManager.status(ctx)) }
+    var privilege by remember { mutableStateOf(ShizukuManager.privilege()) }
     fun refresh() {
         status = ShizukuManager.status(ctx)
+        privilege = ShizukuManager.privilege()
     }
 
     // Live updates: binder appearing/dying, plus the async result of a permission request.
@@ -183,6 +186,31 @@ fun SettingShizukuPage() {
                         StatusDot(color = if (permissionGranted) StatusColor.Green else StatusColor.Red)
                     },
                 )
+                // What the broker actually runs as ~ the privilege `shizuku_exec` (and the root
+                // tool, when configured) execute with. Shown even when not ready so the state is
+                // never ambiguous: a root-started Shizuku / Sui reads "Root (uid 0)", an
+                // ADB-started one reads "Shell (uid 2000)".
+                item(
+                    headlineContent = { Text(stringResource(R.string.setting_shizuku_status_privilege)) },
+                    supportingContent = {
+                        Text(
+                            when (privilege) {
+                                PrivilegeLevel.ROOT -> stringResource(R.string.setting_shizuku_status_privilege_root)
+                                PrivilegeLevel.SHELL -> stringResource(R.string.setting_shizuku_status_privilege_shell)
+                                PrivilegeLevel.UNKNOWN -> stringResource(R.string.setting_shizuku_status_privilege_unknown)
+                            }
+                        )
+                    },
+                    leadingContent = {
+                        StatusDot(
+                            color = when (privilege) {
+                                PrivilegeLevel.ROOT -> StatusColor.Amber
+                                PrivilegeLevel.SHELL -> StatusColor.Green
+                                PrivilegeLevel.UNKNOWN -> StatusColor.Red
+                            }
+                        )
+                    },
+                )
             }
 
             CardGroup(
@@ -197,13 +225,15 @@ fun SettingShizukuPage() {
     }
 }
 
-private enum class StatusColor { Green, Red }
+private enum class StatusColor { Green, Red, Amber }
 
 @Composable
 private fun StatusDot(color: StatusColor) {
     val tint = when (color) {
         StatusColor.Green -> MaterialTheme.colorScheme.primary
         StatusColor.Red -> MaterialTheme.colorScheme.error
+        // Amber marks the elevated (root) privilege — distinct from both "ok" and "error".
+        StatusColor.Amber -> MaterialTheme.colorScheme.tertiary
     }
     Canvas(
         modifier = Modifier

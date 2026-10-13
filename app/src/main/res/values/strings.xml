@@ -1957,6 +1957,10 @@
   <string name="setting_shizuku_status_permission">Permission</string>
   <string name="setting_shizuku_status_permission_granted">Granted, tap to re-request</string>
   <string name="setting_shizuku_status_permission_missing">Not granted, tap to request</string>
+  <string name="setting_shizuku_status_privilege">Privilege level</string>
+  <string name="setting_shizuku_status_privilege_root">Root (uid 0)</string>
+  <string name="setting_shizuku_status_privilege_shell">Shell (uid 2000)</string>
+  <string name="setting_shizuku_status_privilege_unknown">Unknown</string>
   <string name="setting_shizuku_toast_permission_granted">Permission granted</string>
   <string name="setting_shizuku_toast_permission_denied">Permission denied</string>
   <string name="setting_shizuku_toast_service_not_running">Shizuku service is not running</string>
