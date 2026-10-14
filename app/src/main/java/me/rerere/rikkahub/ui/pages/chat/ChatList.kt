@@ -38,7 +38,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListItemInfo
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -103,7 +102,6 @@ import me.rerere.rikkahub.ui.components.ui.Tooltip
 import me.rerere.rikkahub.ui.hooks.ImeLazyListAutoScroller
 import me.rerere.rikkahub.ui.theme.ChatFontProvider
 import me.rerere.rikkahub.utils.plus
-import kotlin.math.roundToInt
 import kotlin.uuid.Uuid
 
 private const val TAG = "ChatList"
@@ -240,15 +238,6 @@ private fun ChatListNormal(
         }
     }
 
-    fun List<LazyListItemInfo>.isAtBottom(): Boolean {
-        val lastItem = lastOrNull() ?: return false
-        val inputBarHeight = with(density) { innerPadding.calculateBottomPadding().toPx() }
-        val lastPos = lastItem.offset + lastItem.size
-        val inputPos = (state.layoutInfo.viewportEndOffset - inputBarHeight.roundToInt())
-        // println("lastPos = $lastPos, inputPos = $inputPos  | ${lastPos <= inputPos - 8}")
-        return lastPos <= inputPos - 8
-    }
-
     // 聊天选择
     val selectedItems = remember { mutableStateListOf<Uuid>() }
     var selecting by remember { mutableStateOf(false) }
@@ -285,18 +274,30 @@ private fun ChatListNormal(
             .fillMaxSize(),
     ) {
         // 自动滚动到底部
+        // 只在「本来就在跟随、且用户没有接管过滚动」时跟随流式输出：任何滚动一开始就暂停跟随，
+        // 直到列表真正停在末尾才恢复。判定见 ChatAutoFollow.kt —— 不能退化成「离底部近」，
+        // 那会在「拖动结束 → 惯性滑行开始」的那一帧把用户的快速滑动拽回底部
+        // （requestScrollToItem 会取消同优先级的 fling）。
         if (settings.displaySetting.enableAutoScroll) {
+            var following by remember { mutableStateOf(false) }
+
             LaunchedEffect(state) {
-                snapshotFlow { state.layoutInfo.visibleItemsInfo }.collect { visibleItemsInfo ->
-                    // println("is bottom = ${visibleItemsInfo.isAtBottom()}, scroll = ${state.isScrollInProgress}, can_scroll = ${state.canScrollForward}, loading = $loading")
-                    if (!state.isScrollInProgress && loadingState) {
-                        if (visibleItemsInfo.isAtBottom()) {
-                            val latestGroupIndex = conversationUpdated.messageNodes
-                                .groupAutomaticCompactionMessages()
-                                .lastIndex
-                            state.requestScrollToItem(latestGroupIndex + 10)
-                            // Log.i(TAG, "ChatList: scroll to $latestGroupIndex")
-                        }
+                // 四个信号必须在同一个快照里读：拆成两个 collector 时，同一个 apply 里会读到
+                // 彼此错位的值（正是上面说的那一帧）。
+                snapshotFlow {
+                    AutoFollowSample(
+                        scrolling = state.isScrollInProgress,
+                        canScrollForward = state.canScrollForward,
+                        itemCount = state.layoutInfo.totalItemsCount,
+                        loading = loadingState,
+                    )
+                }.collect { sample ->
+                    when (autoFollowAction(sample, following)) {
+                        AutoFollowAction.PAUSE -> following = false
+                        AutoFollowAction.RESUME -> following = true
+                        AutoFollowAction.FOLLOW ->
+                            state.requestScrollToItem(conversationUpdated.messageNodes.size + 10)
+                        AutoFollowAction.NONE -> Unit
                     }
                 }
             }
