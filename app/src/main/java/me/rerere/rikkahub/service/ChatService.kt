@@ -469,6 +469,9 @@ class ChatService(
 ) {
     // workspace 系统提示注入 (依赖 workspaceRepository, 故在类内构造)
     private val workspaceReminderTransformer = WorkspaceReminderTransformer(workspaceRepository)
+    // Moxw - <app_environment> 系统提示注入 (依赖 workspaceRepository / libraryIndex, 故在类内构造)
+    private val appEnvironmentTransformer = me.rerere.rikkahub.data.ai.transformers
+        .AppEnvironmentTransformer(workspaceRepository, libraryIndex)
 
     // 统一会话管理
     private val sessions = ConcurrentHashMap<Uuid, ConversationSession>()
@@ -1915,6 +1918,7 @@ class ChatService(
                     addAll(inputTransformers)
                     add(templateTransformer)
                     add(workspaceReminderTransformer)
+                    add(appEnvironmentTransformer)
                     // 放在最后: 估算的是已注入模板 / workspace 引导之后的最终请求上下文
                     add(ContextBudgetReminderTransformer)
                 },
