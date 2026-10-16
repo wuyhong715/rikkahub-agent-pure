@@ -1,13 +1,11 @@
 package me.rerere.rikkahub.data.ai.transformers
 
-import android.os.Build
 import android.util.Log
 import kotlinx.coroutines.CancellationException
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.Brand
-import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.data.ai.AppEnvironmentPrompt
 import me.rerere.rikkahub.data.ai.tools.ColdMemoryRules
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
@@ -26,11 +24,15 @@ import me.rerere.rikkahub.shizuku.ShizukuManager
  * workspace directories hold the knowledge base and the file library, whether semantic search
  * has an embedding model behind it, and what privilege the Shizuku shell currently has.
  *
+ * The block deliberately carries only ACTION-RELEVANT, STABLE facts (拍板 2026-10-17): no app
+ * version, no SDK level, no device model — the model never branches on those, and leaving them
+ * out keeps the block byte-identical across releases and devices, which keeps prompt caching
+ * intact and the prompt generic.
+ *
  * The knowledge-base / file-library lines are emitted under exactly the same gates that register
  * their tools (`ChatService.createColdMemoryToolsIfConfigured` /
  * `createLibraryToolsIfConfigured`), so the prompt never advertises a capability the turn does
- * not actually have. The block contains no timestamps, so its bytes stay stable across turns of
- * one conversation and prompt caching is not disturbed.
+ * not actually have.
  *
  * All collection is best-effort and synchronous-cheap: one small directory listing (installed
  * embedding models), one binder call guarded by pingBinder (Shizuku UID), and two DAO reads.
@@ -115,13 +117,6 @@ class AppEnvironmentTransformer(
 
         return AppEnvironmentPrompt.Info(
             appName = Brand.NAME,
-            appLabel = Brand.NAME,
-            versionName = BuildConfig.VERSION_NAME,
-            versionCode = BuildConfig.VERSION_CODE,
-            packageName = context.packageName,
-            androidRelease = Build.VERSION.RELEASE ?: "unknown",
-            androidSdk = Build.VERSION.SDK_INT,
-            deviceModel = deviceModel(),
             privateFilesDir = context.filesDir.absolutePath,
             coldMemoryLabel = coldMemoryLabel,
             libraryLabel = libraryLabel,
@@ -133,21 +128,6 @@ class AppEnvironmentTransformer(
 
     private companion object {
         const val TAG = "AppEnvironment"
-
-        /** "vivo V2463A" style; MODEL sometimes already carries the manufacturer prefix. */
-        fun deviceModel(): String {
-            val manufacturer = Build.MANUFACTURER.orEmpty().trim()
-            val model = Build.MODEL.orEmpty().trim()
-            val brandified = manufacturer.replaceFirstChar {
-                if (it.isLowerCase()) it.titlecase() else it.toString()
-            }
-            return when {
-                model.isEmpty() -> brandified.ifEmpty { "unknown" }
-                brandified.isEmpty() -> model
-                model.startsWith(brandified, ignoreCase = true) -> model
-                else -> "$brandified $model"
-            }
-        }
     }
 }
 

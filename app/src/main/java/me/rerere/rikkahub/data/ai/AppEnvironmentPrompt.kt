@@ -9,9 +9,16 @@ package me.rerere.rikkahub.data.ai
  * assistant has them configured), whether semantic search has an embedding model behind it, and
  * what privilege the Shizuku shell currently runs with.
  *
- * The two path lines are conditional on purpose: they are emitted exactly when the matching
- * tools (`memory_*` / `library_search`) are registered, so the prompt never advertises a place
- * the model cannot act on. The conditions are mirrored from
+ * Design rule (拍板 2026-10-17): the block carries only ACTION-RELEVANT and STABLE facts.
+ * Anything volatile or behaviourally irrelevant — app version, versionCode, Android SDK level,
+ * device model — is deliberately absent: the model's behaviour never branches on them, and
+ * keeping them out keeps the block byte-identical across releases and devices. What stays is
+ * what changes what the model DOES: paths it can hand to file tools, capabilities that decide
+ * whether a tool call will work, and the privilege the shell runs with.
+ *
+ * The two workspace-path lines are conditional on purpose: they are emitted exactly when the
+ * matching tools (`memory_*` / `library_search`) are registered, so the prompt never advertises
+ * a place the model cannot act on. The conditions are mirrored from
  * `ChatService.createColdMemoryToolsIfConfigured` / `createLibraryToolsIfConfigured`; if those
  * gates change, the transformer's collection code must change with them.
  *
@@ -32,16 +39,6 @@ object AppEnvironmentPrompt {
     data class Info(
         /** Brand short name, used in shared-folder paths: "Moxw". */
         val appName: String,
-        /** Human-facing app label: "Moxw Agent". */
-        val appLabel: String,
-        val versionName: String,
-        /** `BuildConfig.VERSION_CODE` is a String buildConfigField in this build. */
-        val versionCode: String,
-        val packageName: String,
-        val androidRelease: String,
-        val androidSdk: Int,
-        /** e.g. "vivo V2463A". Sanitized inside [render]. */
-        val deviceModel: String,
         /** `context.filesDir.absolutePath`. */
         val privateFilesDir: String,
         /** "/workspace/<dir>" when cold memory is fully configured; null omits the line. */
@@ -56,11 +53,6 @@ object AppEnvironmentPrompt {
 
     fun render(info: Info): String = buildString {
         appendLine("<app_environment>")
-        appendLine(
-            "- App: ${info.appLabel} ${info.versionName} (versionCode ${info.versionCode}); " +
-                "package ${info.packageName}; Android ${info.androidRelease} (SDK ${info.androidSdk}); " +
-                "device ${sanitize(info.deviceModel)}."
-        )
         appendLine(
             "- User-visible shared folders — files written here appear in the user's Files app; " +
                 "deliver user-facing output here:"
@@ -93,11 +85,13 @@ object AppEnvironmentPrompt {
             )
 
             SemanticBackend.LOCAL -> appendLine(
-                "- Semantic search: ready (local embedding model \"${info.semanticModelLabel ?: "auto"}\")."
+                "- Semantic search: ready (local embedding model " +
+                    "\"${sanitize(info.semanticModelLabel ?: "auto")}\")."
             )
 
             SemanticBackend.CLOUD -> appendLine(
-                "- Semantic search: ready (cloud embedding model \"${info.semanticModelLabel ?: "auto"}\")."
+                "- Semantic search: ready (cloud embedding model " +
+                    "\"${sanitize(info.semanticModelLabel ?: "auto")}\")."
             )
         }
         when (info.shellPrivilege) {
@@ -118,7 +112,10 @@ object AppEnvironmentPrompt {
         append("</app_environment>")
     }.trim()
 
-    /** Device/OEM strings are attacker-controlled enough to deserve control-character stripping. */
+    /**
+     * Model file names and cloud display names are user/provider-controlled: strip control
+     * characters so one cannot forge new prompt lines.
+     */
     private fun sanitize(raw: String): String =
         raw.filterNot { it.isISOControl() }.trim().take(MAX_FIELD_CHARS).ifBlank { "unknown" }
 
