@@ -20,6 +20,17 @@ package me.rerere.rikkahub.data.vector
  */
 enum class LibraryFileKind { TEXT, CODE, DOCUMENT, IMAGE, AUDIO, VIDEO }
 
+/**
+ * True for the two kinds whose rows are their own segments rather than their text.
+ *
+ * Top-level rather than a member of [WorkspaceLibraryRules] so that every reader - the round
+ * planner, the coordinator, the search envelope - can ask the same question without importing an
+ * object's scope. A media hit is a time range, not a passage, and that distinction is needed in
+ * more than one place.
+ */
+val LibraryFileKind.isMedia: Boolean
+    get() = this == LibraryFileKind.AUDIO || this == LibraryFileKind.VIDEO
+
 /** Which `:document` parser reads a file, if any. Kept here so the mapping is testable. */
 enum class LibraryDocumentParser { PDF, DOCX, PPTX, EPUB }
 
@@ -388,10 +399,6 @@ object WorkspaceLibraryRules {
             kept <= limit
         }
     }
-
-    /** True for the two kinds whose rows are their own segments rather than their text. */
-    val LibraryFileKind.isMedia: Boolean
-        get() = this == LibraryFileKind.AUDIO || this == LibraryFileKind.VIDEO
 
     /**
      * What an image with no recognisable text is indexed as.

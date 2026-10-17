@@ -59,6 +59,13 @@ object LibrarySearchEnvelope {
                         put("score", hit.score)
                         put("text", hit.text.take(MAX_HIT_CHARS))
                         if (hit.text.length > MAX_HIT_CHARS) put("truncated", true)
+                        // A media hit is a *time range* in a file, not a passage in it: the model
+                        // must not follow the path to `workspace_read_file`, which would return
+                        // bytes. Said here rather than left to the description of the text.
+                        val kind = WorkspaceLibraryRules.kindOf(hit.path.substringAfterLast('/'))
+                        if (kind != null && kind.isMedia) {
+                            put("kind", if (kind == LibraryFileKind.AUDIO) "audio" else "video")
+                        }
                     })
                 }
             })

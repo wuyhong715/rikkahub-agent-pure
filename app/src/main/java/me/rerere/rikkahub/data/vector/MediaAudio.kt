@@ -136,8 +136,9 @@ object MediaAudio {
             sink.finish()
             result = sink.result()
         } catch (e: Exception) {
+            // What was produced before the failure is still returned: a half-readable recording is
+            // more useful indexed than absent, and the rows that did make it are complete segments.
             Log.d(TAG, "cannot decode '${file.name}': ${e.message}")
-            emptyList()
         } finally {
             runCatching { decoder?.stop() }
             runCatching { decoder?.release() }
