@@ -15,7 +15,9 @@ import org.junit.Test
  */
 class EmbeddingReadinessTest {
 
-    private val visionFile = LitertEmbeddingCatalog.ENTRIES.single().file
+    // The catalogue now offers more than one file - the 740M one with the audio encoder, the 440M
+    // one without - so this names the capability rather than the entry's position.
+    private val visionFile = LitertEmbeddingCatalog.ENTRIES.first { it.vision }.file
 
     @Test
     fun `a vision litertlm reads images`() {

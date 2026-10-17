@@ -15,7 +15,11 @@ import org.junit.Test
  */
 class LitertEmbeddingCatalogTest {
 
-    private val entry = LitertEmbeddingCatalog.ENTRIES.single()
+    /** The text+vision file: the one a fresh install gets. */
+    private val entry = LitertEmbeddingCatalog.ENTRIES.first { it.vision && !it.audio }
+
+    /** The text+vision+audio file: the one an audio index needs. */
+    private val audioEntry = LitertEmbeddingCatalog.ENTRIES.first { it.audio }
 
     /**
      * The `litert-community` repos publish a per-SoC AOT build next to the plain file, and the
@@ -94,7 +98,40 @@ class LitertEmbeddingCatalogTest {
     }
 
     @Test
-    fun `curatedOrder lists the curated files`() {
-        assertEquals(listOf(entry.file), LitertEmbeddingCatalog.curatedOrder)
+    fun `curatedOrder lists the curated files, the default first`() {
+        assertEquals(LitertEmbeddingCatalog.ENTRIES.map { it.file }, LitertEmbeddingCatalog.curatedOrder)
+        // The order is what an untouched install falls back to, and 485 MB of audio encoder is not
+        // what somebody asking for "an embedding model" should get by default.
+        assertEquals(entry.file, LitertEmbeddingCatalog.curatedOrder.first())
+    }
+
+    @Test
+    fun `the audio file is the same plain file, with an encoder the other one lacks`() {
+        assertFalse(audioEntry.file, audioEntry.file.contains("_Qualcomm"))
+        assertEquals("embeddinggemma-2-740m.litertlm", audioEntry.file)
+        assertEquals(484_622_336L, audioEntry.sizeBytes)
+        assertTrue(audioEntry.audio)
+        // The 740M is text + vision + audio; an audio index that could not read a video's frames
+        // would be a worse file than no file at all.
+        assertTrue(audioEntry.vision)
+        assertFalse(entry.audio)
+    }
+
+    /**
+     * The audio signature has to hold a segment.
+     *
+     * The model charges 25 tokens per second of sound, so the signature is what bounds a segment:
+     * at 2048 the ceiling is ~80 s, which is what `AudioDecodeRules` plans for. A smaller signature
+     * would make every segment over-long and the engine would refuse it outright.
+     */
+    @Test
+    fun `the audio signature holds a whole segment`() {
+        assertEquals(2_048, audioEntry.signature)
+        // 75 s, the segment length the app's audio rules plan for (this module cannot see them).
+        val tokensForOneSegment = 75 * 25
+        assertTrue(
+            "a segment needs $tokensForOneSegment tokens",
+            tokensForOneSegment <= audioEntry.signature,
+        )
     }
 }
