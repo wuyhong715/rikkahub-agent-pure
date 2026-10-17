@@ -28,6 +28,7 @@ class LitertLmEmbedderTest {
         var closed = false
             private set
         var lastImageBytes: ByteArray? = null
+        var lastAudioBytes: ByteArray? = null
 
         override fun embed(texts: List<String>): List<FloatArray> {
             failOnEmbed?.let { throw it }
@@ -38,6 +39,12 @@ class LitertLmEmbedderTest {
             failOnEmbed?.let { throw it }
             lastImageBytes = bytes
             return FloatArray(dim) { (bytes.size % 5).toFloat() }
+        }
+
+        override fun embedAudio(bytes: ByteArray): FloatArray {
+            failOnEmbed?.let { throw it }
+            lastAudioBytes = bytes
+            return FloatArray(dim) { (bytes.size % 3).toFloat() }
         }
 
         override fun close() {
@@ -286,6 +293,26 @@ class LitertLmEmbedderTest {
     fun `embedImage throws when nothing is loaded`() = runBlocking {
         val embedder = LitertLmEmbedder(native = FakeNative())
         val thrown = runCatching { embedder.embedImage(byteArrayOf(1)) }.exceptionOrNull()
+        assertTrue(thrown is IllegalStateException)
+    }
+
+    @Test
+    fun `embedAudio hands the clip through untouched`() = runBlocking {
+        val native = FakeNative(dim = 768)
+        val embedder = LitertLmEmbedder(native = native)
+        embedder.load("/models/a.litertlm", signature = 2048)
+
+        val wav = byteArrayOf(82, 73, 70, 70, 0, 0, 0, 0)
+        val vector = embedder.embedAudio(wav)
+
+        assertEquals(768, vector.size)
+        assertArrayEquals(wav, native.sessions.single().lastAudioBytes)
+    }
+
+    @Test
+    fun `embedAudio throws when nothing is loaded`() = runBlocking {
+        val embedder = LitertLmEmbedder(native = FakeNative())
+        val thrown = runCatching { embedder.embedAudio(byteArrayOf(1)) }.exceptionOrNull()
         assertTrue(thrown is IllegalStateException)
     }
 

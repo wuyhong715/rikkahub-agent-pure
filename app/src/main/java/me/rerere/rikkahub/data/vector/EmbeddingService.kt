@@ -133,6 +133,15 @@ class EmbeddingService(
          */
         val vision: Boolean = false,
         /**
+         * True when this model embeds sound as sound.
+         *
+         * Same contract as [vision], and deliberately a separately named flag rather than one
+         * "multimodal" boolean: the two encoders are separate modules that can be present in any
+         * combination, and an audio indexer that had to guess from a vision flag would either skip
+         * a capable model or hand bytes to one that cannot take them.
+         */
+        val audio: Boolean = false,
+        /**
          * The cloud model behind this, or null when it is the local file.
          *
          * [dim] is 0 when this is set: the width is the provider's business and is only known once
@@ -362,6 +371,7 @@ class EmbeddingService(
             documentPrefix = entry.documentPrefix,
             litert = true,
             vision = entry.vision,
+            audio = entry.audio,
             // What the engine actually came up on, so the identity of every row it writes reflects
             // the accelerator that produced it.
             accelerator = info.accelerator,
@@ -422,6 +432,33 @@ class EmbeddingService(
         require(model.vision) { "the embedding model in effect cannot embed images" }
         if (model.isCloud) error("a cloud embedding model cannot embed images")
         val vector = litert.embedImage(bytes)
+        require(vector.size == model.dim) {
+            "the model returned ${vector.size} values, expected ${model.dim}"
+        }
+        vector
+    }
+
+    /**
+     * Whether the model in effect can embed a clip of sound *as sound*.
+     *
+     * There is no fallback behind this one: nothing in the app transcribes audio, so false means
+     * the file is not indexed at all. Callers therefore have to ask before reading minutes of a
+     * file they cannot use.
+     */
+    suspend fun canEmbedAudio(): Boolean = ensureLoaded()?.audio == true
+
+    /**
+     * Embeds one clip of sound, L2-normalised, with no task prefix.
+     *
+     * [bytes] is a RIFF/WAVE of 16 kHz mono 16-bit PCM: the model's own requirement, and the
+     * decoder that produces it is [MediaAudio]. Throws when the model in effect has no audio
+     * encoder - callers are expected to have asked [canEmbedAudio] first.
+     */
+    suspend fun embedAudio(bytes: ByteArray): FloatArray = onWorker {
+        val model = ensureLoaded() ?: error("no embedding model is installed")
+        require(model.audio) { "the embedding model in effect cannot embed audio" }
+        if (model.isCloud) error("a cloud embedding model cannot embed audio")
+        val vector = litert.embedAudio(bytes)
         require(vector.size == model.dim) {
             "the model returned ${vector.size} values, expected ${model.dim}"
         }

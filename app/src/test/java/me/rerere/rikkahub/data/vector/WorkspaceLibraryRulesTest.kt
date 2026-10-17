@@ -37,9 +37,12 @@ class WorkspaceLibraryRulesTest {
         assertNull(WorkspaceLibraryRules.kindOf("archive.zip"))
         assertNull(WorkspaceLibraryRules.kindOf("model.gguf"))
         assertNull(WorkspaceLibraryRules.kindOf("binary"))
-        // Media that is not text, and whose meaning needs a model of its own.
-        assertNull(WorkspaceLibraryRules.kindOf("clip.mp4"))
-        assertNull(WorkspaceLibraryRules.kindOf("voice.m4a"))
+        // Media is no longer "not indexed": audio and video are kinds of their own, and the walk
+        // reads them through the decoders rather than through the text reader.
+        assertEquals(LibraryFileKind.VIDEO, WorkspaceLibraryRules.kindOf("clip.mp4"))
+        assertEquals(LibraryFileKind.AUDIO, WorkspaceLibraryRules.kindOf("voice.m4a"))
+        // What is left out is what nothing in the app can read.
+        assertNull(WorkspaceLibraryRules.kindOf("movie.avi"))
     }
 
     @Test
@@ -257,5 +260,60 @@ class WorkspaceLibraryRulesTest {
             WorkspaceLibraryRules.placeholderForImage("a.png")
                 .startsWith(WorkspaceLibraryRules.IMAGE_PLACEHOLDER_PREFIX),
         )
+    }
+
+    @Test
+    fun `recordings and videos are their own kinds`() {
+        assertEquals(LibraryFileKind.AUDIO, WorkspaceLibraryRules.kindOf("talk.m4a"))
+        assertEquals(LibraryFileKind.AUDIO, WorkspaceLibraryRules.kindOf("voice.OGG"))
+        assertEquals(LibraryFileKind.VIDEO, WorkspaceLibraryRules.kindOf("clip.mp4"))
+        assertEquals(LibraryFileKind.VIDEO, WorkspaceLibraryRules.kindOf("holiday.MOV"))
+        // A media extension nobody can decode is still not text: it is left alone rather than read.
+        assertNull(WorkspaceLibraryRules.kindOf("notes.xyz"))
+    }
+
+    @Test
+    fun `a media file is charged nothing against the character budget`() {
+        // Its cost is duration, and the round bounds that separately as it reads. Charging a
+        // two-hour recording by its byte count would empty the round before a single note.
+        assertEquals(0, WorkspaceLibraryRules.estimatedChars(LibraryFileKind.AUDIO, 900_000_000))
+        assertEquals(0, WorkspaceLibraryRules.estimatedChars(LibraryFileKind.VIDEO, 900_000_000))
+    }
+
+    @Test
+    fun `a round opens only so many media files`() {
+        val candidates = (1..6).map {
+            candidate("clip%02d.mp4".format(it), kind = LibraryFileKind.VIDEO, sizeBytes = 10_000_000)
+        }
+        val round = WorkspaceLibraryRules.planRound(candidates, indexed = emptySet(), maxMedia = 2)
+        assertEquals(listOf("clip01.mp4", "clip02.mp4"), round.take.map { it.path })
+        assertEquals(4, round.deferred)
+    }
+
+    @Test
+    fun `the media cap never pushes out the files that are not media`() {
+        val candidates = (1..3).map {
+            candidate("clip$it.mp4", kind = LibraryFileKind.VIDEO, sizeBytes = 10_000_000)
+        } + candidate("notes.md")
+        val round = WorkspaceLibraryRules.planRound(candidates, indexed = emptySet(), maxMedia = 1)
+        // Path order, so the note lands after the clip: the cap drops media, never text.
+        assertEquals(listOf("clip1.mp4", "notes.md"), round.take.map { it.path })
+        assertEquals(2, round.deferred)
+    }
+
+    @Test
+    fun `a media file over its cap is reported rather than opened`() {
+        val round = WorkspaceLibraryRules.planRound(
+            listOf(
+                candidate(
+                    "huge.mkv",
+                    kind = LibraryFileKind.VIDEO,
+                    sizeBytes = WorkspaceLibraryRules.MAX_MEDIA_FILE_BYTES + 1,
+                ),
+            ),
+            indexed = emptySet(),
+        )
+        assertEquals(emptyList<String>(), round.take.map { it.path })
+        assertEquals(listOf("huge.mkv"), round.tooBig)
     }
 }

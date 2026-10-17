@@ -201,8 +201,10 @@ class LibraryIndexCoordinator(
             val docs = mutableListOf<WorkspaceLibrarySource.Doc>()
             var failed = 0
             val nativeImages = NativeImageBudget(WorkspaceLibraryRules.MAX_NATIVE_IMAGES_PER_ROUND)
+            val media = MediaBudget(WorkspaceLibraryRules.MAX_MEDIA_SECONDS_PER_ROUND * 1000L)
+            val frames = FrameBudget(WorkspaceLibraryRules.MAX_VIDEO_FRAMES_PER_ROUND)
             for (candidate in round.take) {
-                val doc = readDoc(workspaceId, candidate, nativeImages)
+                val doc = readDoc(workspaceId, candidate, nativeImages, media, frames)
                 if (doc == null) {
                     failed++
                 } else {
@@ -343,6 +345,32 @@ class LibraryIndexCoordinator(
     }
 
     /**
+     * How much sound this round may still embed, in milliseconds.
+     *
+     * Charged before the file is opened rather than after it is embedded: the point is to bound the
+     * work, and a budget consulted once the decoder has already run is a budget that has already
+     * been spent.
+     */
+    private class MediaBudget(private var leftMs: Long) {
+        fun take(durationMs: Long): Boolean {
+            if (durationMs <= 0 || durationMs > leftMs) return false
+            leftMs -= durationMs
+            return true
+        }
+    }
+
+    /** How many video frames this round may still hand to the vision encoder. */
+    private class FrameBudget(private var left: Int) {
+        fun take(count: Int): Boolean {
+            if (count <= 0 || count > left) return false
+            left -= count
+            return true
+        }
+
+        fun remaining(): Int = left
+    }
+
+    /**
      * The model's own vector for [file], or null when it cannot produce one.
      *
      * Null covers three situations on purpose - the model in effect cannot see, this round has
@@ -372,6 +400,8 @@ class LibraryIndexCoordinator(
         workspaceId: String,
         candidate: WorkspaceLibraryRules.Candidate,
         nativeImages: NativeImageBudget,
+        media: MediaBudget,
+        frames: FrameBudget,
     ): WorkspaceLibrarySource.Doc? {
         val relative = candidate.path.removePrefix("${ColdMemoryRules.WORKSPACE_PREFIX}/")
         var imageVector: FloatArray? = null
@@ -416,6 +446,24 @@ class LibraryIndexCoordinator(
                     }
                 }
 
+                LibraryFileKind.AUDIO -> {
+                    val file = workspaceRepository.resolveFile(
+                        workspaceId,
+                        WorkspaceStorageArea.FILES,
+                        relative,
+                    )
+                    return audioDoc(file, candidate.path, candidate.name, media)
+                }
+
+                LibraryFileKind.VIDEO -> {
+                    val file = workspaceRepository.resolveFile(
+                        workspaceId,
+                        WorkspaceStorageArea.FILES,
+                        relative,
+                    )
+                    return videoDoc(file, candidate.path, candidate.name, media, frames)
+                }
+
                 else -> workspaceRepository.readText(workspaceId, relative)
             }
             val capped = text.take(WorkspaceLibraryRules.charCapOf(candidate.kind))
@@ -432,6 +480,123 @@ class LibraryIndexCoordinator(
             Log.d(TAG, "cannot read '${candidate.path}', skipping it this round: ${e.message}")
             null
         }
+    }
+
+    /**
+     * A recording: one row per segment the model can hear, or null when it cannot be indexed.
+     *
+     * Null is the answer for four different situations on purpose - no audio-capable model, no
+     * duration, longer than the cap, no budget left - because the caller does the same thing in
+     * all of them: leave the file alone this round and try again when something has changed.
+     * Failing to embed one recording must never fail the round.
+     */
+    private suspend fun audioDoc(
+        file: File,
+        path: String,
+        name: String,
+        media: MediaBudget,
+    ): WorkspaceLibrarySource.Doc? {
+        if (!embeddings.canEmbedAudio()) return null
+        val duration = MediaProbe.durationMs(file) ?: return null
+        if (duration > WorkspaceLibraryRules.MAX_MEDIA_SECONDS * 1000L) {
+            Log.d(TAG, "skipping '$name': ${duration / 1000}s is over the media cap")
+            return null
+        }
+        if (!file.isFile || !media.take(duration)) return null
+
+        val segments = audioSegments(file, name, duration)
+        if (segments.isEmpty()) return null
+        return WorkspaceLibrarySource.Doc(
+            path = path,
+            text = segments.joinToString("\n") { it.label },
+            chunkMode = ChunkingMode.PLAIN,
+            segments = segments,
+            fingerprint = "${file.length()}:$duration",
+        )
+    }
+
+    /**
+     * A video: sampled frames through the vision encoder, plus its sound track when the model can
+     * hear - a talk is found by what was *said* in it as often as by what was shown.
+     */
+    private suspend fun videoDoc(
+        file: File,
+        path: String,
+        name: String,
+        media: MediaBudget,
+        frames: FrameBudget,
+    ): WorkspaceLibrarySource.Doc? {
+        if (!embeddings.canEmbedImages()) return null
+        val duration = MediaProbe.durationMs(file) ?: return null
+        if (duration > WorkspaceLibraryRules.MAX_MEDIA_SECONDS * 1000L) {
+            Log.d(TAG, "skipping '$name': ${duration / 1000}s is over the media cap")
+            return null
+        }
+        val plan = VideoDecodeRules.frameTimesMs(duration, frames.remaining())
+        if (plan.isEmpty() || !frames.take(plan.size)) return null
+
+        val decoded = MediaVideo.read(file, duration, maxFrames = plan.size)
+        val segments = decoded.mapNotNull { frame -> frameVector(frame, name) }.toMutableList()
+
+        // The sound track is charged separately from the frames, and only when there is one: a
+        // silent screen recording must not spend the round's audio budget.
+        if (embeddings.canEmbedAudio() && MediaProbe.hasAudioTrack(file) && media.take(duration)) {
+            segments += audioSegments(file, name, duration)
+        }
+        if (segments.isEmpty()) return null
+        return WorkspaceLibrarySource.Doc(
+            path = path,
+            text = segments.joinToString("\n") { it.label },
+            chunkMode = ChunkingMode.PLAIN,
+            segments = segments,
+            fingerprint = "${file.length()}:$duration",
+        )
+    }
+
+    private suspend fun audioSegments(
+        file: File,
+        name: String,
+        durationMs: Long,
+    ): List<WorkspaceLibrarySource.Segment> {
+        val clips = MediaAudio.read(
+            file = file,
+            durationMs = durationMs,
+            // One file may not own more than the whole round's allowance, so the cap here is the
+            // number of segments a [WorkspaceLibraryRules.MAX_MEDIA_SECONDS] file can have.
+            maxSegments = (WorkspaceLibraryRules.MAX_MEDIA_SECONDS * 1000L /
+                AudioDecodeRules.MAX_SEGMENT_MS).toInt(),
+        )
+        val segments = ArrayList<WorkspaceLibrarySource.Segment>(clips.size)
+        for ((segment, wav) in clips) {
+            val vector = try {
+                embeddings.embedAudio(wav)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.d(TAG, "cannot embed '${name}' at ${segment.startMs}ms: ${e.message}")
+                null
+            } ?: continue
+            segments += WorkspaceLibrarySource.Segment(
+                label = MediaLabels.audio(name, segment.startMs, segment.endMs),
+                vector = vector,
+            )
+        }
+        return segments
+    }
+
+    private suspend fun frameVector(
+        frame: MediaVideo.Frame,
+        name: String,
+    ): WorkspaceLibrarySource.Segment? = try {
+        WorkspaceLibrarySource.Segment(
+            label = MediaLabels.frame(name, frame.atMs),
+            vector = embeddings.embedImage(frame.jpeg),
+        )
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        Log.d(TAG, "cannot embed a frame of '${name}': ${e.message}")
+        null
     }
 
     private fun parseDocument(file: File, parser: LibraryDocumentParser): String = when (parser) {

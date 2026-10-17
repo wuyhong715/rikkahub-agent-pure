@@ -52,6 +52,16 @@ data class LitertEmbeddingEntry(
      * difference is worth carrying in the catalogue rather than discovering at run time.
      */
     val vision: Boolean,
+    /**
+     * Whether this model embeds sound as sound.
+     *
+     * True only for the files that carry the 300M audio encoder. Same role as [vision]: it is a
+     * property of the *file*, and everything that indexes audio reads it to decide whether the
+     * bytes can go straight to the engine. There is no text fallback for sound - nothing in this
+     * app transcribes it - so a false here means audio files are simply not indexed rather than
+     * indexed worse.
+     */
+    val audio: Boolean = false,
     /** Text prepended to *documents*. See `LlamaCppEmbeddingEntry` for why this is not optional. */
     val documentPrefix: String,
     /** Text prepended to *queries*. */
@@ -97,6 +107,29 @@ object LitertEmbeddingCatalog {
             documentPrefix = DOCUMENT_PREFIX,
             queryPrefix = SEARCH_QUERY_PREFIX,
             minMemGb = 4,
+        ),
+        LitertEmbeddingEntry(
+            displayName = "EmbeddingGemma 2 740M (text + vision + audio)",
+            repo = "litert-community/embeddinggemma-2-740m-litert-lm",
+            // The plain file, for the same reason as above: the per-SoC `_Qualcomm_SM8750` build
+            // is an NPU-only artefact and does not allocate its tensors on a CPU/GPU configuration.
+            file = "embeddinggemma-2-740m.litertlm",
+            // Read off the HuggingFace API on 2026-10-17; see the note on ENTRIES about exactness.
+            sizeBytes = 484_622_336L,
+            dim = 768,
+            maxContextTokens = 8_192,
+            // 2048 rather than the 512 of the 440M entry, and the reason is audio: the model
+            // charges 25 tokens per second of sound, so 2048 tokens is what makes a segment of
+            // roughly 80 seconds fit. A 512 signature would cap a segment at 20 seconds, which is
+            // shorter than a single sentence of a podcast. The arena grows with this, which is the
+            // one risk the caller sees as a failed open rather than as wrong answers.
+            signature = 2_048,
+            vision = true,
+            audio = true,
+            documentPrefix = DOCUMENT_PREFIX,
+            queryPrefix = SEARCH_QUERY_PREFIX,
+            // 485 MB of weights plus the 300M audio encoder resident at once.
+            minMemGb = 6,
         ),
     )
 

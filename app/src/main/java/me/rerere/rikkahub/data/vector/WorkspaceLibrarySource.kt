@@ -34,7 +34,31 @@ class WorkspaceLibrarySource(
         val text: String,
         val chunkMode: ChunkingMode,
         val vector: FloatArray? = null,
+        /**
+         * The pieces of a media file, each with the vector the model produced for it.
+         *
+         * A recording and a video are the two files whose meaning is not in one place: one vector
+         * for a whole podcast would be about nothing in particular, and the whole point of a media
+         * index is to answer *where* in it. Each segment is therefore its own row, ordered, with
+         * [Segment.label] as its text and its time as part of the label.
+         *
+         * empty for every other kind of file - [vector] and the chunker are the paths a text or an
+         * image take.
+         */
+        val segments: List<Segment> = emptyList(),
+        /**
+         * What the file *is*, for the fingerprint of every segment row.
+         *
+         * A label alone cannot tell whether the audio behind it changed: the same recording
+         * re-exported at a different bitrate keeps both its length and its timestamps. Size and
+         * modification time are the evidence available, and they ride here rather than in the label
+         * because a timestamp in the text would be searchable as content.
+         */
+        val fingerprint: String = "",
     )
+
+    /** One embedded piece of a media file: what it is called, and its vector. */
+    data class Segment(val label: String, val vector: FloatArray)
 
     data class SyncReport(
         val documents: Int,
@@ -84,13 +108,26 @@ class WorkspaceLibrarySource(
 
         for (doc in docs) {
             val precomputed = doc.vector
+            val segments = doc.segments
             // A file the model read itself is ONE chunk. Cutting a picture into pieces would only
             // produce fragments of a meaning that was never in the text in the first place, and
             // the vector we already have describes the whole of it.
-            val fresh = if (precomputed != null) {
-                listOf(TextChunk(0, doc.text, ContentHash.of(doc.text)))
-            } else {
-                TextChunker.chunk(doc.text, ChunkSpec(mode = doc.chunkMode).fitting(model.contextTokens))
+            //
+            // A recording or a video is the opposite case and the reason [Doc.segments] exists:
+            // its rows *are* the pieces, each already embedded with the moment it covers.
+            val fresh = when {
+                segments.isNotEmpty() -> segments.mapIndexed { index, segment ->
+                    TextChunk(
+                        index = index,
+                        text = segment.label,
+                        // The label carries the time, the fingerprint carries whether the bytes
+                        // behind it changed - see [Doc.fingerprint].
+                        contentHash = ContentHash.of("${segment.label}#${doc.fingerprint}"),
+                    )
+                }
+
+                precomputed != null -> listOf(TextChunk(0, doc.text, ContentHash.of(doc.text)))
+                else -> TextChunker.chunk(doc.text, ChunkSpec(mode = doc.chunkMode).fitting(model.contextTokens))
             }
             if (fresh.isEmpty()) {
                 skipped++
@@ -101,8 +138,17 @@ class WorkspaceLibrarySource(
                 unchanged++
                 continue
             }
+            val byLabel = if (segments.isEmpty()) {
+                emptyMap()
+            } else {
+                segments.associate { it.label to it.vector }
+            }
             val written = store.apply(source, doc.path, plan, model.modelId, nowMs) { texts ->
-                if (precomputed != null) listOf(precomputed) else embeddings.embedDocuments(texts)
+                when {
+                    segments.isNotEmpty() -> texts.map { label -> byLabel.getValue(label) }
+                    precomputed != null -> listOf(precomputed)
+                    else -> embeddings.embedDocuments(texts)
+                }
             }
             plan as SyncPlan.Replace
             chunks += written

@@ -18,7 +18,7 @@ package me.rerere.rikkahub.data.vector
  * recognition, so a screenshot of a stack trace is searchable by the words in it. That is also why
  * they carry numbers of their own - see [ESTIMATED_CHARS_PER_IMAGE] and [MAX_IMAGES_PER_ROUND].
  */
-enum class LibraryFileKind { TEXT, CODE, DOCUMENT, IMAGE }
+enum class LibraryFileKind { TEXT, CODE, DOCUMENT, IMAGE, AUDIO, VIDEO }
 
 /** Which `:document` parser reads a file, if any. Kept here so the mapping is testable. */
 enum class LibraryDocumentParser { PDF, DOCX, PPTX, EPUB }
@@ -46,6 +46,43 @@ object WorkspaceLibraryRules {
      */
     const val MAX_IMAGE_FILE_BYTES = 15_000_000L
     const val MAX_IMAGE_CHARS = 40_000
+
+    /**
+     * A recording or a video is capped by bytes only as a guard against a file the phone cannot
+     * even open; the cost that matters is duration, and it is charged separately.
+     */
+    const val MAX_MEDIA_FILE_BYTES = 2_000_000_000L
+
+    /**
+     * The longest piece of media the index will take on, in seconds.
+     *
+     * Thirty minutes is twenty-four audio segments or twelve video frames. Beyond that the file is
+     * left out rather than indexed partially: the index replaces a document's rows as a whole, so a
+     * half-indexed recording would be re-embedded from the start every round, forever.
+     */
+    const val MAX_MEDIA_SECONDS = 1_800
+
+    /**
+     * How many seconds of media one round may embed.
+     *
+     * A round is a background job on a phone, and an audio segment costs an encoder pass: this is
+     * the number that keeps a folder of podcasts from turning the first pass into a stove. It is
+     * deliberately as large as [MAX_MEDIA_SECONDS] so that a single accepted file always fits -
+     * a file that can never fit its round would be deferred forever.
+     */
+    const val MAX_MEDIA_SECONDS_PER_ROUND = 1_800
+
+    /**
+     * How many media files one round may open.
+     *
+     * Separate from the seconds above because opening one costs a container parse and, for a video,
+     * a `MediaMetadataRetriever`; a folder of two hundred voice memos would otherwise spend the
+     * round's whole time in metadata reads.
+     */
+    const val MAX_MEDIA_FILES_PER_ROUND = 4
+
+    /** Frames one round may hand to the vision encoder, across every video in it. */
+    const val MAX_VIDEO_FRAMES_PER_ROUND = 24
 
     /**
      * One round's budget. This is the number that keeps a phone from embedding for an hour: at
@@ -101,6 +138,14 @@ object WorkspaceLibraryRules {
      */
     private val DECLARED_IMAGE = setOf("png", "jpg", "jpeg", "webp", "bmp", "gif", "heic", "heif")
 
+    /**
+     * Containers the platform decoders read. Audio and video are separate sets rather than one
+     * "media" set because what the index does with them differs in kind: a recording is embedded by
+     * its sound, a video by a dozen frames.
+     */
+    private val DECLARED_AUDIO = setOf("m4a", "mp3", "wav", "ogg", "oga", "opus", "flac", "aac", "amr", "3ga", "wma")
+    private val DECLARED_VIDEO = setOf("mp4", "m4v", "mkv", "webm", "mov", "3gp")
+
     private val DECLARED_TEXT = setOf(
         "md", "markdown", "txt", "text", "rst", "org", "adoc",
         "csv", "tsv", "log", "ndjson", "jsonl",
@@ -147,6 +192,8 @@ object WorkspaceLibraryRules {
             return when (extension) {
                 in DECLARED_DOCUMENT -> LibraryFileKind.DOCUMENT
                 in DECLARED_IMAGE -> LibraryFileKind.IMAGE
+                in DECLARED_AUDIO -> LibraryFileKind.AUDIO
+                in DECLARED_VIDEO -> LibraryFileKind.VIDEO
                 in DECLARED_CODE -> LibraryFileKind.CODE
                 in DECLARED_TEXT -> LibraryFileKind.TEXT
                 else -> null
@@ -185,6 +232,8 @@ object WorkspaceLibraryRules {
         LibraryFileKind.DOCUMENT -> ChunkingMode.PLAIN
         // Recognised text arrives as lines: no markup, and no structure worth trusting.
         LibraryFileKind.IMAGE -> ChunkingMode.PLAIN
+        // Media never reaches the chunker - its rows are its segments - but the mapping is total.
+        LibraryFileKind.AUDIO, LibraryFileKind.VIDEO -> ChunkingMode.PLAIN
     }
 
     fun isIgnoredDirectory(name: String): Boolean =
@@ -201,12 +250,15 @@ object WorkspaceLibraryRules {
     fun sizeCapOf(kind: LibraryFileKind): Long = when (kind) {
         LibraryFileKind.DOCUMENT -> MAX_DOCUMENT_FILE_BYTES
         LibraryFileKind.IMAGE -> MAX_IMAGE_FILE_BYTES
+        LibraryFileKind.AUDIO, LibraryFileKind.VIDEO -> MAX_MEDIA_FILE_BYTES
         else -> MAX_TEXT_FILE_BYTES
     }
 
     fun charCapOf(kind: LibraryFileKind): Int = when (kind) {
         LibraryFileKind.DOCUMENT -> MAX_DOCUMENT_CHARS
         LibraryFileKind.IMAGE -> MAX_IMAGE_CHARS
+        // Unused: a media file's text is the labels this app writes, never its own bytes.
+        LibraryFileKind.AUDIO, LibraryFileKind.VIDEO -> MAX_MEDIA_CHARS
         else -> MAX_TEXT_CHARS
     }
 
@@ -225,6 +277,9 @@ object WorkspaceLibraryRules {
             (sizeBytes / 4).coerceAtMost(MAX_DOCUMENT_CHARS.toLong()).toInt()
         // Independent of the file size on purpose: see [ESTIMATED_CHARS_PER_IMAGE].
         LibraryFileKind.IMAGE -> ESTIMATED_CHARS_PER_IMAGE
+        // Charged nothing against the character budget: a media file's cost is its duration, and
+        // it is bounded by [MAX_MEDIA_SECONDS_PER_ROUND] as the round reads it.
+        LibraryFileKind.AUDIO, LibraryFileKind.VIDEO -> 0
         else ->
             sizeBytes.coerceAtMost(MAX_TEXT_CHARS.toLong()).toInt()
     }
@@ -273,6 +328,7 @@ object WorkspaceLibraryRules {
         budgetChars: Int = MAX_CHARS_PER_ROUND,
         maxFiles: Int = MAX_FILES_PER_ROUND,
         maxImages: Int = MAX_IMAGES_PER_ROUND,
+        maxMedia: Int = MAX_MEDIA_FILES_PER_ROUND,
     ): Round {
         val planned = RoundBudget.plan(
             items = candidates,
@@ -289,7 +345,8 @@ object WorkspaceLibraryRules {
         // the tail keeps the order the planner chose - never read first, then by path - so the
         // images a round postpones are the ones it would have reached last, and the next round
         // carries on where this one stopped instead of starting over.
-        val take = capImages(planned.take, maxImages)
+        val withImages = capImages(planned.take, maxImages)
+        val take = capMedia(withImages, maxMedia)
         return Round(
             take = take,
             deferred = planned.deferred + (planned.take.size - take.size),
@@ -315,6 +372,28 @@ object WorkspaceLibraryRules {
     }
 
     /**
+     * Keeps the first [maxMedia] recordings and videos of a plan, whatever else is in it.
+     *
+     * The same shape as [capImages] and for the same reason: opening one is an order of magnitude
+     * more expensive than reading a note, and a library with a folder of videos must still index
+     * the notes beside them.
+     */
+    private fun capMedia(take: List<Candidate>, maxMedia: Int): List<Candidate> {
+        val limit = maxMedia.coerceAtLeast(0)
+        if (take.count { it.kind.isMedia } <= limit) return take
+        var kept = 0
+        return take.filter { candidate ->
+            if (!candidate.kind.isMedia) return@filter true
+            kept++
+            kept <= limit
+        }
+    }
+
+    /** True for the two kinds whose rows are their own segments rather than their text. */
+    val LibraryFileKind.isMedia: Boolean
+        get() = this == LibraryFileKind.AUDIO || this == LibraryFileKind.VIDEO
+
+    /**
      * What an image with no recognisable text is indexed as.
      *
      * A file whose text comes out empty is skipped, and a skipped file is one the next round tries
@@ -325,4 +404,7 @@ object WorkspaceLibraryRules {
 
     /** Marks a row that stands for an image itself rather than for text read out of one. */
     const val IMAGE_PLACEHOLDER_PREFIX = "Image: "
+
+    /** Upper bound on the label text of one media row; unused by the chunker, used by the reader. */
+    const val MAX_MEDIA_CHARS = 200
 }

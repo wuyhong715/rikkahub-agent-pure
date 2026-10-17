@@ -57,6 +57,14 @@ interface LitertEmbedSession : AutoCloseable {
      * reach this, and the engine refuses it outright on a text-only file.
      */
     fun embedImage(bytes: ByteArray): FloatArray
+
+    /**
+     * Embeds one clip of sound, from its encoded bytes.
+     *
+     * The model wants 16 kHz mono PCM in a WAV container - resampling and downmixing are the
+     * decoder's job, not the engine's. No task prefix, for the same reason as [embedImage].
+     */
+    fun embedAudio(bytes: ByteArray): FloatArray
 }
 
 /** The seam over the SDK, so [LitertLmEmbedder] is testable without native code. */
@@ -107,6 +115,13 @@ class RealLitertEmbedNative : LitertEmbedNative {
                 // and has no fallback for one a delegate cannot take, so with `visionBackend` on the
                 // GPU the only two states on offer are "no embedding at all" and this one.
                 visionBackend = Backend.CPU(),
+                // Audio is pinned for a second reason on top of the vision one: Google's own
+                // on-device embedder does the same (`google-ai-edge/gallery`, OnDeviceEmbedder:
+                // "Force the audio encoder to run on CPU for performance and accuracy purposes for
+                // now"). The 300M encoder on this class of hardware is not where the time goes for
+                // a text or an image, and the CPU is the one backend the model card's numbers were
+                // measured on.
+                audioBackend = Backend.CPU(),
                 cacheDir = cacheDir,
                 // Picks which of the file's input signatures to load -- see the comment on
                 // [LitertEmbedInfo.signature]. Omitting it makes the engine load the largest one
@@ -127,6 +142,12 @@ class RealLitertEmbedNative : LitertEmbedNative {
             // No prefix, and no text: the bytes go in as they are.
             override fun embedImage(bytes: ByteArray): FloatArray = engine.computeEmbedding(
                 listOf(InputData.Image(bytes)),
+                EmbeddingOptions(normalize = true),
+            ).embedding
+
+            // Same shape, different input: a WAV of 16 kHz mono PCM, no prefix and no text.
+            override fun embedAudio(bytes: ByteArray): FloatArray = engine.computeEmbedding(
+                listOf(InputData.Audio(bytes)),
                 EmbeddingOptions(normalize = true),
             ).embedding
 
@@ -289,6 +310,19 @@ class LitertLmEmbedder(
     suspend fun embedImage(bytes: ByteArray): FloatArray = lock.withLock {
         val open = session ?: error("no .litertlm embedding model is loaded")
         open.embedImage(bytes)
+    }
+
+    /**
+     * Embeds one clip of sound, L2-normalised.
+     *
+     * The same door as [embedImage] and for the same reason: the input is bytes rather than text,
+     * and only the text door takes a task prefix. The caller is expected to have asked the service
+     * whether the loaded file has an audio encoder at all - the engine throws rather than answering
+     * with something plausible.
+     */
+    suspend fun embedAudio(bytes: ByteArray): FloatArray = lock.withLock {
+        val open = session ?: error("no .litertlm embedding model is loaded")
+        open.embedAudio(bytes)
     }
 
     /** Frees the engine and whatever the accelerator held on to. */
