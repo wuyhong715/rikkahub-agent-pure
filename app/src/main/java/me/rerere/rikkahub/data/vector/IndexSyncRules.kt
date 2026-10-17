@@ -6,6 +6,12 @@ data class StoredChunk(
     val id: Long,
     val index: Int,
     val contentHash: Long,
+    /**
+     * Which model embedded this row. A plan is only valid against the model that is about to
+     * write: a vector is a point in *one* model's space, so a row from another model is not an
+     * asset to reuse - it is the wrong answer already stored.
+     */
+    val modelId: String,
 )
 
 /**
@@ -40,8 +46,16 @@ sealed interface SyncPlan {
  */
 object IndexSyncRules {
 
-    fun plan(existing: List<StoredChunk>, fresh: List<TextChunk>): SyncPlan {
+    fun plan(existing: List<StoredChunk>, fresh: List<TextChunk>, modelId: String): SyncPlan {
         val sortedExisting = existing.sortedBy { it.index }
+
+        // A model swap invalidates every stored row at once: the content is unchanged, but the
+        // vectors were computed by a different function, and comparing across models is the one
+        // mistake that keeps returning plausible answers. Reuse is therefore empty on purpose -
+        // carrying a vector over would keep the old model's answer under the new model's name.
+        if (sortedExisting.isNotEmpty() && sortedExisting.any { it.modelId != modelId }) {
+            return SyncPlan.Replace(chunks = fresh, reuse = emptyMap())
+        }
 
         // Short-circuit on the whole document first: folding the chunk fingerprints gives a
         // document-level fingerprint for free, so the common case (a file that was re-read but

@@ -93,7 +93,7 @@ class MemoryVectorSource(
                 skipped++
                 continue
             }
-            val plan = store.plan(source, doc.name, fresh)
+            val plan = store.plan(source, doc.name, fresh, model.modelId)
             if (IndexSyncRules.isNoOp(plan)) {
                 unchanged++
                 continue

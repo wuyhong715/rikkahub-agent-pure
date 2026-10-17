@@ -45,6 +45,12 @@ class VectorIndexStore(
         require(fresh.size == pending.size) {
             "the embedder returned ${fresh.size} vectors for ${pending.size} chunks"
         }
+        fresh.forEach { vector ->
+            require(vector.all { it.isFinite() }) {
+                "the embedder returned a vector with NaN/Inf; the model file or backend is " +
+                    "producing garbage, and storing it would poison every later comparison"
+            }
+        }
         val freshByIndex = pending.indices.associate { pending[it].index to fresh[it] }
 
         val dim = (fresh.firstOrNull()?.size ?: reused.values.firstOrNull()?.let { bytes ->
@@ -85,8 +91,9 @@ class VectorIndexStore(
         source: String,
         docKey: String,
         fresh: List<TextChunk>,
+        modelId: String,
     ): SyncPlan = withContext(Dispatchers.IO) {
-        IndexSyncRules.plan(dao.fingerprints(source, docKey).map { it.toStoredChunk() }, fresh)
+        IndexSyncRules.plan(dao.fingerprints(source, docKey).map { it.toStoredChunk() }, fresh, modelId)
     }
 
     /**

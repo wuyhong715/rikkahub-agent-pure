@@ -271,8 +271,16 @@ class LitertLmEmbedder(
             signature = signature,
         )
         val measured = try {
-            opened.embed(listOf(" ")).firstOrNull()
-                ?: throw IllegalStateException("the embedding engine returned nothing")
+            (opened.embed(listOf(" ")).firstOrNull()
+                ?: throw IllegalStateException("the embedding engine returned nothing")).also { probe ->
+                // A probe that comes back with NaN/Inf is a failed load, not a valid one: the
+                // engine would keep returning poison for everything, and nothing downstream is
+                // allowed to store it. Failing here lets [load] fall through to the CPU retry.
+                require(probe.all { it.isFinite() }) {
+                    "the embedding engine's probe vector contains NaN/Inf; " +
+                        "the model file is corrupt or this backend cannot run it"
+                }
+            }
         } catch (t: Throwable) {
             runCatching { opened.close() }
             throw t
@@ -295,7 +303,7 @@ class LitertLmEmbedder(
      */
     suspend fun embedNormalized(text: String): FloatArray = lock.withLock {
         val open = session ?: error("no .litertlm embedding model is loaded")
-        open.embed(listOf(text)).single()
+        open.embed(listOf(text)).single().requireFinite("text")
     }
 
     /**
@@ -309,7 +317,7 @@ class LitertLmEmbedder(
      */
     suspend fun embedImage(bytes: ByteArray): FloatArray = lock.withLock {
         val open = session ?: error("no .litertlm embedding model is loaded")
-        open.embedImage(bytes)
+        open.embedImage(bytes).requireFinite("image")
     }
 
     /**
@@ -322,7 +330,23 @@ class LitertLmEmbedder(
      */
     suspend fun embedAudio(bytes: ByteArray): FloatArray = lock.withLock {
         val open = session ?: error("no .litertlm embedding model is loaded")
-        open.embedAudio(bytes)
+        open.embedAudio(bytes).requireFinite("audio")
+    }
+
+    /**
+     * Refuses a vector with a NaN or an Inf in it.
+     *
+     * The engine does not fail when it produces one - the call returns normally and the garbage
+     * only shows up downstream as a cosine of NaN, i.e. a search whose every score is NaN and
+     * whose ranking is the storage order. Failing here, at the door, turns that silent corruption
+     * into an error that names the model and the backend while the evidence is still on screen.
+     */
+    private fun FloatArray.requireFinite(input: String): FloatArray {
+        require(all { it.isFinite() }) {
+            "the embedding engine returned NaN/Inf for a $input input; " +
+                "the model file is corrupt or this backend cannot run it"
+        }
+        return this
     }
 
     /** Frees the engine and whatever the accelerator held on to. */

@@ -161,7 +161,7 @@ object WorkspaceLibraryRules {
         "md", "markdown", "txt", "text", "rst", "org", "adoc",
         "csv", "tsv", "log", "ndjson", "jsonl",
         "json", "json5", "yaml", "yml", "toml", "ini", "conf", "cfg", "properties", "env",
-        "xml", "html", "htm", "srt", "vtt", "tex", "bib", "po", "patch", "diff",
+        "xml", "svg", "html", "htm", "srt", "vtt", "tex", "bib", "po", "patch", "diff",
     )
 
     private val DECLARED_CODE = setOf(

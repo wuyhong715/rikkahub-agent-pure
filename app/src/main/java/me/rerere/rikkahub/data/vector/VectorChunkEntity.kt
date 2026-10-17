@@ -62,6 +62,8 @@ data class StoredChunkRow(
     @ColumnInfo("id") val id: Long,
     @ColumnInfo("chunk_index") val chunkIndex: Int,
     @ColumnInfo("content_hash") val contentHash: Long,
+    @ColumnInfo("model_id") val modelId: String,
 ) {
-    fun toStoredChunk(): StoredChunk = StoredChunk(id = id, index = chunkIndex, contentHash = contentHash)
+    fun toStoredChunk(): StoredChunk =
+        StoredChunk(id = id, index = chunkIndex, contentHash = contentHash, modelId = modelId)
 }

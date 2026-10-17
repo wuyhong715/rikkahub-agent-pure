@@ -93,7 +93,17 @@ object VectorSearchRules {
                 skipped++
                 continue
             }
-            scored += ScoredChunk(item, VectorMath.cosine(query, vector))
+            val score = VectorMath.cosine(query, vector)
+            // A non-finite score means a poisoned vector got into the index (or the query itself
+            // is one): an engine that emitted NaN/Inf, which nothing upstream rejected. Treating
+            // it as unusable rather than ranked keeps one bad row from surfacing as a hit - and
+            // since a comparison involving NaN is never less than anything, an unguarded NaN
+            // sorts *above* every honest score.
+            if (!score.isFinite()) {
+                skipped++
+                continue
+            }
+            scored += ScoredChunk(item, score)
         }
 
         scored.sortByDescending { it.score }

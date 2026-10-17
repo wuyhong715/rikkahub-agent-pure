@@ -9,7 +9,7 @@ interface VectorChunkDao {
 
     /** Fingerprints of one document, enough to decide whether anything needs re-embedding. */
     @Query(
-        "SELECT id, chunk_index, content_hash FROM vector_chunks " +
+        "SELECT id, chunk_index, content_hash, model_id FROM vector_chunks " +
             "WHERE source = :source AND doc_key = :docKey ORDER BY chunk_index"
     )
     suspend fun fingerprints(source: String, docKey: String): List<StoredChunkRow>

@@ -133,7 +133,7 @@ class WorkspaceLibrarySource(
                 skipped++
                 continue
             }
-            val plan = store.plan(source, doc.path, fresh)
+            val plan = store.plan(source, doc.path, fresh, model.modelId)
             if (IndexSyncRules.isNoOp(plan)) {
                 unchanged++
                 continue

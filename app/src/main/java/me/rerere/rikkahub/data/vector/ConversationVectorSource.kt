@@ -74,7 +74,7 @@ class ConversationVectorSource(
             // truncating it. The spec is sized against the loaded model, and [search] collapses a
             // message's chunks back to its best one.
             val fresh = TextChunker.chunk(doc.text, MESSAGE_SPEC.fitting(model.contextTokens))
-            val plan = store.plan(SOURCE, doc.docKey, fresh)
+            val plan = store.plan(SOURCE, doc.docKey, fresh, model.modelId)
             if (IndexSyncRules.isNoOp(plan)) {
                 unchanged++
                 continue
