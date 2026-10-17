@@ -8,6 +8,9 @@ on:
       # Maintenance branches (CI tweaks, dependency bumps, docs) build too — they
       # are still code that will be merged, so they deserve the same gate.
       - 'chore/**'
+      # Bug-fix branches build on push too: same gate as feat/**, so a PR into
+      # moxw or master has a green signal before the PR event itself fires.
+      - 'fix/**'
       # Moxw Agent is a long-lived product branch (not a feature to merge back),
       # but it is still code: every push runs the same gate.
       - 'moxw'
@@ -23,6 +26,9 @@ on:
   pull_request:
     branches:
       - master
+      # PRs into the Moxw product branch are gated too: it ships its own flavour,
+      # so a breakage there is a release breakage, not a master-only concern.
+      - 'moxw'
     # Same rule for PRs: a docs-only PR stays mergeable without burning a run.
     paths-ignore:
       - '**/*.md'
