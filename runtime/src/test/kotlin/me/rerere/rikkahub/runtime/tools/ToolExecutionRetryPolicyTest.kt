@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.data.ai.tools
+package me.rerere.rikkahub.runtime.tools
 
 import java.io.FileNotFoundException
 import java.io.IOException

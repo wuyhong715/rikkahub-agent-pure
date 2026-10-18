@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.data.datastore
+package me.rerere.rikkahub.runtime
 
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelType
