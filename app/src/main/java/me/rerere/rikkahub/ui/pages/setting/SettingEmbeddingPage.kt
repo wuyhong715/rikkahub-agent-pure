@@ -128,6 +128,11 @@ fun SettingEmbeddingPage() {
 
     val cloudSelected = CloudEmbeddingRules.isCloud(settings.embeddingBackend)
     val cloudModel = EmbeddingReadiness.cloudModel(settings)
+    // Computed up here rather than inside the CardGroup DSL: that lambda is not @Composable,
+    // so remember() cannot live in it.
+    val cloudCandidates = remember(settings.providers) {
+        CloudEmbeddingModels.candidates(settings.providers)
+    }
     val resolvedLocalFile = EmbeddingReadiness.localModelFile(settings, installed)
     val ready = cloudModel != null || resolvedLocalFile != null
     val readsImages = EmbeddingReadiness.localModelReadsImages(settings, installed)
@@ -354,9 +359,6 @@ fun SettingEmbeddingPage() {
                             )
                         },
                     )
-                    val cloudCandidates = remember(settings.providers) {
-                        CloudEmbeddingModels.candidates(settings.providers)
-                    }
                     if (cloudCandidates.isEmpty()) {
                         item(
                             headlineContent = {
