@@ -327,7 +327,8 @@ val appModule = module {
             libraryIndex = get(),
             conversationIndex = get(),
             missionEngine = get(),
-            runCheckpointRepository = get()
+            runCheckpointRepository = get(),
+            runOrchestrator = get()
         )
     }
 

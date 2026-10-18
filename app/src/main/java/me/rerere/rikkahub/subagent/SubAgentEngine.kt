@@ -609,6 +609,16 @@ class SubAgentEngine(
         conversationRepo.insertConversation(conv)
         chatService.initializeConversation(conv.id)
         HeadlessConversations.mark(conv.id)
+        // P5/P6 — this conversation belongs to the sub-agent's ledger run, so its per-step
+        // checkpoints land on that run and the run shows up as a first-class parent-linked
+        // Run instead of an anonymous chat.
+        ledgerIds[runId]?.let { ledgerId ->
+            me.rerere.rikkahub.service.run.ConversationRunRegistry.bind(
+                conversationId = conv.id,
+                runId = ledgerId,
+                kind = me.rerere.rikkahub.data.agentrun.AgentRunKind.SubAgent.wire,
+            )
+        }
         // P2-12d — attribute this run's model calls to it, so the ledger can price the
         // dispatch and the parent→child tree has a run id to hang off. The parent id is the
         // conversation that dispatched it (the same value written to agent_runs.parent_run_id).
@@ -790,6 +800,7 @@ class SubAgentEngine(
             ConversationSystemAddendum.clear(conv.id)
             ConversationToolStepLimits.clear(conv.id)
             ConversationReasoningOverrides.clear(conv.id)
+            me.rerere.rikkahub.service.run.ConversationRunRegistry.unbind(conv.id)
             // T-09 / (8) + P2-04 — release in the same finally that unmarks the conversation, so a
             // cancelled / failed / timed-out run cannot leave a stale freeze behind. Releasing is
             // unconditional and safe: removing a record that was never written is a no-op.

@@ -109,6 +109,7 @@ import me.rerere.rikkahub.data.ai.tools.createWorkspaceTools
 import me.rerere.rikkahub.data.ai.tools.buildColdMemoryTools
 import me.rerere.rikkahub.data.ai.tools.buildLibrarySearchTool
 import me.rerere.rikkahub.data.ai.tools.createConversationTools
+import me.rerere.rikkahub.data.ai.tools.createMissionDispatchTools
 import me.rerere.rikkahub.data.ai.tools.buildMemorySearchTool
 import me.rerere.rikkahub.data.ai.tools.ColdMemoryDoc
 import me.rerere.rikkahub.data.ai.tools.ColdMemoryRules
@@ -477,6 +478,8 @@ class ChatService(
     private val missionEngine: me.rerere.rikkahub.data.mission.MissionEngine,
     /** P5 — per-step run breakpoints, written from the loop's checkpoint hook. */
     private val runCheckpointRepository: me.rerere.rikkahub.data.agentrun.RunCheckpointRepository,
+    /** P6 — multi-run orchestration behind the `mission_dispatch` tool. */
+    private val runOrchestrator: me.rerere.rikkahub.service.run.RunOrchestrator,
 ) {
     // workspace 系统提示注入 (依赖 workspaceRepository, 故在类内构造)
     private val workspaceReminderTransformer = WorkspaceReminderTransformer(workspaceRepository)
@@ -1612,6 +1615,15 @@ class ChatService(
         // P4 — the file library's search, on both build paths so a regenerate sees the surface the
         // first pass had. Off unless enabled AND configured.
         addAll(createLibraryToolsIfConfigured(surfaceAssistant))
+        // P6 — parallel child runs (inert unless the model fans work out).
+        addAll(
+            createMissionDispatchTools(
+                orchestrator = runOrchestrator,
+                defaultAssistantId = surfaceAssistant.id,
+                conversationId = conversationId,
+                missionIdProvider = { runCatching { missionEngine.missionIdFor(conversationId.toString()) }.getOrNull() },
+            )
+        )
         // P5 — history search. Registered here rather than in ChatToolFactory because that
         // factory's createTools has no callers in the repository: the model never actually had
         // this tool in the chat path. Gated on the same flag the static recent-chats reference
@@ -2027,6 +2039,14 @@ class ChatService(
         // P4 — the file library's search, on both build paths so a regenerate sees the surface the
         // first pass had. Off unless enabled AND configured.
         addAll(createLibraryToolsIfConfigured(surfaceAssistant))
+        addAll(
+            createMissionDispatchTools(
+                orchestrator = runOrchestrator,
+                defaultAssistantId = surfaceAssistant.id,
+                conversationId = conversationId,
+                missionIdProvider = { runCatching { missionEngine.missionIdFor(conversationId.toString()) }.getOrNull() },
+            )
+        )
         // P5 — history search. Registered here rather than in ChatToolFactory because that
         // factory's createTools has no callers in the repository: the model never actually had
         // this tool in the chat path. Gated on the same flag the static recent-chats reference
