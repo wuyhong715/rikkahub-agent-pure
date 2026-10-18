@@ -1,7 +1,6 @@
 package me.rerere.rikkahub.ui.components.ai
 import me.rerere.rikkahub.runtime.tools.ApprovalMode
 
-
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -43,7 +42,6 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowDown01
 import me.rerere.hugeicons.stroke.Tick02
 import me.rerere.rikkahub.R
-import me.rerere.rikkahub.data.ai.tools.ApprovalMode
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.preferences.ToolApprovalPreferences
 import me.rerere.rikkahub.subagent.SubAgentDispatchProfile

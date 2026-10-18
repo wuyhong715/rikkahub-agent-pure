@@ -1,7 +1,6 @@
 package me.rerere.rikkahub.data.preferences
 import me.rerere.rikkahub.runtime.tools.ApprovalMode
 
-
 import android.content.Context
 import android.util.Log
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -12,7 +11,6 @@ import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import me.rerere.rikkahub.data.ai.tools.ApprovalMode
 import me.rerere.rikkahub.runtime.tools.ToolApprovalDefaults
 
 private const val TAG = "ToolApprovalPreferences"
