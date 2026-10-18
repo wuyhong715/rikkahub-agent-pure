@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.data.ai
+package me.rerere.rikkahub.runtime
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

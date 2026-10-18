@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.data.ai
+package me.rerere.rikkahub.runtime
 
 import java.io.IOException
 import kotlinx.coroutines.CancellationException

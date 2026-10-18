@@ -712,7 +712,7 @@ class GenerationLoop(
                     // these through. Result: tool is marked Denied with the hardline
                     // reason, the regular Denied branch downstream emits an error
                     // envelope to the model without executing.
-                    val hardlineReason = me.rerere.rikkahub.data.ai.tools
+                    val hardlineReason = me.rerere.rikkahub.runtime.tools
                         .HardlineCommandGuard.checkTool(tool.toolName, tool.input)
                     val transformed = when {
                         hardlineReason != null && tool.approvalState is ToolApprovalState.Auto -> {
@@ -825,7 +825,7 @@ class GenerationLoop(
                         // Re-check here so that a hardline-matched tool persisted in Approved
                         // state from an old DB row (pre-hardline schema, direct DB edit) can
                         // never execute via the resume path.
-                        val resumeHardlineReason = me.rerere.rikkahub.data.ai.tools
+                        val resumeHardlineReason = me.rerere.rikkahub.runtime.tools
                             .HardlineCommandGuard.checkTool(tool.toolName, tool.input)
                         if (resumeHardlineReason != null) {
                             Log.w(TAG, "generateText: resume-path hardline re-check blocked ${tool.toolName}: $resumeHardlineReason")
@@ -856,14 +856,7 @@ class GenerationLoop(
                         // sees a structured refusal and can pivot. Sitting here rather than in
                         // the approval lookup is deliberate: it also covers the resume path,
                         // where tools arrive already Approved.
-                        val headlessRefusal = me.rerere.rikkahub.data.ai.tools.HeadlessToolApprovalPolicy
-                            .refusalEnvelopeFor(
-                                toolName = tool.toolName,
-                                headless = conversationId?.let { id ->
-                                    me.rerere.rikkahub.data.ai.tools.HeadlessConversations
-                                        .shouldAutoApprove(id)
-                                } ?: false,
-                            )
+                        val headlessRefusal = host.headlessRefusal(tool.toolName, conversationId)
                         if (headlessRefusal != null) {
                             Log.w(TAG, "generateText: ${tool.toolName} refused — headless conversation has no approval channel")
                             executedTools += tool.copy(
@@ -1736,4 +1729,158 @@ class GenerationLoop(
         append(body)
     }
 
+}
+
+// ---------------------------------------------------------------------------
+// U3 stream-continuation policy (moved with the loop in P4). Pure functions: the loop
+// asks them whether to retry / continue / restart; the string helpers that used to live
+// beside them are now host.retryingStatus / host.continuingStatus.
+// ---------------------------------------------------------------------------
+
+/** How many times a mid-stream break is patched by asking the model to continue from the text
+ *  it had already produced, before falling back to restarting the whole reply. */
+private const val MAX_STREAM_CONTINUATIONS = 2
+
+/** The synthetic user turn appended to a continuation request. It is sent to the provider but
+ *  never written back into the visible conversation, so the user only sees the streamed
+ *  continuation text (which merges into the same assistant message). */
+internal const val CONTINUATION_INSTRUCTION =
+    "Your previous reply was cut off by a network error. Continue it from exactly where it " +
+        "stopped. Do not repeat anything you already wrote, do not restate the question, and do " +
+        "not start over — just keep going to a natural end."
+
+private val USER_CANCELLATION_MARKERS = listOf(
+    "canceled by user",
+    "cancelled by user",
+    "user_canceled",
+    "user_cancelled",
+)
+
+// A deterministic 4xx will not succeed on retry, so retrying it just burns quota and delay for
+// an outcome that was never going to change. These four are the exceptions: they signal a
+// transient condition (timeout, conflict, precondition, rate limit) rather than a request that
+// is permanently invalid.
+private val RETRYABLE_4XX_STATUS_CODES = setOf(408, 409, 425, 429)
+
+private fun isCancellationFailure(failure: Throwable): Boolean =
+    generateSequence(failure) { it.cause }
+        .take(8)
+        .any { cause ->
+            cause is CancellationException ||
+                USER_CANCELLATION_MARKERS.any { marker ->
+                    cause.message?.contains(marker, ignoreCase = true) == true
+                }
+        }
+
+/**
+ * A clean stream close only signals a transport failure worth retrying when NOTHING was ever
+ * received. If at least one chunk arrived but none of them yielded parseable parts (e.g. every
+ * part shape was unrecognized), that is a permanent condition - retrying the whole generation
+ * cannot help, so the caller should log it and let the generation end normally instead of
+ * synthesizing a retryable failure.
+ */
+internal fun shouldReportEmptyGenerationStream(receivedAnyChunk: Boolean): Boolean =
+    !receivedAnyChunk
+
+internal fun shouldRetryGenerationStreamFailure(
+    failure: Throwable,
+    retryAttempt: Long,
+    maxRetries: Int,
+    receivedMeaningfulOutput: Boolean,
+): Boolean {
+    if (receivedMeaningfulOutput || retryAttempt >= maxRetries.coerceAtLeast(0).toLong()) {
+        return false
+    }
+    if (failure is ResponseStreamErrorException || isContextLimitFailure(failure)) {
+        return false
+    }
+    if (isNonRetryableClientError(failure)) {
+        return false
+    }
+    if (isQuotaExhaustedFailure(failure)) {
+        return false
+    }
+    // Retry provider, parsing, and local processing failures alike. Cancellation is kept
+    // out of the retry loop so stop-generation and parent-scope cancellation propagate.
+    return !isCancellationFailure(failure)
+}
+
+/**
+ * U3 — should a stream that broke AFTER the model had already written something be CONTINUED,
+ * i.e. re-issued with the partial text and an instruction to keep going, instead of being handed
+ * to the caller as a truncated reply?
+ *
+ * This is deliberately the mirror image of [shouldRetryGenerationStreamFailure]: that one refuses
+ * to retry once output has arrived (a fresh retry would regenerate and duplicate text), while this
+ * one only fires once output HAS arrived. The permanent conditions — an explicit response-stream
+ * error, a context-limit failure, an exhausted quota, and a deterministic non-retryable 4xx — stay
+ * non-continuable, because asking the model again cannot fix any of them.
+ */
+internal fun shouldContinueGenerationStream(
+    failure: Throwable,
+    receivedMeaningfulOutput: Boolean,
+    continuationsUsed: Int,
+    maxContinuations: Int = MAX_STREAM_CONTINUATIONS,
+): Boolean {
+    if (!receivedMeaningfulOutput) return false
+    if (continuationsUsed >= maxContinuations.coerceAtLeast(0)) return false
+    if (isCancellationFailure(failure)) return false
+    if (failure is ResponseStreamErrorException || isContextLimitFailure(failure)) return false
+    if (isNonRetryableClientError(failure)) return false
+    if (isQuotaExhaustedFailure(failure)) return false
+    return true
+}
+
+/**
+ * U3 — can [partial] (the assistant message a broken stream left behind) seed a continuation
+ * request? Only plain text is safe to continue: re-sending an assistant turn that holds a
+ * half-streamed tool call would produce a request with a dangling tool call and no matching
+ * result, which several providers reject outright.
+ */
+internal fun canContinueFromPartial(partial: UIMessage?): Boolean =
+    partial != null &&
+        partial.role == MessageRole.ASSISTANT &&
+        partial.parts.none { it is UIMessagePart.ToolCall } &&
+        partial.parts.any { it is UIMessagePart.Text && it.text.isNotBlank() }
+
+/**
+ * U3 — the request messages for a continuation attempt: the original system + context, then the
+ * partial assistant turn, then a synthetic user instruction to keep going. The synthetic turn is
+ * deliberately NOT written back into `messages`, so the visible conversation gains only the
+ * streamed continuation text — merged into the same assistant message by [StreamChunkHandler].
+ */
+internal fun continuationRequestMessages(
+    baseRequestMessages: List<UIMessage>,
+    currentMessages: List<UIMessage>,
+): List<UIMessage> {
+    val partial = currentMessages.lastOrNull()
+        ?.takeIf { it.role == MessageRole.ASSISTANT }
+        ?: return baseRequestMessages
+    return baseRequestMessages +
+        UIMessage(role = MessageRole.ASSISTANT, parts = partial.parts) +
+        UIMessage(
+            role = MessageRole.USER,
+            parts = listOf(UIMessagePart.Text(CONTINUATION_INSTRUCTION)),
+            isSynthetic = true,
+        )
+}
+
+/**
+ * U3 — the final fallback: when a continuation is not possible, or has already been tried and the
+ * stream broke again, restart the whole request ONCE from the pre-stream snapshot. The partial
+ * reply is discarded, so the user sees the answer regenerate rather than stop mid-sentence.
+ * [receivedMeaningfulOutput] here is the loop-wide flag, so this still fires when a continuation
+ * attempt itself died before writing a single chunk.
+ */
+internal fun shouldRestartGenerationStreamAfterPartial(
+    failure: Throwable,
+    receivedMeaningfulOutput: Boolean,
+    alreadyRestarted: Boolean,
+): Boolean {
+    if (!receivedMeaningfulOutput || alreadyRestarted) return false
+    if (isCancellationFailure(failure)) return false
+    if (failure is ResponseStreamErrorException || isContextLimitFailure(failure)) return false
+    if (isNonRetryableClientError(failure)) return false
+    if (isQuotaExhaustedFailure(failure)) return false
+    return true
 }

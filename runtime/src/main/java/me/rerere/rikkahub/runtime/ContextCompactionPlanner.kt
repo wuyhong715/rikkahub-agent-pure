@@ -193,7 +193,7 @@ internal object ContextCompactionPlanner {
         message.parts.count { part ->
             when (part) {
                 is UIMessagePart.Tool ->
-                    !ContextCompactionPresentation.isDisplayTool(part) && part.output.isNotEmpty()
+                    !isCompactionDisplayPart(part) && part.output.isNotEmpty()
                 is UIMessagePart.ToolResult -> true
                 else -> false
             }
@@ -257,7 +257,7 @@ internal object ContextCompactionPlanner {
             for (index in messages.lastIndex downTo rawTailStartIndex) {
                 retainedToolCalls += messages[index].parts.count { part ->
                     when (part) {
-                        is UIMessagePart.Tool -> !ContextCompactionPresentation.isDisplayTool(part)
+                        is UIMessagePart.Tool -> !isCompactionDisplayPart(part)
                         is UIMessagePart.ToolCall,
                         is UIMessagePart.ToolResult
                             -> true
@@ -376,7 +376,7 @@ internal object ContextCompactionPlanner {
     @Suppress("DEPRECATION")
     private fun completedToolRecord(part: UIMessagePart): String? = when (part) {
         is UIMessagePart.Tool -> {
-            if (ContextCompactionPresentation.isDisplayTool(part) || part.output.isEmpty()) {
+            if (isCompactionDisplayPart(part) || part.output.isEmpty()) {
                 null
             } else {
                 buildString {
@@ -450,7 +450,7 @@ internal object ContextCompactionPlanner {
 
     @Suppress("DEPRECATION")
     private fun StringBuilder.appendPartForSummary(part: UIMessagePart) {
-        if (ContextCompactionPresentation.isDisplayTool(part)) return
+        if (isCompactionDisplayPart(part)) return
         when (part) {
             // The retention report describes the layout produced by one specific compaction.
             // Re-summarizing it would turn that old boundary into a stale claim in the next
@@ -493,7 +493,7 @@ internal object ContextCompactionPlanner {
 
     @Suppress("DEPRECATION")
     private fun StringBuilder.appendPartForMap(part: UIMessagePart) {
-        if (ContextCompactionPresentation.isDisplayTool(part)) return
+        if (isCompactionDisplayPart(part)) return
         when (part) {
             is UIMessagePart.Tool -> {
                 appendLine("[Completed tool execution record — must be retained in summary]")

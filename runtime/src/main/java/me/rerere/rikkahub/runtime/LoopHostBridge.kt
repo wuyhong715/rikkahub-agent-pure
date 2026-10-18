@@ -1,5 +1,7 @@
 package me.rerere.rikkahub.runtime
 
+import kotlin.uuid.Uuid
+
 /**
  * LoopHostBridge — every Android effect the generation loop needs, behind one
  * interface (P4 of the harness re-architecture).
@@ -61,6 +63,14 @@ interface LoopHostBridge {
      * the tool call itself.
      */
     fun spillToolOutput(toolCallId: String, fullText: String): String?
+
+    /**
+     * The structured refusal for a tool a headless run may not call (no approval channel
+     * exists), or null when the tool is fine. Implemented in :app over
+     * HeadlessToolApprovalPolicy + HeadlessConversations — both carry app-side policy and
+     * preference state, so the loop asks instead of importing.
+     */
+    fun headlessRefusal(toolName: String, conversationId: Uuid?): String?
 
     /** Whether this is a debug build (gates extra diagnostics). */
     val isDebugBuild: Boolean

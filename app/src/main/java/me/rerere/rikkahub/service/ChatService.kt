@@ -79,7 +79,7 @@ import me.rerere.rikkahub.data.ai.tools.AppPlaybookRules
 import me.rerere.rikkahub.runtime.GenerationChunk
 import me.rerere.rikkahub.runtime.GenerationLoop
 import me.rerere.rikkahub.data.ai.ModelRouter
-import me.rerere.rikkahub.data.ai.ContextBudgetPlanner
+import me.rerere.rikkahub.runtime.ContextBudgetPlanner
 import me.rerere.rikkahub.runtime.ContextCompactionPlanner
 import me.rerere.rikkahub.data.ai.ContextCompactionPresentation
 import me.rerere.rikkahub.data.ai.CompactedMessageView

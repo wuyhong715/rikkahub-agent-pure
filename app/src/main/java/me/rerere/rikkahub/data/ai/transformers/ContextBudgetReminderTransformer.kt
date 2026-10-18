@@ -2,7 +2,7 @@ package me.rerere.rikkahub.data.ai.transformers
 
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
-import me.rerere.rikkahub.data.ai.ContextBudgetPlanner
+import me.rerere.rikkahub.runtime.ContextBudgetPlanner
 import me.rerere.rikkahub.data.datastore.getEffectiveContextLength
 
 /**

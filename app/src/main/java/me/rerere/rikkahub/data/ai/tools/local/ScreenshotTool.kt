@@ -20,7 +20,7 @@ import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.runtime.AgentTurnTracker
-import me.rerere.rikkahub.data.ai.ScreenshotLedger
+import me.rerere.rikkahub.runtime.ScreenshotLedger
 import me.rerere.rikkahub.service.ActionLogEntry
 import me.rerere.rikkahub.service.RikkaAccessibilityService
 import java.io.ByteArrayOutputStream

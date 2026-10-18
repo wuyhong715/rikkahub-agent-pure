@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.data.ai
+package me.rerere.rikkahub.runtime
 
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.TokenUsage

@@ -1,6 +1,9 @@
 package me.rerere.rikkahub.data.ai
 
+import me.rerere.rikkahub.runtime.COMPACTION_DISPLAY_ONLY_KEY
+import me.rerere.rikkahub.runtime.COMPACTION_DISPLAY_TOOL_NAME
 import me.rerere.rikkahub.runtime.ContextCompactionPlanner
+import me.rerere.rikkahub.runtime.isCompactionDisplayPart
 
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
@@ -21,8 +24,10 @@ import kotlin.uuid.Uuid
  * compaction source is built.
  */
 internal object ContextCompactionPresentation {
-    const val TOOL_NAME = "context_compaction"
-    private const val DISPLAY_ONLY_METADATA_KEY = "rikkahub_display_only_context_compaction"
+    // P4 — the name/marker literals and the predicate now live in :runtime, shared with the
+    // compaction planner so the two sides cannot drift.
+    const val TOOL_NAME = COMPACTION_DISPLAY_TOOL_NAME
+    private const val DISPLAY_ONLY_METADATA_KEY = COMPACTION_DISPLAY_ONLY_KEY
 
     fun createTool(compaction: ConversationCompaction): UIMessagePart.Tool = UIMessagePart.Tool(
         toolCallId = "context_compaction_${compaction.createdAt.toEpochMilli()}_${compaction.sourceEndNodeId}",
@@ -42,10 +47,7 @@ internal object ContextCompactionPresentation {
         },
     )
 
-    fun isDisplayTool(part: UIMessagePart): Boolean =
-        part is UIMessagePart.Tool &&
-            part.toolName == TOOL_NAME &&
-            part.metadata?.get(DISPLAY_ONLY_METADATA_KEY)?.jsonPrimitive?.booleanOrNull == true
+    fun isDisplayTool(part: UIMessagePart): Boolean = isCompactionDisplayPart(part)
 
     fun hasDisplayTool(message: UIMessage): Boolean = message.parts.any(::isDisplayTool)
 

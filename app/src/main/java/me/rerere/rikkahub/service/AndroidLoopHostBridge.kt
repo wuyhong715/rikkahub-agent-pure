@@ -12,6 +12,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.files.FileFolders
 import me.rerere.rikkahub.runtime.LoopHostBridge
 import java.io.File
+import kotlin.uuid.Uuid
 
 private const val TAG = "AndroidLoopHostBridge"
 
@@ -90,6 +91,19 @@ class AndroidLoopHostBridge(
         File(outputDir, fileName).writeText(fullText)
         fileName
     }.getOrNull()
+
+    /**
+     * Headless runs have no approval channel, so a tool that would need one is refused with a
+     * structured envelope instead of hanging. The policy (which tools, what the envelope says)
+     * stays in :app — HeadlessToolApprovalPolicy + HeadlessConversations own it.
+     */
+    override fun headlessRefusal(toolName: String, conversationId: Uuid?): String? =
+        me.rerere.rikkahub.data.ai.tools.HeadlessToolApprovalPolicy.refusalEnvelopeFor(
+            toolName = toolName,
+            headless = conversationId?.let { id ->
+                me.rerere.rikkahub.data.ai.tools.HeadlessConversations.shouldAutoApprove(id)
+            } ?: false,
+        )
 
     override val isDebugBuild: Boolean
         get() = BuildConfig.DEBUG
