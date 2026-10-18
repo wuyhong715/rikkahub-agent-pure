@@ -9,11 +9,9 @@ import androidx.room.TypeConverters
 import androidx.room.migration.AutoMigrationSpec
 import me.rerere.ai.core.TokenUsage
 import me.rerere.rikkahub.data.agentrun.AgentRun
+import me.rerere.rikkahub.data.agentrun.AgentRunDao
 import me.rerere.rikkahub.data.agentrun.RunCheckpointDao
 import me.rerere.rikkahub.data.agentrun.RunCheckpointEntity
-import me.rerere.rikkahub.data.agentrun.AgentRun
-import me.rerere.rikkahub.data.agentrun.RunCheckpointDao
-import me.rerere.rikkahub.data.agentrun.RunCheckpointEntityDao
 import me.rerere.rikkahub.data.db.dao.ConversationDAO
 import me.rerere.rikkahub.data.db.dao.ConversationCompactionDAO
 import me.rerere.rikkahub.data.db.dao.FavoriteDAO
