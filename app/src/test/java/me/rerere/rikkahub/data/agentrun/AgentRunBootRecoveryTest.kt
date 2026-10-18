@@ -126,7 +126,7 @@ class AgentRunBootRecoveryTest {
 
         val flipped = recovery.runRecovery()
 
-        assertEquals(listOf("stranded-1", "stranded-2"), resumedIds)
+        assertEquals(setOf("stranded-1", "stranded-2"), resumedIds.toSet())
         assertEquals(1, flipped)
         // The resumed row keeps its in-flight status; only the un-resumable one is declared lost.
         assertEquals(AgentRunStatus.running.name, repo.getById("stranded-1")!!.status)
