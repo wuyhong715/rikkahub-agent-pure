@@ -22,10 +22,13 @@ class AgentRunBootRecoveryTest {
     private var notifyCount = 0
 
     private fun recovery(repo: AgentRunRepository): AgentRunBootRecovery =
-        AgentRunBootRecovery(repo) { stranded ->
-            notifyCount++
-            notifiedWith = stranded
-        }
+        AgentRunBootRecovery(
+            repository = repo,
+            notifyStranded = { stranded ->
+                notifyCount++
+                notifiedWith = stranded
+            },
+        )
 
     @Test
     fun `stranded running rows older than the threshold are flipped to process_lost`() = runBlocking {
@@ -99,6 +102,35 @@ class AgentRunBootRecoveryTest {
         assertEquals(AgentRunStatus.process_lost.name, repo.getById("queued-stale")!!.status)
         assertEquals(AgentRunStatus.running.name, repo.getById("live")!!.status)
         assertEquals(AgentRunStatus.succeeded.name, repo.getById("done")!!.status)
+    }
+
+    @Test
+    fun `a successful resume keeps the row out of process_lost`() = runBlocking {
+        val dao = FakeAgentRunDao()
+        val repo = AgentRunRepository(dao)
+        dao.insert(runRow(id = "stranded-1", status = AgentRunStatus.running, updatedAtMs = stale))
+        dao.insert(runRow(id = "stranded-2", status = AgentRunStatus.running, updatedAtMs = stale))
+
+        var resumedIds = mutableListOf<String>()
+        val recovery = AgentRunBootRecovery(
+            repository = repo,
+            notifyStranded = { stranded ->
+                notifyCount++
+                notifiedWith = stranded
+            },
+            resume = { run ->
+                resumedIds += run.id
+                run.id == "stranded-1"
+            },
+        )
+
+        val flipped = recovery.runRecovery()
+
+        assertEquals(listOf("stranded-1", "stranded-2"), resumedIds)
+        assertEquals(1, flipped)
+        // The resumed row keeps its in-flight status; only the un-resumable one is declared lost.
+        assertEquals(AgentRunStatus.running.name, repo.getById("stranded-1")!!.status)
+        assertEquals(AgentRunStatus.process_lost.name, repo.getById("stranded-2")!!.status)
     }
 
     private fun runRow(id: String, status: AgentRunStatus, updatedAtMs: Long): AgentRun =
