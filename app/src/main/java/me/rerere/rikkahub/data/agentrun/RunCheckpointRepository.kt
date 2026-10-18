@@ -92,7 +92,7 @@ class RunCheckpointRepository(private val dao: RunCheckpointDao) {
 
     private fun encodePendingTools(ids: List<String>): String? {
         if (ids.isEmpty()) return null
-        val json = ids.joinToString(prefix = "[", postfix = "]") { id ->
+        val json = ids.joinToString(prefix = "[", postfix = "]", separator = ",") { id ->
             "\"" + id.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
         }
         // Defensive bound: a pathological step can't bloat the row.
