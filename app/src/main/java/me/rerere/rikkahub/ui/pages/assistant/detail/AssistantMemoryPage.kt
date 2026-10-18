@@ -20,7 +20,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
@@ -47,39 +46,28 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEach
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import me.rerere.llamacpp.EmbeddingFocus
-import me.rerere.llamacpp.EmbeddingTier
-import me.rerere.locallm.litert.LitertEmbeddingCatalog
-import me.rerere.llamacpp.LlamaCppEmbeddingEntry
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantMemory
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
-import me.rerere.rikkahub.data.vector.CloudEmbeddingModels
-import me.rerere.rikkahub.data.vector.CloudEmbeddingRules
-import me.rerere.rikkahub.data.vector.EmbeddingAcceleratorRules
-import me.rerere.rikkahub.data.vector.EmbeddingCatalog
-import me.rerere.rikkahub.data.vector.EmbeddingModelRules
+import me.rerere.rikkahub.data.vector.EmbeddingModelFiles
 import me.rerere.rikkahub.data.vector.EmbeddingReadiness
 import me.rerere.rikkahub.ui.components.ai.WorkspaceCwdPickerSheet
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
+import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.hooks.EditStateContent
 import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.workspace.WorkspaceStorageArea
-import androidx.compose.foundation.clickable
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.RadioButton
 import androidx.compose.ui.platform.LocalContext
 import me.rerere.rikkahub.data.datastore.SettingsStore
-import me.rerere.rikkahub.data.vector.ConversationIndexCoordinator
 import me.rerere.rikkahub.data.vector.LibraryIndexCoordinator
 import me.rerere.rikkahub.data.vector.MemoryIndexCoordinator
-import me.rerere.rikkahub.data.vector.ToolVectorIndex
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
@@ -157,79 +145,25 @@ private fun AssistantMemoryContent(
     val libraryWorkspace = workspaces.find { it.id == assistant.workspaceId?.toString() }
     val workspaceRepository: WorkspaceRepository = koinInject()
     val scope = rememberCoroutineScope()
+    val navController = LocalNavController.current
 
-    // Moxw - the knowledge-base index. The model is a global setting (one embedding model is
-    // resident at a time, so it cannot be a per-assistant choice), but it is shown here, next to
-    // the knowledge base it serves.
+    // The knowledge-base and library indexes are synced from here because their switches and
+    // directories live here. The model itself moved to its own settings page (SettingEmbedding):
+    // it is global - one model is resident at a time - not a property of any assistant.
     val settingsStore: SettingsStore = koinInject()
     val settings by settingsStore.settingsFlow.collectAsStateWithLifecycle()
     val memoryIndex: MemoryIndexCoordinator = koinInject()
-    val indexStatus by memoryIndex.status.collectAsStateWithLifecycle()
-    // P4 — the file library's index, shown the same way: a state a person can read and a rebuild
-    // they can ask for, rather than an index that silently does or does not exist.
     val libraryIndex: LibraryIndexCoordinator = koinInject()
     val libraryIndexStatus by libraryIndex.status.collectAsStateWithLifecycle()
-    // P5 — history search's index. App-wide rather than per-assistant, and shown here because this
-    // is the page where the embedding model it depends on is chosen.
-    val conversationIndex: ConversationIndexCoordinator = koinInject()
-    val conversationIndexStatus by conversationIndex.status.collectAsStateWithLifecycle()
-    // P3-03 — the tool catalogue's vectors. Same treatment as the knowledge-base index above: a
-    // row the user can read the state of and ask for again, rather than an index that silently
-    // does or does not exist.
-    val toolVectors: ToolVectorIndex = koinInject()
-    val toolIndexStatus by toolVectors.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    var showEmbeddingModelPicker by remember { mutableStateOf(false) }
-    // Set when a download large enough to matter is about to start on a metered connection: the
-    // dialog it opens is the last chance to say no before the bytes are spent.
-    var pendingDownload by remember { mutableStateOf<PendingDownload?>(null) }
-    val embeddingVm: EmbeddingModelViewModel = koinViewModel()
-    val embeddingInstalled by embeddingVm.installed.collectAsStateWithLifecycle()
-    val embeddingDownload by embeddingVm.download.collectAsStateWithLifecycle()
-    val embeddingError by embeddingVm.error.collectAsStateWithLifecycle()
 
     // Whether the model in effect reads pictures itself - the same question the coordinator asks
-    // before choosing a path, so the switch and the behaviour cannot disagree. Declared up here
-    // because two sections ask it: the knowledge base's image switch and the embedding rows.
+    // before choosing a path, so the library's image-summary switch and the behaviour cannot
+    // disagree.
+    val embeddingInstalled = remember(settings.embeddingModelFile, settings.embeddingBackend) {
+        EmbeddingModelFiles.installedFiles(context)
+    }
     val embeddingReadsImages = EmbeddingReadiness.localModelReadsImages(settings, embeddingInstalled)
-
-    // What the resolved model is, in one line, when it is one of ours: the width and the window are
-    // the two facts a person cannot see anywhere else, and the window is the one that changes what
-    // gets indexed. Null for a cloud model, a GGUF installed by hand, or nothing at all.
-    val embeddingModelFacts: String? = run {
-        if (CloudEmbeddingRules.isCloud(settings.embeddingBackend)) return@run null
-        val entry = EmbeddingModelRules
-            .pick(
-                configured = settings.embeddingModelFile.takeIf { it.isNotBlank() },
-                installed = embeddingInstalled,
-                curatedOrder = EmbeddingCatalog.curatedOrder,
-            )
-            ?.let { LitertEmbeddingCatalog.entryFor(it) }
-            ?: return@run null
-        stringResource(
-            if (entry.vision) R.string.assistant_page_embedding_facts_vision
-            else R.string.assistant_page_embedding_facts,
-            entry.dim,
-            // The window that will actually be loaded, which is the override when there is one.
-            settings.embeddingSignature.takeIf { it > 0 } ?: entry.signature,
-        )
-    }
-
-    // What the GPU switch *shows*, which is not always what it stores: an unanswered switch reads as
-    // off, and a user who turns it on is making a real choice rather than repeating a default they
-    // never saw.
-    val embeddingGpuInEffect = EmbeddingAcceleratorRules.useGpu(settings.embeddingUseGpu)
-    val indexStatusText = when {
-        indexStatus.running -> stringResource(R.string.assistant_page_index_running)
-        indexStatus.lastError != null ->
-            stringResource(R.string.assistant_page_index_error, indexStatus.lastError.orEmpty())
-        indexStatus.lastReport != null -> stringResource(
-            R.string.assistant_page_index_report,
-            indexStatus.lastReport!!.documents,
-            indexStatus.lastReport!!.chunks,
-        )
-        else -> stringResource(R.string.assistant_page_index_never)
-    }
 
     if (showTimeReminderIntervalDialog) {
         val interval = timeReminderIntervalInput.toIntOrNull()?.takeIf { it > 0 }
@@ -628,73 +562,13 @@ private fun AssistantMemoryContent(
             }
         }
 
-        // P5 — history search. A row of its own rather than a line under the model, because it is
-        // the one index whose absence is not a missing convenience: the keyword search it replaced
-        // needed no model, so with none installed this feature does not exist.
+        // The model itself is global, so it has its own settings page now; what remains here is
+        // the way in, shown next to the knowledge base it feeds.
         CardGroup {
             item(
-                headlineContent = { Text(stringResource(R.string.assistant_page_history_index)) },
-                supportingContent = {
-                    val report = conversationIndexStatus.lastReport
-                    Text(
-                        when {
-                            conversationIndexStatus.running -> stringResource(
-                                R.string.assistant_page_index_running
-                            )
-
-                            conversationIndexStatus.lastError != null -> stringResource(
-                                R.string.assistant_page_index_error,
-                                conversationIndexStatus.lastError.orEmpty(),
-                            )
-
-                            embeddingInstalled.isEmpty() -> stringResource(
-                                R.string.assistant_page_history_index_no_model
-                            )
-
-                            report != null -> stringResource(
-                                R.string.assistant_page_history_index_report,
-                                report.indexedTotal,
-                                report.read,
-                                report.deferred,
-                            )
-
-                            else -> stringResource(R.string.assistant_page_history_index_idle)
-                        }
-                    )
-                },
-                trailingContent = {
-                    TextButton(
-                        onClick = { conversationIndex.requestSync(minIntervalMs = 0L) },
-                        enabled = !conversationIndexStatus.running,
-                    ) {
-                        Text(stringResource(R.string.assistant_page_index_rebuild_action))
-                    }
-                },
-            )
-        }
-
-        CardGroup {
-            item(
-                headlineContent = { Text(stringResource(R.string.assistant_page_embedding_model)) },
-                supportingContent = {
-                    Column {
-                        Text(
-                            text = EmbeddingReadiness.label(settings).ifEmpty {
-                                stringResource(R.string.assistant_page_embedding_model_auto)
-                            }
-                        )
-                        // What the model actually is, when it is one of ours: the width and the
-                        // window are the two facts a person cannot see anywhere else, and the
-                        // window is the one that changes what gets indexed.
-                        embeddingModelFacts?.let { facts ->
-                            Text(
-                                text = facts,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                },
+                onClick = { navController.navigate(Screen.SettingEmbedding) },
+                headlineContent = { Text(stringResource(R.string.assistant_page_embedding_entry)) },
+                supportingContent = { Text(stringResource(R.string.assistant_page_embedding_entry_desc)) },
                 trailingContent = {
                     Icon(
                         imageVector = HugeIcons.ArrowRight01,
@@ -702,119 +576,9 @@ private fun AssistantMemoryContent(
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 },
-                onClick = {
-                    embeddingVm.refresh()
-                    showEmbeddingModelPicker = true
-                },
-            )
-            item(
-                headlineContent = {
-                    Text(stringResource(R.string.assistant_page_embedding_native_images))
-                },
-                supportingContent = {
-                    Text(
-                        if (embeddingReadsImages) {
-                            stringResource(R.string.assistant_page_embedding_native_images_desc)
-                        } else {
-                            stringResource(R.string.assistant_page_embedding_native_images_not_vision)
-                        }
-                    )
-                },
-                trailingContent = {
-                    Switch(
-                        // Off when the model cannot see, whatever the setting says: the switch
-                        // describes what will happen, not only what was chosen.
-                        checked = settings.embeddingNativeImages && embeddingReadsImages,
-                        enabled = embeddingReadsImages,
-                        onCheckedChange = { on ->
-                            scope.launch {
-                                settingsStore.update { it.copy(embeddingNativeImages = on) }
-                            }
-                            // The pictures already in the library are worth indexing properly
-                            // now rather than at the next scheduled round.
-                            libraryIndex.requestSync(assistant, minIntervalMs = 0L)
-                        },
-                    )
-                },
-            )
-            item(
-                headlineContent = { Text(stringResource(R.string.assistant_page_embedding_gpu)) },
-                supportingContent = {
-                    Text(
-                        if (embeddingGpuInEffect) {
-                            stringResource(R.string.assistant_page_embedding_gpu_on)
-                        } else {
-                            stringResource(R.string.assistant_page_embedding_gpu_off)
-                        }
-                    )
-                },
-                trailingContent = {
-                    Switch(
-                        checked = embeddingGpuInEffect,
-                        // Only a local model can use the device's GPU; a provider's endpoint has
-                        // its own hardware, and there is nothing here to switch.
-                        enabled = settings.embeddingBackend != CloudEmbeddingRules.BACKEND_CLOUD,
-                        onCheckedChange = { on ->
-                            scope.launch {
-                                settingsStore.update { it.copy(embeddingUseGpu = on) }
-                            }
-                            // The two accelerators do not produce identical vectors (cosine
-                            // 0.9997 on the same sentence), and a vector is only comparable to
-                            // the ones stored beside it. The accelerator is part of the model
-                            // identity, so every stored chunk goes stale and this sync rebuilds
-                            // rather than mixing - it is the identity that makes it safe, not
-                            // the sync.
-                            memoryIndex.requestSync(assistant, minIntervalMs = 0L)
-                        },
-                    )
-                },
-            )
-            item(
-                headlineContent = { Text(stringResource(R.string.assistant_page_index_rebuild)) },
-                supportingContent = { Text(indexStatusText) },
-                trailingContent = {
-                    TextButton(
-                        onClick = {
-                            // Zero interval: an explicit rebuild means now, not "unless one ran
-                            // in the last five minutes".
-                            memoryIndex.requestSync(assistant, minIntervalMs = 0L)
-                        },
-                        enabled = !indexStatus.running && assistant.coldMemoryEnabled &&
-                            assistant.workspaceId != null,
-                    ) {
-                        Text(stringResource(R.string.assistant_page_index_rebuild_action))
-                    }
-                },
-            )
-            // The catalogue's own index. There is no longer a mode where it would be beside the
-            // point — every turn is built from it now.
-            item(
-                headlineContent = { Text(stringResource(R.string.assistant_page_tool_index_title)) },
-                supportingContent = {
-                    Text(
-                        text = when {
-                            toolIndexStatus.total == 0 ->
-                                stringResource(R.string.assistant_page_tool_index_never)
-                            !toolIndexStatus.hasVector ->
-                                stringResource(R.string.assistant_page_tool_index_off)
-                            else -> stringResource(
-                                R.string.assistant_page_tool_index_ready,
-                                toolIndexStatus.cached,
-                                toolIndexStatus.total,
-                            )
-                        },
-                    )
-                },
-                trailingContent = {
-                    TextButton(
-                        onClick = { scope.launch { toolVectors.rebuild() } },
-                        enabled = toolIndexStatus.total > 0,
-                    ) {
-                        Text(stringResource(R.string.assistant_page_index_rebuild_action))
-                    }
-                },
             )
         }
+
 
         CardGroup {
             item(
@@ -923,378 +687,6 @@ private fun AssistantMemoryContent(
         )
     }
 
-    val cloudSelected = CloudEmbeddingRules.isCloud(settings.embeddingBackend)
-
-    if (showEmbeddingModelPicker) {
-        AlertDialog(
-            onDismissRequest = { showEmbeddingModelPicker = false },
-            title = { Text(stringResource(R.string.assistant_page_embedding_model)) },
-            text = {
-                Column(
-                    modifier = Modifier.verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
-                ) {
-                    EmbeddingChoiceRow(
-                        label = stringResource(R.string.assistant_page_embedding_source_local),
-                        selected = !cloudSelected,
-                        onClick = {
-                            scope.launch {
-                                settingsStore.update {
-                                    it.copy(embeddingBackend = CloudEmbeddingRules.BACKEND_LOCAL)
-                                }
-                            }
-                            memoryIndex.requestSync(assistant, minIntervalMs = 0L)
-                        },
-                    )
-                    EmbeddingChoiceRow(
-                        label = stringResource(R.string.assistant_page_embedding_source_cloud),
-                        selected = cloudSelected,
-                        onClick = {
-                            scope.launch {
-                                settingsStore.update {
-                                    it.copy(embeddingBackend = CloudEmbeddingRules.BACKEND_CLOUD)
-                                }
-                            }
-                            memoryIndex.requestSync(assistant, minIntervalMs = 0L)
-                        },
-                    )
-                    if (cloudSelected) {
-                        Text(
-                            text = stringResource(R.string.assistant_page_embedding_cloud_notice),
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(top = 8.dp),
-                        )
-                        val cloudCandidates = remember(settings.providers) {
-                            CloudEmbeddingModels.candidates(settings.providers)
-                        }
-                        if (cloudCandidates.isEmpty()) {
-                            Text(
-                                text = stringResource(R.string.assistant_page_embedding_cloud_none),
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.padding(top = 8.dp),
-                            )
-                        }
-                        cloudCandidates.forEach { candidate ->
-                            EmbeddingChoiceRow(
-                                label = if (candidate.supported) {
-                                    candidate.displayName
-                                } else {
-                                    stringResource(
-                                        R.string.assistant_page_embedding_cloud_unsupported,
-                                        candidate.providerName,
-                                    )
-                                },
-                                selected = settings.embeddingCloudModel == candidate.modelUuid,
-                                onClick = {
-                                    scope.launch {
-                                        settingsStore.update {
-                                            it.copy(embeddingCloudModel = candidate.modelUuid)
-                                        }
-                                    }
-                                    memoryIndex.requestSync(assistant, minIntervalMs = 0L)
-                                    showEmbeddingModelPicker = false
-                                },
-                            )
-                        }
-                    } else {
-                        Text(
-                            text = stringResource(R.string.assistant_page_embedding_model_desc),
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                        EmbeddingChoiceRow(
-                            label = stringResource(R.string.assistant_page_embedding_model_auto),
-                            selected = settings.embeddingModelFile.isEmpty(),
-                            onClick = {
-                                scope.launch { settingsStore.update { it.copy(embeddingModelFile = "") } }
-                                memoryIndex.requestSync(assistant, minIntervalMs = 0L)
-                                showEmbeddingModelPicker = false
-                            },
-                        )
-                        // The window, and only for a model whose window we choose. A GGUF carries
-                        // its own, so offering this for one would be a control with nothing behind
-                        // it.
-                        if (LitertEmbeddingCatalog.entryFor(settings.embeddingModelFile) != null) {
-                            Text(
-                                text = stringResource(R.string.assistant_page_embedding_window),
-                                style = MaterialTheme.typography.labelMedium,
-                                modifier = Modifier.padding(top = 10.dp),
-                            )
-                            EmbeddingChoiceRow(
-                                label = stringResource(R.string.assistant_page_embedding_window_auto),
-                                selected = settings.embeddingSignature <= 0,
-                                onClick = {
-                                    scope.launch {
-                                        settingsStore.update { it.copy(embeddingSignature = 0) }
-                                    }
-                                    memoryIndex.requestSync(assistant, minIntervalMs = 0L)
-                                },
-                            )
-                            LitertEmbeddingCatalog.SIGNATURES.forEach { signature ->
-                                EmbeddingChoiceRow(
-                                    label = stringResource(
-                                        R.string.assistant_page_embedding_window_value,
-                                        signature,
-                                    ),
-                                    selected = settings.embeddingSignature == signature,
-                                    onClick = {
-                                        scope.launch {
-                                            settingsStore.update {
-                                                it.copy(embeddingSignature = signature)
-                                            }
-                                        }
-                                        memoryIndex.requestSync(assistant, minIntervalMs = 0L)
-                                    },
-                                )
-                            }
-                        }
-                        embeddingInstalled.forEach { fileName ->
-                            EmbeddingChoiceRow(
-                                label = fileName,
-                                selected = settings.embeddingModelFile == fileName,
-                                onClick = {
-                                    scope.launch { settingsStore.update { it.copy(embeddingModelFile = fileName) } }
-                                    memoryIndex.requestSync(assistant, minIntervalMs = 0L)
-                                    showEmbeddingModelPicker = false
-                                },
-                            )
-                        }
-
-                        // The curated models, for a fresh install: pasting a HuggingFace URL into the
-                        // local-model page works, but it asks the user to know one. They are listed
-                        // in grid order - rung by rung, and the model this phone should have first -
-                        // so the list reads as a choice rather than as a catalogue, and each row
-                        // carries the two things that decide it: which rung it is, and whether the
-                        // disk can take it.
-                        val offers = embeddingVm.offers
-                        if (offers.isNotEmpty()) {
-                            Text(
-                                text = stringResource(R.string.assistant_page_embedding_suggested),
-                                style = MaterialTheme.typography.labelMedium,
-                                modifier = Modifier.padding(top = 10.dp),
-                            )
-                            offers.forEach { offer ->
-                                val entry = offer.entry
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text(
-                                                text = entry.displayName,
-                                                style = MaterialTheme.typography.bodyMedium,
-                                            )
-                                            offer.focus?.let { focus ->
-                                                Text(
-                                                    text = laneLabel(focus),
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = MaterialTheme.colorScheme.secondary,
-                                                    modifier = Modifier.padding(start = 6.dp),
-                                                )
-                                            }
-                                            if (entry == embeddingVm.recommended) {
-                                                Text(
-                                                    text = stringResource(
-                                                        R.string.assistant_page_embedding_recommended
-                                                    ),
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = MaterialTheme.colorScheme.primary,
-                                                    modifier = Modifier.padding(start = 6.dp),
-                                                )
-                                            }
-                                        }
-                                        Text(
-                                            text = stringResource(
-                                                R.string.assistant_page_embedding_size_tier,
-                                                tierLabel(offer.tier),
-                                                (entry.sizeBytes / 1_000_000L).toInt(),
-                                                entry.dim,
-                                                entry.contextLabel,
-                                            ),
-                                            style = MaterialTheme.typography.bodySmall,
-                                        )
-                                        if (!offer.fits) {
-                                            Text(
-                                                text = stringResource(
-                                                    R.string.assistant_page_embedding_no_room
-                                                ),
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.error,
-                                            )
-                                        }
-                                    }
-                                    TextButton(
-                                        onClick = {
-                                            val start = {
-                                                embeddingVm.download(entry) {
-                                                    memoryIndex.requestSync(assistant, minIntervalMs = 0L)
-                                                }
-                                            }
-                                            if (embeddingVm.onMeteredNetwork &&
-                                                entry.sizeBytes >= LARGE_DOWNLOAD_BYTES
-                                            ) {
-                                                pendingDownload = PendingDownload(entry.sizeBytes, start)
-                                            } else {
-                                                start()
-                                            }
-                                        },
-                                        enabled = embeddingDownload == null && offer.fits,
-                                    ) {
-                                        Text(stringResource(R.string.assistant_page_embedding_download))
-                                    }
-                                }
-                            }
-                        }
-
-                        // The `.litertlm` entries, after the GGUFs rather than merged with them:
-                        // these are the ones that can read a picture, and the only ones whose window
-                        // is chosen at load time, so their label says the first and the window row
-                        // below covers the second. The type is separate because the files are -
-                        // they download into their own directory and the engine that opens them is
-                        // a different one - but the row reads the same as the others on purpose.
-                        val litertOffers = embeddingVm.litertOffers
-                        litertOffers.forEach { offer ->
-                            val entry = offer.entry
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(
-                                            text = entry.displayName,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                        )
-                                        Text(
-                                            text = stringResource(
-                                                R.string.assistant_page_embedding_lane_multimodal
-                                            ),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.secondary,
-                                            modifier = Modifier.padding(start = 6.dp),
-                                        )
-                                    }
-                                    Text(
-                                        text = stringResource(
-                                            R.string.assistant_page_embedding_litert_size,
-                                            (entry.sizeBytes / 1_000_000L).toInt(),
-                                            entry.dim,
-                                            entry.contextTokens,
-                                        ),
-                                        style = MaterialTheme.typography.bodySmall,
-                                    )
-                                    if (!offer.fits) {
-                                        Text(
-                                            text = stringResource(
-                                                R.string.assistant_page_embedding_no_room
-                                            ),
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.error,
-                                        )
-                                    }
-                                }
-                                TextButton(
-                                    onClick = {
-                                        val start = {
-                                            embeddingVm.download(entry) {
-                                                memoryIndex.requestSync(assistant, minIntervalMs = 0L)
-                                            }
-                                        }
-                                        if (embeddingVm.onMeteredNetwork &&
-                                            entry.sizeBytes >= LARGE_DOWNLOAD_BYTES
-                                        ) {
-                                            pendingDownload = PendingDownload(entry.sizeBytes, start)
-                                        } else {
-                                            start()
-                                        }
-                                    },
-                                    enabled = embeddingDownload == null && offer.fits,
-                                ) {
-                                    Text(stringResource(R.string.assistant_page_embedding_download))
-                                }
-                            }
-                        }
-
-                        embeddingDownload?.let { inFlight ->
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 10.dp),
-                            ) {
-                                Text(
-                                    text = stringResource(
-                                        R.string.assistant_page_embedding_downloading,
-                                        inFlight.percent,
-                                    ),
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
-                                LinearProgressIndicator(
-                                    progress = { inFlight.percent / 100f },
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                                TextButton(onClick = { embeddingVm.cancel() }) {
-                                    Text(stringResource(R.string.cancel))
-                                }
-                            }
-                        }
-
-                        embeddingError?.let { message ->
-                            Text(
-                                text = message,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.padding(top = 10.dp),
-                            )
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showEmbeddingModelPicker = false }) {
-                    Text(stringResource(R.string.confirm))
-                }
-            },
-        )
-    }
-
-    // A model is hundreds of megabytes, and this is the one place in the app where a single tap
-    // spends that much of somebody's data plan. Asked only on a metered connection and only above
-    // [LARGE_DOWNLOAD_BYTES]: interrupting a 26 MB download over Wi-Fi is noise, and noise is how
-    // a warning gets dismissed without being read.
-    pendingDownload?.let { pending ->
-        AlertDialog(
-            onDismissRequest = { pendingDownload = null },
-            title = { Text(stringResource(R.string.assistant_page_embedding_metered_title)) },
-            text = {
-                Text(
-                    stringResource(
-                        R.string.assistant_page_embedding_metered_desc,
-                        (pending.sizeBytes / 1_000_000L).toInt(),
-                    )
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        pendingDownload = null
-                        pending.start()
-                    }
-                ) {
-                    Text(stringResource(R.string.assistant_page_embedding_download))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { pendingDownload = null }) {
-                    Text(stringResource(R.string.cancel))
-                }
-            },
-        )
-    }
-
     RikkaConfirmDialog(
         show = pendingDeleteMemory != null,
         title = stringResource(R.string.confirm_delete),
@@ -1313,69 +705,6 @@ private fun AssistantMemoryContent(
             )
         }
     )
-}
-
-/**
- * The rung a row belongs to, as the label it shows.
- *
- * "Extra" rather than a rung name for a model the grid does not place: it is still curated and
- * still installable, it is just not what the ladder is recommending.
- */
-@Composable
-private fun tierLabel(tier: EmbeddingTier?): String = stringResource(
-    when (tier) {
-        EmbeddingTier.LIGHT -> R.string.assistant_page_embedding_tier_light
-        EmbeddingTier.STANDARD -> R.string.assistant_page_embedding_tier_standard
-        EmbeddingTier.TOP -> R.string.assistant_page_embedding_tier_top
-        null -> R.string.assistant_page_embedding_tier_extra
-    }
-)
-
-/** Which corpus the model is tuned for - the one thing that decides between two rows of a rung. */
-@Composable
-private fun laneLabel(focus: EmbeddingFocus): String = stringResource(
-    if (focus == EmbeddingFocus.CHINESE) {
-        R.string.assistant_page_embedding_lane_chinese
-    } else {
-        R.string.assistant_page_embedding_lane_multilingual
-    }
-)
-
-/**
- * Downloads at or above this are worth confirming on a metered connection.
- *
- * 100 MB: under it a download is over before the dialog could be read, over it the user has a
- * right to know before it starts.
- */
-private const val LARGE_DOWNLOAD_BYTES = 100_000_000L
-
-/**
- * A download waiting for the user to confirm it on a metered connection: what it costs, and how to
- * start it.
- *
- * One type for both catalogues rather than one per runtime, because the question ("is this worth
- * somebody's data plan?") and the answer ("only if they say so") do not depend on which directory
- * the file lands in.
- */
-private data class PendingDownload(val sizeBytes: Long, val start: () -> Unit)
-
-@Composable
-private fun EmbeddingChoiceRow(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        RadioButton(selected = selected, onClick = null)
-        Text(text = label, style = MaterialTheme.typography.bodyMedium)
-    }
 }
 
 @Composable

@@ -190,7 +190,7 @@ fun GettingStartedPage() {
                     descRes = R.string.getting_started_step_embedding_desc,
                     done = steps[GettingStartedStep.Embedding] == true,
                     optional = false,
-                    onAction = { nav.navigate(Screen.AssistantMemory(assistantId)) },
+                    onAction = { nav.navigate(Screen.SettingEmbedding) },
                 )
             }
 

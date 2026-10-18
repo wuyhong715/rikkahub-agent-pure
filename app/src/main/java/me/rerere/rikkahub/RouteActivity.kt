@@ -111,6 +111,7 @@ import me.rerere.rikkahub.ui.pages.videogen.VideoGenPage
 import me.rerere.rikkahub.ui.pages.log.LogPage
 import me.rerere.rikkahub.ui.pages.search.SearchPage
 import me.rerere.rikkahub.ui.pages.setting.SettingAboutPage
+import me.rerere.rikkahub.ui.pages.setting.SettingEmbeddingPage
 import me.rerere.rikkahub.ui.pages.setting.SettingAccessibilityPage
 import me.rerere.rikkahub.ui.pages.setting.SettingFloatingBallPage
 import me.rerere.rikkahub.ui.pages.setting.SettingNotificationsPage
@@ -511,6 +512,10 @@ class RouteActivity : ComponentActivity() {
                                 SettingModelPage()
                             }
 
+                            entry<Screen.SettingEmbedding> {
+                                SettingEmbeddingPage()
+                            }
+
                             entry<Screen.SettingAbout> {
                                 SettingAboutPage()
                             }
@@ -814,6 +819,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object SettingModels : Screen
+
+    @Serializable
+    data object SettingEmbedding : Screen
 
     @Serializable
     data object SettingAbout : Screen

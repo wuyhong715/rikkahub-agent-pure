@@ -26,11 +26,8 @@ data class SettingsSearchEntry(
  * Static mirror of the hub rows in [SettingPage]. This list is NOT derived from that page, so it
  * drifts if a row is added, removed, or renamed there without a matching edit here (see the
  * reminder comment in SettingPage.kt).
- *
- * [currentAssistantId] is only needed by the "local embedding model" row, whose destination is the
- * assistant memory page (the one screen that both explains the model and can install it).
  */
-fun settingsSearchIndex(developerMode: Boolean, currentAssistantId: String = ""): List<SettingsSearchEntry> {
+fun settingsSearchIndex(developerMode: Boolean): List<SettingsSearchEntry> {
     val entries = mutableListOf(
         // Appearance & interaction
         SettingsSearchEntry(
@@ -245,7 +242,7 @@ fun settingsSearchIndex(developerMode: Boolean, currentAssistantId: String = "")
             titleRes = R.string.setting_page_embedding_model,
             descriptionRes = R.string.setting_page_embedding_model_missing,
             groupRes = R.string.setting_page_group_models,
-            route = Screen.AssistantMemory(id = currentAssistantId),
+            route = Screen.SettingEmbedding,
         )
     )
 

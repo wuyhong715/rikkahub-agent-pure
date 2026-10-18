@@ -80,7 +80,6 @@ import me.rerere.hugeicons.stroke.View
 import me.rerere.hugeicons.stroke.Wrench01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
-import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.isNotConfigured
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.vector.EmbeddingModelFiles
@@ -242,11 +241,7 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         headlineContent = { Text(stringResource(R.string.setting_page_tts_service)) },
                     )
                     item(
-                        onClick = {
-                            navController.navigate(
-                                Screen.AssistantMemory(id = settings.getCurrentAssistant().id.toString())
-                            )
-                        },
+                        onClick = { navController.navigate(Screen.SettingEmbedding) },
                         leadingContent = { Icon(HugeIcons.Cpu, null) },
                         supportingContent = {
                             Text(

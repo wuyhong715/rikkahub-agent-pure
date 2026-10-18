@@ -55,6 +55,13 @@ class EmbeddingModelViewModel(
     val installed: StateFlow<List<String>> = _installed.asStateFlow()
 
     /**
+     * Total size on disk of everything [installed] lists, in bytes. Recomputed by [refresh], so a
+     * finished download or a deletion shows up without the screen having to count files itself.
+     */
+    private val _installedBytes = MutableStateFlow(measureInstalledBytes())
+    val installedBytes: StateFlow<Long> = _installedBytes.asStateFlow()
+
+    /**
      * One curated GGUF as the picker shows it: the file, the cell of the grid it occupies (null for
      * a model the grid does not place), and whether this phone has room for it.
      *
@@ -133,6 +140,30 @@ class EmbeddingModelViewModel(
     /** Re-reads the directory. Called when the picker opens - the user may have just installed. */
     fun refresh() {
         _installed.value = EmbeddingModelFiles.installedFiles(context)
+        _installedBytes.value = measureInstalledBytes()
+    }
+
+    private fun measureInstalledBytes(): Long =
+        EmbeddingModelFiles.dirs(context)
+            .flatMap { dir -> dir.listFiles()?.toList() ?: emptyList() }
+            .filter { it.isFile }
+            .sumOf { it.length() }
+
+    /**
+     * Removes an installed model from disk.
+     *
+     * Deleting the file the setting points at would leave a configured name that resolves to
+     * nothing, so that case resets the choice to automatic: the lookup then picks the best of what
+     * is left, which is what "automatic" means everywhere else in the app.
+     */
+    fun delete(fileName: String) {
+        EmbeddingModelFiles.fileFor(context, fileName)?.delete()
+        if (settingsStore.settingsFlow.value.embeddingModelFile == fileName) {
+            viewModelScope.launch {
+                settingsStore.update { it.copy(embeddingModelFile = "") }
+            }
+        }
+        refresh()
     }
 
     fun cancel() {

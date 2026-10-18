@@ -12,7 +12,6 @@ import androidx.compose.ui.res.stringResource
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.Settings
-import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.vector.EmbeddingModelFiles
 import me.rerere.rikkahub.data.vector.EmbeddingReadiness
 import me.rerere.rikkahub.ui.context.LocalNavController
@@ -64,9 +63,7 @@ fun EmbeddingModelGate(setting: Settings) {
             TextButton(
                 onClick = {
                     acknowledged = true
-                    navController.navigate(
-                        Screen.AssistantMemory(id = setting.getCurrentAssistant().id.toString())
-                    )
+                    navController.navigate(Screen.SettingEmbedding)
                 }
             ) {
                 Text(stringResource(R.string.embedding_gate_action))
