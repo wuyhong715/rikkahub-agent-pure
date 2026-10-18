@@ -1,4 +1,6 @@
 package me.rerere.rikkahub.ui.components.ai
+import me.rerere.rikkahub.runtime.tools.ApprovalMode
+
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement

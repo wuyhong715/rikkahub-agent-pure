@@ -11,7 +11,7 @@ import me.rerere.ai.ui.UIMessagePart
  * instead bounded by a conservative token estimate.  The returned source segments preserve every
  * character; the caller can recursively reduce their summaries into one final summary.
  */
-internal object ContextCompactionPlanner {
+object ContextCompactionPlanner {
     private const val DEFAULT_CONTEXT_LENGTH = 8_192
     private const val PROMPT_OVERHEAD_TOKENS = 768
     private const val MIN_INPUT_BUDGET_TOKENS = 512
@@ -321,7 +321,7 @@ internal object ContextCompactionPlanner {
      * chars consume one token each. This intentionally overestimates mixed text to keep every
      * compression prompt safely below its planned budget.
      */
-    internal fun estimateTokens(text: String): Int = estimateTokens(text, 0, text.length)
+    fun estimateTokens(text: String): Int = estimateTokens(text, 0, text.length)
         .coerceAtLeast(1)
 
     private fun estimateTokens(text: String, startIndex: Int, endIndex: Int): Int {

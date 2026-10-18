@@ -1,4 +1,6 @@
 package me.rerere.rikkahub.data.preferences
+import me.rerere.rikkahub.runtime.tools.ApprovalMode
+
 
 import android.content.Context
 import android.util.Log

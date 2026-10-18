@@ -1,4 +1,6 @@
 package me.rerere.rikkahub.ui.pages.setting
+import me.rerere.rikkahub.runtime.tools.ApprovalMode
+
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement

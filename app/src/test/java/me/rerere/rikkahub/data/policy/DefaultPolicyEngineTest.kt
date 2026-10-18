@@ -1,4 +1,6 @@
 package me.rerere.rikkahub.data.policy
+import me.rerere.rikkahub.runtime.tools.ApprovalMode
+
 
 import kotlinx.coroutines.runBlocking
 import me.rerere.rikkahub.costguards.TokenBudgetTracker
