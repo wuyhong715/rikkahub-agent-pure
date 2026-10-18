@@ -7,11 +7,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.mission.MissionEntity
-import me.rerere.rikkahub.data.mission.MissionEventEntity
-import me.rerere.rikkahub.data.mission.MissionEventType
 import me.rerere.rikkahub.data.mission.MissionRepository
 import me.rerere.rikkahub.data.mission.MissionStatus
 import me.rerere.rikkahub.data.mission.acceptanceChecked
+import me.rerere.rikkahub.data.runevent.RunEventEntity
+import me.rerere.rikkahub.data.runevent.RunEventType
 
 class MissionDetailVM(
     private val missionId: String,
@@ -21,7 +21,7 @@ class MissionDetailVM(
     val mission: StateFlow<MissionEntity?> = missionRepository.observeMission(missionId)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    val events: StateFlow<List<MissionEventEntity>> = missionRepository.observeEvents(missionId)
+    val events: StateFlow<List<RunEventEntity>> = missionRepository.observeEvents(missionId)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun toggleAcceptance(index: Int) {
@@ -47,7 +47,7 @@ class MissionDetailVM(
         viewModelScope.launch {
             missionRepository.logEvent(
                 missionId = missionId,
-                type = MissionEventType.NOTE,
+                type = RunEventType.NOTE,
                 title = text,
             )
         }

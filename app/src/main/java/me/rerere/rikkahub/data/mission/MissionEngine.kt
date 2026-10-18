@@ -5,10 +5,15 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
+import me.rerere.rikkahub.data.runevent.RunEventRepository
+import me.rerere.rikkahub.data.runevent.RunEventType
 import me.rerere.rikkahub.subagent.SubAgentRegistry
 import me.rerere.rikkahub.subagent.SubAgentRun
 import me.rerere.rikkahub.subagent.SubAgentStatus
+import me.rerere.rikkahub.utils.JsonInstant
 import java.util.concurrent.ConcurrentHashMap
 
 private const val TAG = "MissionEngine"
@@ -31,8 +36,9 @@ private val ARTIFACT_TOOLS = setOf(
  * Three responsibilities:
  * 1. **Conversation binding** — maps a conversationId to a missionId in memory
  *    (with DB fallback via [MissionRepository.findActiveByConversation]).
- * 2. **Tool artifact tracking** — when a whitelisted file-writing tool executes,
- *    extracts the path from the tool's args and attaches it to the bound mission.
+ * 2. **Tool execution journaling** — every tool execution emits a
+ *    [RunEventType.TOOL_RESULT] event to the run-event journal; whitelisted
+ *    file-writing tools additionally have their path attached as an artifact.
  * 3. **Sub-agent dispatch tracking** — collects [SubAgentRegistry.runs] and logs
  *    SUBAGENT_DISPATCHED / SUBAGENT_FINISHED events for runs whose parent chat
  *    has a bound mission.
@@ -40,12 +46,14 @@ private val ARTIFACT_TOOLS = setOf(
  * All public methods are wrapped in [runCatching] — this is observability
  * infrastructure and must never break the generation loop.
  *
- * @param repository the mission data layer (Role A).
+ * @param repository the mission data layer.
+ * @param runEventRepository the run-event journal writer (TOOL_RESULT emissions).
  * @param subAgentRegistry the in-memory sub-agent run store.
  * @param appScope the application-scoped coroutine scope for the init collector.
  */
 class MissionEngine(
     private val repository: MissionRepository,
+    private val runEventRepository: RunEventRepository,
     private val subAgentRegistry: SubAgentRegistry,
     private val appScope: CoroutineScope,
 ) {
@@ -89,8 +97,10 @@ class MissionEngine(
             SubAgentStatus.RUNNING -> {
                 repository.logEvent(
                     missionId = missionId,
-                    type = MissionEventType.SUBAGENT_DISPATCHED,
+                    type = RunEventType.SUBAGENT_DISPATCHED,
                     title = run.label,
+                    runId = run.id,
+                    conversationId = parentChatId,
                 )
             }
 
@@ -101,9 +111,11 @@ class MissionEngine(
                 val detail = run.result?.take(200) ?: run.error?.take(200)
                 repository.logEvent(
                     missionId = missionId,
-                    type = MissionEventType.SUBAGENT_FINISHED,
+                    type = RunEventType.SUBAGENT_FINISHED,
                     title = run.label,
                     detail = detail,
+                    runId = run.id,
+                    conversationId = parentChatId,
                 )
             }
 
@@ -123,7 +135,7 @@ class MissionEngine(
             bindings[conversationId] = missionId
             repository.logEvent(
                 missionId = missionId,
-                type = MissionEventType.NOTE,
+                type = RunEventType.NOTE,
                 title = "Bound to conversation: $conversationId",
             )
         }.onFailure { Log.w(TAG, "bindConversation failed", it) }
@@ -139,7 +151,7 @@ class MissionEngine(
             if (missionId != null) {
                 repository.logEvent(
                     missionId = missionId,
-                    type = MissionEventType.NOTE,
+                    type = RunEventType.NOTE,
                     title = "Unbound from conversation: $conversationId",
                 )
             }
@@ -159,17 +171,41 @@ class MissionEngine(
     }.getOrNull()
 
     /**
-     * Hook called after a tool executes. If the tool is in [ARTIFACT_TOOLS],
-     * extracts the `path` field from [argsJson] and attaches it as an artifact
-     * to the bound mission via [MissionRepository.attachArtifact].
+     * Hook called after a tool executes. Two responsibilities (in order):
+     *
+     * a) **Unconditionally emit a [RunEventType.TOOL_RESULT] event** to the run-event
+     *    journal. This fires for every tool call in the generation loop, regardless of
+     *    mission binding — [missionId] is nullable so unbound conversations still get
+     *    journaled (scoped by [conversationId] only). title = tool name, detail = output
+     *    excerpt (first 300 chars, null if blank), payload = {"tool", "args" excerpt}.
+     *
+     * b) **Artifact tracking** — if the tool is in [ARTIFACT_TOOLS], extracts the
+     *    `path` field from [argsJson] and attaches it as an artifact to the bound
+     *    mission via [MissionRepository.attachArtifact].
      */
     suspend fun onToolExecuted(
         conversationId: String,
         toolName: String,
         argsJson: String,
-        @Suppress("UNUSED_PARAMETER") outputJson: String,
+        outputJson: String,
     ) {
         runCatching {
+            // (a) TOOL_RESULT — unconditional, one row per tool execution.
+            runEventRepository.emit(
+                type = RunEventType.TOOL_RESULT,
+                title = toolName,
+                detail = outputJson.take(300).ifBlank { null },
+                payloadJson = JsonInstant.encodeToString(
+                    buildJsonObject {
+                        put("tool", toolName)
+                        put("args", argsJson.take(500))
+                    }
+                ),
+                missionId = missionIdFor(conversationId),
+                conversationId = conversationId,
+            )
+
+            // (b) ARTIFACT_TOOLS whitelist — attach file artifacts to the bound mission.
             if (toolName !in ARTIFACT_TOOLS) return@runCatching
             val path = parsePath(argsJson) ?: return@runCatching
             val missionId = missionIdFor(conversationId) ?: return@runCatching
@@ -186,8 +222,9 @@ class MissionEngine(
             val missionId = missionIdFor(conversationId) ?: return@runCatching
             repository.logEvent(
                 missionId = missionId,
-                type = MissionEventType.MILESTONE,
+                type = RunEventType.MILESTONE,
                 title = "Generation finished",
+                conversationId = conversationId,
             )
         }.onFailure { Log.w(TAG, "onGenerationFinished failed", it) }
     }

@@ -15,6 +15,8 @@ import me.rerere.rikkahub.data.ai.AIRequestInterceptor
 import me.rerere.rikkahub.data.ai.RequestLoggingInterceptor
 import me.rerere.rikkahub.data.mission.MissionEngine
 import me.rerere.rikkahub.data.mission.MissionRepository
+import me.rerere.rikkahub.data.runevent.RunEventDao
+import me.rerere.rikkahub.data.runevent.RunEventRepository
 import me.rerere.rikkahub.data.ai.transformers.AssistantTemplateLoader
 import me.rerere.rikkahub.data.ai.GenerationLoop
 import me.rerere.rikkahub.data.ai.TranslationHandler
@@ -290,8 +292,13 @@ val dataSourceModule = module {
     // Workbench: mission ledger + engine. The engine tracks conversation-bound missions,
     // records artifacts written by file tools, and mirrors sub-agent state into the timeline.
     single { get<AppDatabase>().missionDao() }
-    single { MissionRepository(get()) }
-    single { MissionEngine(repository = get(), subAgentRegistry = get(), appScope = get<AppScope>()) }
+    single { MissionRepository(get(), get()) }
+    // P1 — Run Event Journal: the unified append-only event stream for agent execution.
+    // The repository is the single shared writer (monotonic timestamps + scope retention);
+    // see RunEventRepository. Best-effort writes, never breaks execution.
+    single { get<AppDatabase>().runEventDao() }
+    single { RunEventRepository(get()) }
+    single { MissionEngine(repository = get(), runEventRepository = get(), subAgentRegistry = get(), appScope = get<AppScope>()) }
     single { AgentRunBootRecovery(context = get(), repository = get()) }
     single {
         OrphanedReasoningRecovery(

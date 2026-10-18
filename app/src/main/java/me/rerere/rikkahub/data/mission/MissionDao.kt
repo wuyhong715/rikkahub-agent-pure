@@ -7,11 +7,13 @@ import androidx.room.Query
 import kotlinx.coroutines.flow.Flow
 
 /**
- * Room DAO for the workbench mission tables ([missions] + [mission_events]).
+ * Room DAO for the workbench [missions] table.
  *
  * Writes are funnelled through [MissionRepository], which serialises mutations through a
  * Mutex so concurrent state transitions can't last-writer-win each other. The DAO itself
- * stays a thin typed query surface.
+ * stays a thin typed query surface. Mission event writes are handled by
+ * [me.rerere.rikkahub.data.runevent.RunEventRepository] /
+ * [me.rerere.rikkahub.data.runevent.RunEventDao] — the unified `run_events` journal.
  */
 @Dao
 interface MissionDao {
@@ -37,20 +39,4 @@ interface MissionDao {
 
     @Query("DELETE FROM missions WHERE id = :id")
     suspend fun deleteById(id: String)
-
-    @Insert
-    suspend fun insertEvent(e: MissionEventEntity)
-
-    @Query("SELECT * FROM mission_events WHERE mission_id = :missionId ORDER BY created_at ASC")
-    fun observeEvents(missionId: String): Flow<List<MissionEventEntity>>
-
-    @Query("DELETE FROM mission_events WHERE mission_id = :missionId")
-    suspend fun deleteEvents(missionId: String)
-
-    @Query(
-        "DELETE FROM mission_events WHERE mission_id = :missionId " +
-            "AND id NOT IN (SELECT id FROM mission_events WHERE mission_id = :missionId " +
-            "ORDER BY created_at DESC LIMIT 500)"
-    )
-    suspend fun trimEvents(missionId: String)
 }

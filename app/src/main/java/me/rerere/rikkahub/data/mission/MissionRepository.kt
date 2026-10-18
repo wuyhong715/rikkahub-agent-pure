@@ -1,52 +1,46 @@
 package me.rerere.rikkahub.data.mission
 
-import android.util.Log
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import me.rerere.rikkahub.data.runevent.RunEventEntity
+import me.rerere.rikkahub.data.runevent.RunEventRepository
+import me.rerere.rikkahub.data.runevent.RunEventType
 import me.rerere.rikkahub.utils.JsonInstant
 import kotlin.uuid.Uuid
 
-private const val TAG = "MissionRepository"
-
 /**
- * Workbench Mission — single shared writer/reader for the mission tables.
+ * Workbench Mission — single shared writer/reader for the mission table.
  *
  * All mutating methods serialise through a [Mutex] so two concurrent transitions on the
  * same mission can't last-writer-win each other's status field — each transition is
  * read-modify-write under the lock.
  *
- * [logEvent] and [attachArtifact] are best-effort: failures are logged, never thrown.
- * The timeline is observability infrastructure — a write failure here must never break
- * the mission it is tracking. [transition] validates the state machine and returns
- * `false` for illegal transitions without throwing.
+ * Event writes (CREATED, STATUS_CHANGED, ARTIFACT, …) are delegated to
+ * [runEventRepository], which owns the `run_events` journal — the unified, append-only
+ * event stream. [logEvent] and [attachArtifact] are best-effort: the journal's
+ * [RunEventRepository.emit] swallows failures internally, so a write failure here must
+ * never break the mission it is tracking. [transition] validates the state machine and
+ * returns `false` for illegal transitions without throwing.
  */
-class MissionRepository(private val dao: MissionDao) {
+class MissionRepository(
+    private val dao: MissionDao,
+    private val runEventRepository: RunEventRepository,
+) {
 
     private val writeMutex = Mutex()
-
-    /**
-     * Monotonic clock for timeline events: rapid-fire logging within the same wall-clock
-     * millisecond must still order (and trim) deterministically, so every event timestamp is
-     * at least one tick after the previous one. Mission rows keep real wall time; only
-     * mission_events.created_at goes through this.
-     */
-    private val lastEventMs = java.util.concurrent.atomic.AtomicLong(0)
-
-    private fun nextEventMs(): Long = lastEventMs.updateAndGet { prev ->
-        maxOf(prev + 1, System.currentTimeMillis())
-    }
 
     fun observeAll(): Flow<List<MissionEntity>> = dao.observeAll()
 
     fun observeMission(id: String): Flow<MissionEntity?> = dao.observeMission(id)
 
-    fun observeEvents(missionId: String): Flow<List<MissionEventEntity>> = dao.observeEvents(missionId)
+    fun observeEvents(missionId: String): Flow<List<RunEventEntity>> =
+        runEventRepository.observeByMission(missionId)
 
     /**
-     * Create a new mission in [MissionStatus.ACTIVE] and log a [MissionEventType.CREATED]
+     * Create a new mission in [MissionStatus.ACTIVE] and log a [RunEventType.CREATED]
      * event. Returns the persisted entity.
      */
     suspend fun create(
@@ -75,14 +69,14 @@ class MissionRepository(private val dao: MissionDao) {
         writeMutex.withLock {
             dao.upsert(entity)
         }
-        logEvent(id, MissionEventType.CREATED, title = "Mission created: $title")
+        logEvent(id, RunEventType.CREATED, title = "Mission created: $title")
         return entity
     }
 
     /**
      * Transition a mission to [to]. Returns `true` if the transition was legal and applied,
      * `false` if the state machine ([MissionStatus.canTransitionTo]) rejects it or the
-     * mission does not exist. On success logs a [MissionEventType.STATUS_CHANGED] event.
+     * mission does not exist. On success logs a [RunEventType.STATUS_CHANGED] event.
      *
      * Entering [MissionStatus.DONE] stamps [MissionEntity.completedAt]; leaving
      * [MissionStatus.DONE] clears it.
@@ -106,20 +100,12 @@ class MissionRepository(private val dao: MissionDao) {
                     completedAt = completedAt,
                 )
             )
-            runCatching {
-                dao.insertEvent(
-                    MissionEventEntity(
-                        id = Uuid.random().toString(),
-                        missionId = id,
-                        type = MissionEventType.STATUS_CHANGED.name,
-                        title = "${current.name} -> ${to.name}",
-                        detail = note,
-                        payloadJson = null,
-                        createdAt = nextEventMs(),
-                    )
-                )
-                dao.trimEvents(id)
-            }.onFailure { logSafe { Log.w(TAG, "transition($id) event log failed", it) } }
+            logEvent(
+                missionId = id,
+                type = RunEventType.STATUS_CHANGED,
+                title = "${current.name} -> ${to.name}",
+                detail = note,
+            )
             result = true
         }
         return result
@@ -143,39 +129,34 @@ class MissionRepository(private val dao: MissionDao) {
     }
 
     /**
-     * Append a timeline event to a mission. Best-effort — failures are logged, never
-     * thrown. After inserting, trims the mission's events to the latest 500 via
-     * [MissionDao.trimEvents].
+     * Append a timeline event to a mission. Thin delegate over
+     * [RunEventRepository.emit] — best-effort, failures are swallowed inside the journal,
+     * never thrown. Retention (500 per mission) is enforced by the journal.
      */
     suspend fun logEvent(
         missionId: String,
-        type: MissionEventType,
+        type: RunEventType,
         title: String,
         detail: String? = null,
         payloadJson: String? = null,
+        runId: String? = null,
+        conversationId: String? = null,
     ) {
-        runCatching {
-            writeMutex.withLock {
-                dao.insertEvent(
-                    MissionEventEntity(
-                        id = Uuid.random().toString(),
-                        missionId = missionId,
-                        type = type.name,
-                        title = title,
-                        detail = detail,
-                        payloadJson = payloadJson,
-                        createdAt = nextEventMs(),
-                    )
-                )
-                dao.trimEvents(missionId)
-            }
-        }.onFailure { logSafe { Log.w(TAG, "logEvent($missionId, $type) failed", it) } }
+        runEventRepository.emit(
+            type = type,
+            title = title,
+            detail = detail,
+            payloadJson = payloadJson,
+            missionId = missionId,
+            conversationId = conversationId,
+            runId = runId,
+        )
     }
 
     /**
-     * Record an artifact produced by a tool execution. Logs an
-     * [MissionEventType.ARTIFACT] event, increments [MissionEntity.artifactCount], and
-     * bumps [MissionEntity.updatedAt]. Best-effort — failures are logged, never thrown.
+     * Record an artifact produced by a tool execution. Logs a [RunEventType.ARTIFACT]
+     * event, increments [MissionEntity.artifactCount], and bumps
+     * [MissionEntity.updatedAt]. Best-effort — failures are swallowed, never thrown.
      */
     suspend fun attachArtifact(
         missionId: String,
@@ -193,49 +174,36 @@ class MissionRepository(private val dao: MissionDao) {
                         updatedAt = now,
                     )
                 )
-                dao.insertEvent(
-                    MissionEventEntity(
-                        id = Uuid.random().toString(),
-                        missionId = missionId,
-                        type = MissionEventType.ARTIFACT.name,
-                        title = path,
-                        detail = summary,
-                        payloadJson = JsonInstant.encodeToString(
-                            buildJsonObject {
-                                put("path", path)
-                                put("sourceTool", sourceTool)
-                            }
-                        ),
-                        createdAt = nextEventMs(),
-                    )
+                logEvent(
+                    missionId = missionId,
+                    type = RunEventType.ARTIFACT,
+                    title = path,
+                    detail = summary,
+                    payloadJson = JsonInstant.encodeToString(
+                        buildJsonObject {
+                            put("path", path)
+                            put("sourceTool", sourceTool)
+                        }
+                    ),
                 )
-                dao.trimEvents(missionId)
             }
-        }.onFailure { logSafe { Log.w(TAG, "attachArtifact($missionId) failed", it) } }
+        }
     }
 
     /**
      * Delete a mission and all its events. The [ForeignKey] CASCADE on
-     * [MissionEventEntity] also handles event cleanup at the DB level, but events are
-     * deleted explicitly first for clarity and for the in-memory fake.
+     * [RunEventEntity] also handles event cleanup at the DB level, but events are
+     * deleted explicitly via [RunEventRepository.deleteByMission] for clarity and for
+     * the in-memory fake used in JVM tests.
      */
     suspend fun delete(id: String) {
         writeMutex.withLock {
-            dao.deleteEvents(id)
             dao.deleteById(id)
         }
+        runEventRepository.deleteByMission(id)
     }
 
     /** The most recently updated non-terminal mission bound to [cid], or null. */
     suspend fun findActiveByConversation(cid: String): MissionEntity? =
         runCatching { dao.findActiveByConversation(cid) }.getOrNull()
-}
-
-/**
- * Run a [android.util.Log] call inside a guard so JVM unit tests — where
- * `android.util.Log` is an unmocked stub that throws — don't crash the code under test.
- * Mirrors [AgentRunRepository]'s `logSafe`.
- */
-private inline fun logSafe(block: () -> Unit) {
-    runCatching { block() }
 }

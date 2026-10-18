@@ -57,10 +57,11 @@ import me.rerere.hugeicons.stroke.Delete02
 import me.rerere.hugeicons.stroke.Copy01
 import me.rerere.hugeicons.stroke.Clipboard
 import me.rerere.hugeicons.stroke.BookOpen01
+import me.rerere.hugeicons.stroke.Wrench01
 import me.rerere.rikkahub.R
-import me.rerere.rikkahub.data.mission.MissionEventEntity
-import me.rerere.rikkahub.data.mission.MissionEventType
 import me.rerere.rikkahub.data.mission.MissionStatus
+import me.rerere.rikkahub.data.runevent.RunEventEntity
+import me.rerere.rikkahub.data.runevent.RunEventType
 import me.rerere.rikkahub.data.mission.acceptanceChecked
 import me.rerere.rikkahub.data.mission.acceptanceCriteria
 import me.rerere.rikkahub.data.mission.statusEnum
@@ -290,7 +291,7 @@ fun MissionDetailPage(missionId: String) {
 
             // ④ Artifacts
             val artifacts = events
-                .filter { it.type == MissionEventType.ARTIFACT.name }
+                .filter { it.type == RunEventType.ARTIFACT.name }
                 .sortedByDescending { it.createdAt }
             if (artifacts.isNotEmpty()) {
                 item {
@@ -426,33 +427,43 @@ private fun missionActionLabel(target: MissionStatus): String = stringResource(
 )
 
 @Composable
-private fun timelineDotColor(type: MissionEventType): Color {
+private fun timelineDotColor(type: RunEventType): Color {
     val scheme = MaterialTheme.colorScheme
     return when (type) {
-        MissionEventType.CREATED, MissionEventType.STATUS_CHANGED -> scheme.primary
-        MissionEventType.ARTIFACT -> scheme.secondary
-        MissionEventType.SUBAGENT_DISPATCHED, MissionEventType.SUBAGENT_FINISHED -> scheme.tertiary
-        MissionEventType.MILESTONE -> scheme.error
-        MissionEventType.NOTE, MissionEventType.ACCEPTANCE_UPDATED -> scheme.outline
+        RunEventType.CREATED, RunEventType.STATUS_CHANGED -> scheme.primary
+        RunEventType.ARTIFACT -> scheme.secondary
+        RunEventType.SUBAGENT_DISPATCHED, RunEventType.SUBAGENT_FINISHED -> scheme.tertiary
+        RunEventType.MILESTONE -> scheme.error
+        RunEventType.NOTE, RunEventType.ACCEPTANCE_UPDATED -> scheme.outline
+        RunEventType.TOOL_RESULT -> scheme.outline
     }
 }
 
 @Composable
-private fun TimelineRow(event: MissionEventEntity) {
-    val type = runCatching { MissionEventType.valueOf(event.type) }.getOrNull()
+private fun TimelineRow(event: RunEventEntity) {
+    val type = runCatching { RunEventType.valueOf(event.type) }.getOrNull()
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Box(
-                modifier = Modifier
-                    .size(10.dp)
-                    .background(
-                        color = type?.let { timelineDotColor(it) } ?: MaterialTheme.colorScheme.outline,
-                        shape = CircleShape,
-                    )
-            )
+            if (type == RunEventType.TOOL_RESULT) {
+                Icon(
+                    imageVector = HugeIcons.Wrench01,
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp),
+                    tint = timelineDotColor(RunEventType.TOOL_RESULT),
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(10.dp)
+                        .background(
+                            color = type?.let { timelineDotColor(it) } ?: MaterialTheme.colorScheme.outline,
+                            shape = CircleShape,
+                        )
+                )
+            }
             Box(
                 modifier = Modifier
                     .width(2.dp)

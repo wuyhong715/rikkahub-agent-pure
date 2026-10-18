@@ -121,4 +121,31 @@ class ImportedDatabaseReconcilerTest {
             assertTrue("not idempotent: $it", it.startsWith("CREATE INDEX IF NOT EXISTS"))
         }
     }
+
+    @Test
+    fun `fork only ddl creates run_events and drops the superseded mission_events`() {
+        // v33 generalises mission_events into the unified run_events journal. The reconciler
+        // must pre-create run_events (a v31/v32 moxw backup never carried it) and drop any
+        // stale mission_events a v32 backup might carry, since the "already current" stamp
+        // path skips the 32->33 auto-migration that would otherwise do both.
+        val ddl = ImportedDatabaseReconciler.FORK_ONLY_DDL
+        assertTrue(
+            "run_events table must be created with the FK cascade to missions",
+            ddl.any {
+                it.startsWith("CREATE TABLE IF NOT EXISTS `run_events`") &&
+                    it.contains("`mission_id` TEXT") &&
+                    it.contains("`conversation_id` TEXT") &&
+                    it.contains("`run_id` TEXT") &&
+                    it.contains("`type` TEXT NOT NULL") &&
+                    it.contains("FOREIGN KEY(`mission_id`) REFERENCES `missions`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE")
+            },
+        )
+        assertTrue(ddl.any { it.contains("index_run_events_mission_id_created_at") })
+        assertTrue(ddl.any { it.contains("index_run_events_conversation_id_created_at") })
+        assertTrue(ddl.any { it.contains("index_run_events_run_id_created_at") })
+        assertTrue(
+            "mission_events must be dropped so no orphaned table is left behind",
+            ddl.any { it == "DROP TABLE IF EXISTS `mission_events`" },
+        )
+    }
 }

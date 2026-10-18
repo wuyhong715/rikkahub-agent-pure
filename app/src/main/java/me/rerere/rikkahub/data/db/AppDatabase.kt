@@ -2,9 +2,11 @@ package me.rerere.rikkahub.data.db
 
 import androidx.room.AutoMigration
 import androidx.room.Database
+import androidx.room.DeleteTable
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
+import androidx.room.migration.AutoMigrationSpec
 import me.rerere.ai.core.TokenUsage
 import me.rerere.rikkahub.data.agentrun.AgentRun
 import me.rerere.rikkahub.data.agentrun.AgentRunDao
@@ -37,7 +39,8 @@ import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.db.migrations.Migration_16_17
 import me.rerere.rikkahub.data.mission.MissionDao
 import me.rerere.rikkahub.data.mission.MissionEntity
-import me.rerere.rikkahub.data.mission.MissionEventEntity
+import me.rerere.rikkahub.data.runevent.RunEventDao
+import me.rerere.rikkahub.data.runevent.RunEventEntity
 import me.rerere.rikkahub.data.db.migrations.Migration_20_21
 import me.rerere.rikkahub.data.db.migrations.Migration_21_22
 import me.rerere.rikkahub.data.db.migrations.Migration_22_23
@@ -67,9 +70,9 @@ import me.rerere.rikkahub.workflow.db.WorkflowRunEntity
         WorkspaceEntity::class,
         FolderEntity::class,
         MissionEntity::class,
-        MissionEventEntity::class,
+        RunEventEntity::class,
     ],
-    version = 32,
+    version = 33,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
@@ -122,6 +125,13 @@ import me.rerere.rikkahub.workflow.db.WorkflowRunEntity
         // additions, so Room's auto-migration creates them outright; no backup can carry
         // them since the moxw line never shipped a workbench before.
         AutoMigration(from = 31, to = 32),
+        // v33: the workbench mission_events timeline is generalised into the unified
+        // run_events journal (RunEventEntity) so any execution path — chat turns,
+        // sub-agent runs, cron jobs, workflows — can append observability events.
+        // mission_events is dropped via the [Migration_32_33] spec: its rows were a
+        // throwaway timeline cache, and the moxw line never shipped a workbench before
+        // v32, so no user data is lost. run_events is created by Room's auto-diff.
+        AutoMigration(from = 32, to = 33, spec = Migration_32_33::class),
     ]
 )
 @TypeConverters(TokenUsageConverter::class)
@@ -159,7 +169,20 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun folderDao(): FolderDAO
 
     abstract fun missionDao(): MissionDao
+
+    abstract fun runEventDao(): RunEventDao
 }
+
+/**
+ * v32 → v33 auto-migration spec: drops the superseded `mission_events` table as part of
+ * generalising the workbench timeline into the unified [RunEventEntity] (`run_events`)
+ * journal. Room auto-creates `run_events` from the entity diff; this spec only authorises
+ * the destructive side (otherwise Room treats a removed table as an error). Co-located
+ * here rather than in the `migrations` package because it is a one-line annotation spec
+ * with no procedural logic, mirroring [Migration_8_9]'s form.
+ */
+@DeleteTable(tableName = "mission_events")
+class Migration_32_33 : AutoMigrationSpec
 
 object TokenUsageConverter {
     @TypeConverter

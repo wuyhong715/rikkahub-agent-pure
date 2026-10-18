@@ -2,7 +2,6 @@ package me.rerere.rikkahub.data.mission
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
-import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 import me.rerere.rikkahub.utils.JsonInstant
@@ -34,23 +33,9 @@ enum class MissionStatus(val isTerminal: Boolean) {
 }
 
 /**
- * Discriminator for the mission event timeline. Stored as the enum's [name] in the
- * `type` column of [MissionEventEntity].
- */
-enum class MissionEventType {
-    CREATED,
-    STATUS_CHANGED,
-    NOTE,
-    ARTIFACT,
-    MILESTONE,
-    SUBAGENT_DISPATCHED,
-    SUBAGENT_FINISHED,
-    ACCEPTANCE_UPDATED
-}
-
-/**
  * A workbench mission — a tracked unit of work with acceptance criteria, lifecycle
- * status, and a timeline of events ([MissionEventEntity]).
+ * status, and a timeline of events (see [me.rerere.rikkahub.data.runevent.RunEventEntity],
+ * the unified run-event journal that superseded the day-one `mission_events` table).
  *
  * JSON columns ([acceptanceJson], [acceptanceCheckedJson]) are decoded via the
  * convenience extensions ([acceptanceCriteria], [acceptanceChecked]) using
@@ -90,42 +75,6 @@ data class MissionEntity(
     val updatedAt: Long,
     @ColumnInfo("completed_at")
     val completedAt: Long? = null,
-)
-
-/**
- * A single timeline entry for a mission. Events are append-only and capped at 500 per
- * mission via [MissionDao.trimEvents] (called by [MissionRepository.logEvent]).
- */
-@Entity(
-    tableName = "mission_events",
-    indices = [
-        Index("mission_id", "created_at"),
-    ],
-    foreignKeys = [
-        ForeignKey(
-            entity = MissionEntity::class,
-            parentColumns = ["id"],
-            childColumns = ["mission_id"],
-            onDelete = ForeignKey.CASCADE,
-        ),
-    ],
-)
-data class MissionEventEntity(
-    @PrimaryKey
-    @ColumnInfo("id")
-    val id: String,
-    @ColumnInfo("mission_id")
-    val missionId: String,
-    @ColumnInfo("type")
-    val type: String,
-    @ColumnInfo("title")
-    val title: String,
-    @ColumnInfo("detail")
-    val detail: String? = null,
-    @ColumnInfo("payload_json")
-    val payloadJson: String? = null,
-    @ColumnInfo("created_at")
-    val createdAt: Long,
 )
 
 // ---------------------------------------------------------------------------
