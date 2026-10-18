@@ -436,6 +436,8 @@ private fun timelineDotColor(type: RunEventType): Color {
         RunEventType.MILESTONE -> scheme.error
         RunEventType.NOTE, RunEventType.ACCEPTANCE_UPDATED -> scheme.outline
         RunEventType.TOOL_RESULT -> scheme.outline
+        // P3 run lifecycle markers — neutral, they frame the work rather than describe it.
+        RunEventType.RUN_STARTED, RunEventType.RUN_FINISHED -> scheme.outline
     }
 }
 

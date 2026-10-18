@@ -393,8 +393,8 @@ class WorkflowActionRunner {
                 detail = detail,
                 payloadJson = me.rerere.rikkahub.utils.JsonInstant.encodeToString(
                     kotlinx.serialization.json.buildJsonObject {
-                        kotlinx.serialization.json.put("tool", tool)
-                        kotlinx.serialization.json.put("workflow", true)
+                        put("tool", tool)
+                        put("workflow", true)
                     }
                 ),
                 runId = runId,
