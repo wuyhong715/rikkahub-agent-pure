@@ -475,6 +475,8 @@ class ChatService(
     private val conversationIndex: me.rerere.rikkahub.data.vector.ConversationIndexCoordinator,
     /** Moxw workbench - tracks conversation-bound missions; artifact logging hooks below. */
     private val missionEngine: me.rerere.rikkahub.data.mission.MissionEngine,
+    /** P5 — per-step run breakpoints, written from the loop's checkpoint hook. */
+    private val runCheckpointRepository: me.rerere.rikkahub.data.agentrun.RunCheckpointRepository,
 ) {
     // workspace 系统提示注入 (依赖 workspaceRepository, 故在类内构造)
     private val workspaceReminderTransformer = WorkspaceReminderTransformer(workspaceRepository)
@@ -1822,10 +1824,30 @@ class ChatService(
             // the `tools = buildList { … }` argument below, which Kotlin evaluates before this
             // call — hence a `var` rather than a value.
             var liveCatalogueTools: (suspend () -> List<Tool>)? = null
+            // P5 — the mission coordinate is resolved once per turn; the checkpoint lambda
+            // below runs on every step and must stay a pure write.
+            val checkpointMissionId = runCatching {
+                missionEngine.missionIdFor(conversationId.toString())
+            }.getOrNull()
             generationLoop.generateText(
                 settings = settings.toLoopSettings(),
                 model = model,
                 processingStatus = session.processingStatus,
+                onCheckpoint = { checkpoint ->
+                    val (scopeRunId, scopeKind) =
+                        me.rerere.rikkahub.service.run.ConversationRunRegistry
+                            .checkpointScope(conversationId)
+                    runCheckpointRepository.record(
+                        runId = scopeRunId,
+                        conversationId = conversationId.toString(),
+                        missionId = checkpointMissionId,
+                        kind = scopeKind,
+                        phase = checkpoint.phase,
+                        stepIndex = checkpoint.stepIndex,
+                        messageCount = checkpoint.messageCount,
+                        pendingToolCalls = checkpoint.pendingToolCallIds,
+                    )
+                },
                 // Per-conversation tool-step cap: a sub-agent run registers its `max_trips`
                 // here for exactly its own lifetime (see ConversationToolStepLimits); every
                 // other conversation falls through to the global default, read live so a

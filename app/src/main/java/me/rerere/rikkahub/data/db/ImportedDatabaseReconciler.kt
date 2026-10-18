@@ -61,8 +61,8 @@ object ImportedDatabaseReconciler {
      * newer *shared* conversation columns were added) or this reconciliation will silently stop
      * matching. `internal` so a JVM test can assert these stay in sync with the schema export.
      */
-    internal const val EXPECTED_VERSION = 33
-    internal const val EXPECTED_IDENTITY_HASH = "545712b2fe95dd4d39cd8148e1df1822"
+    internal const val EXPECTED_VERSION = 34
+    internal const val EXPECTED_IDENTITY_HASH = "TODO_RUN_CHECKPOINTS_V34"
 
     /**
      * Columns that a restored file must already have for its shared schema to be considered
@@ -121,6 +121,11 @@ object ImportedDatabaseReconciler {
         "CREATE INDEX IF NOT EXISTS `index_run_events_conversation_id_created_at` ON `run_events` (`conversation_id`, `created_at`)",
         "CREATE INDEX IF NOT EXISTS `index_run_events_run_id_created_at` ON `run_events` (`run_id`, `created_at`)",
         "DROP TABLE IF EXISTS `mission_events`",
+        // v34 (P5): durable run breakpoints. Fork-only, so a restored backup needs it
+        // pre-created for the same reason missions/run_events are.
+        "CREATE TABLE IF NOT EXISTS `run_checkpoints` (`run_id` TEXT NOT NULL, `conversation_id` TEXT, `mission_id` TEXT, `kind` TEXT NOT NULL, `phase` TEXT NOT NULL, `step_index` INTEGER NOT NULL, `message_count` INTEGER NOT NULL, `pending_tools` TEXT, `attempts` INTEGER NOT NULL, `updated_at_ms` INTEGER NOT NULL, PRIMARY KEY(`run_id`))",
+        "CREATE INDEX IF NOT EXISTS `index_run_checkpoints_conversation_id` ON `run_checkpoints` (`conversation_id`)",
+        "CREATE INDEX IF NOT EXISTS `index_run_checkpoints_updated_at_ms` ON `run_checkpoints` (`updated_at_ms`)",
     )
 
     /**

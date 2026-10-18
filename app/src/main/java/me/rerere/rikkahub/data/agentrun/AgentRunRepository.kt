@@ -120,6 +120,34 @@ class AgentRunRepository(private val dao: AgentRunDao) {
         }.onFailure { logSafe { Log.w(TAG, "markTerminal($id, $status) failed", it) } }
     }
 
+    /**
+     * P5 — re-open a run so a resume attempt can drive it again.
+     *
+     * Unlike [setStatus], this deliberately transitions a TERMINAL row back to `running`
+     * (that is the whole point: a process_lost run is terminal by definition) and clears
+     * `finished_at_ms`. `started_at_ms` is preserved so the ledger still records when the
+     * run originally began. Returns false when the row is unknown.
+     */
+    suspend fun reopen(id: String): Boolean {
+        var reopened = false
+        runCatching {
+            writeMutex.withLock {
+                val existing = dao.getById(id) ?: return@withLock
+                val now = System.currentTimeMillis()
+                dao.update(
+                    existing.copy(
+                        status = AgentRunStatus.running.name,
+                        updatedAtMs = now,
+                        startedAtMs = existing.startedAtMs ?: now,
+                        finishedAtMs = null,
+                    )
+                )
+                reopened = true
+            }
+        }.onFailure { logSafe { Log.w(TAG, "reopen($id) failed", it) } }
+        return reopened
+    }
+
     fun observeRecent(limit: Int = 50): Flow<List<AgentRun>> = dao.observeRecent(limit)
 
     suspend fun getRecent(limit: Int = 50): List<AgentRun> =

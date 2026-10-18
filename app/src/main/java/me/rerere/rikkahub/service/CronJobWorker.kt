@@ -223,24 +223,32 @@ class CronJobWorker(
                 errorMessage = null,
             ))
 
-            // Phase 24 — open the cross-pillar ledger row alongside the domain detail row.
+            // P5 — the ledger row is opened by whoever owns the execution: RunService for
+            // llm fires (its row id IS the run id, which is what makes checkpoint/resume
+            // work), and this worker for direct fires (no RunService involved there).
             // domain_id is keyed per-fire (jobId:slot) so a replay or a later fire of the
-            // same job is a distinct ledger row. Best-effort: ledger failures never break the
-            // cron run.
-            val ledgerId = agentRunRepo.open(
-                kind = AgentRunKind.Cron,
-                domainId = "$jobId:$scheduledAtMs",
-                metadata = buildJsonObject {
-                    put("job_name", job.name)
-                    put("mode", job.mode)
-                    put("manual", isManual)
-                },
-            )
-
+            // same job is a distinct ledger row.
             val (outcome, errorMessage, convIdMaybe) = when (job.mode) {
-                "llm"    -> runLlm(job)
-                "direct" -> runDirect(job)
-                else     -> Triple("failed", "unknown_mode:${job.mode}", null)
+                "llm" -> runLlm(job, domainId = "$jobId:$scheduledAtMs")
+                "direct" -> {
+                    val ledgerId = agentRunRepo.open(
+                        kind = AgentRunKind.Cron,
+                        domainId = "$jobId:$scheduledAtMs",
+                        metadata = buildJsonObject {
+                            put("job_name", job.name)
+                            put("mode", job.mode)
+                            put("manual", isManual)
+                        },
+                    )
+                    val result = runDirect(job)
+                    agentRunRepo.markTerminal(
+                        id = ledgerId,
+                        status = if (result.first == "success") AgentRunStatus.succeeded else AgentRunStatus.failed,
+                        lastError = if (result.first == "success") null else "${result.first}: ${result.second.orEmpty()}",
+                    )
+                    result
+                }
+                else -> Triple("failed", "unknown_mode:${job.mode}", null)
             }
 
             runRepo.update(ScheduledJobRunEntity(
@@ -254,16 +262,6 @@ class CronJobWorker(
                 conversationId = convIdMaybe?.toString(),
                 errorMessage = errorMessage?.take(500),
             ))
-
-            // Phase 24 — mirror the terminal outcome into the cross-pillar ledger. Cron
-            // outcomes map to: success → succeeded; timed_out / failed / unknown → failed.
-            // (concurrent_skip / skipped_catchup / process_killed_replay never reach here —
-            // they early-return before the ledger row is opened.)
-            agentRunRepo.markTerminal(
-                id = ledgerId,
-                status = if (outcome == "success") AgentRunStatus.succeeded else AgentRunStatus.failed,
-                lastError = if (outcome == "success") null else "$outcome: ${errorMessage.orEmpty()}",
-            )
 
             // Failure notification (post once per failure; the existing channel handles dedup)
             if (outcome != "success") {
@@ -316,7 +314,11 @@ class CronJobWorker(
         return false
     }
 
-    private suspend fun runLlm(job: ScheduledJobEntity): Triple<String, String?, Uuid?> {
+    private suspend fun runLlm(
+        job: ScheduledJobEntity,
+        /** Per-fire ledger domain id; also ties this fire to its agent_runs row. */
+        domainId: String,
+    ): Triple<String, String?, Uuid?> {
         val prompt = job.prompt ?: return Triple("failed", "missing_prompt_for_llm_mode", null)
         val assistantUuid = runCatching { Uuid.parse(job.assistantId) }.getOrNull()
             ?: return Triple("failed", "bad_assistant_id:${job.assistantId}", null)
@@ -330,6 +332,10 @@ class CronJobWorker(
                 prompt = prompt,
                 title = "[Scheduled] ${job.name}",
                 promptPrefix = CRON_DELIVERY_DIRECTIVE,
+                // P5 — explicit kind/domain so the ledger row RunService opens is the same
+                // row this fire's domain history refers to.
+                kind = me.rerere.rikkahub.data.agentrun.AgentRunKind.Cron,
+                domainId = domainId,
             )
         )
         return try {

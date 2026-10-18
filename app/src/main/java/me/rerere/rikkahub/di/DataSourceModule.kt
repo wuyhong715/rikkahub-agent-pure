@@ -288,6 +288,19 @@ val dataSourceModule = module {
     // there is no DI-cycle risk here.
     single { get<AppDatabase>().agentRunDao() }
     single { AgentRunRepository(get()) }
+    // P5 — durable run breakpoints. DAO + single writer; written from the generation loop's
+    // per-step hook and read by boot recovery.
+    single { get<AppDatabase>().runCheckpointDao() }
+    single { me.rerere.rikkahub.data.agentrun.RunCheckpointRepository(get()) }
+    single {
+        me.rerere.rikkahub.data.agentrun.RunResumeCoordinator(
+            agentRunRepository = get(),
+            checkpointRepository = get(),
+            conversationRepository = get(),
+            runService = get(),
+            runEventRepository = get(),
+        )
+    }
 
     // Workbench: mission ledger + engine. The engine tracks conversation-bound missions,
     // records artifacts written by file tools, and mirrors sub-agent state into the timeline.
@@ -303,9 +316,24 @@ val dataSourceModule = module {
     // the P3 implementation; P4 swaps in a conversation-free runtime without call sites
     // noticing. Cron submits through this; Telegram follows when the streaming surface lands.
     single<me.rerere.rikkahub.service.run.RunService> {
-        me.rerere.rikkahub.service.run.ChatServiceRunService(get(), get(), get())
+        me.rerere.rikkahub.service.run.ChatServiceRunService(
+            chatService = get(),
+            conversationRepo = get(),
+            runEventRepository = get(),
+            agentRunRepository = get(),
+            checkpointRepository = get(),
+        )
     }
-    single { AgentRunBootRecovery(context = get(), repository = get()) }
+    single {
+        // Capture the coordinator instance rather than resolving it inside the lambda: the
+        // lambda outlives this provider expression and must not depend on the DSL scope.
+        val coordinator = get<me.rerere.rikkahub.data.agentrun.RunResumeCoordinator>()
+        AgentRunBootRecovery(
+            context = get(),
+            repository = get(),
+            resume = coordinator::tryResume,
+        )
+    }
     single {
         OrphanedReasoningRecovery(
             conversationDAO = get<AppDatabase>().conversationDao(),

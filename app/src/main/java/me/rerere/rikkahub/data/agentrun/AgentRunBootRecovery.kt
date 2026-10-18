@@ -33,12 +33,23 @@ class AgentRunBootRecovery(
      * once per [runRecovery] invocation, only when at least one row was flipped.
      */
     private val notifyStranded: (List<AgentRun>) -> Unit = {},
+    /**
+     * P5 — resume hook, tried per stranded row before it is declared lost. Returns true
+     * when the run was resumed all the way to completion (so the row is already terminal
+     * and must NOT be flipped to process_lost). Default: never resume — the pre-P5 sweep.
+     */
+    private val resume: suspend (AgentRun) -> Boolean = { false },
 ) {
 
     /** Convenience constructor for production wiring — posts a real Android notification. */
-    constructor(context: Context, repository: AgentRunRepository) : this(
+    constructor(
+        context: Context,
+        repository: AgentRunRepository,
+        resume: suspend (AgentRun) -> Boolean = { false },
+    ) : this(
         repository = repository,
         notifyStranded = { stranded -> postAggregateNotification(context, stranded) },
+        resume = resume,
     )
 
     /**
@@ -53,8 +64,27 @@ class AgentRunBootRecovery(
                 logSafe { Log.i(TAG, "runRecovery: no stranded runs") }
                 return@runCatching 0
             }
-            val flipped = repository.markAllProcessLost(stranded.map { it.id })
-            logSafe { Log.w(TAG, "runRecovery: flipped $flipped stranded run(s) to process_lost") }
+            // P5 — give each stranded run a chance to resume from its checkpoint before
+            // declaring it lost. The hook is serial on purpose: resumes re-enter the
+            // generation machinery and a boot storm of parallel runs is the last thing a
+            // just-started process needs.
+            val lost = mutableListOf<AgentRun>()
+            var resumed = 0
+            for (run in stranded) {
+                val resumable = runCatching { resume(run) }.getOrDefault(false)
+                if (resumable) {
+                    resumed++
+                } else {
+                    lost += run
+                }
+            }
+            val flipped = repository.markAllProcessLost(lost.map { it.id })
+            logSafe {
+                Log.w(
+                    TAG,
+                    "runRecovery: resumed $resumed, flipped $flipped stranded run(s) to process_lost",
+                )
+            }
             if (flipped > 0) {
                 runCatching { notifyStranded(stranded) }
                     .onFailure { logSafe { Log.w(TAG, "notifyStranded failed", it) } }

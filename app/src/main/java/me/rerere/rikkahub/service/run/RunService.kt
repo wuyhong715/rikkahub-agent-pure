@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.service.run
 
 import kotlinx.coroutines.flow.Flow
+import me.rerere.rikkahub.data.agentrun.AgentRunKind
 import me.rerere.rikkahub.data.runevent.RunEventEntity
 import kotlin.uuid.Uuid
 
@@ -36,6 +37,16 @@ interface RunService {
 
     suspend fun cancel(handle: RunHandle)
 
+    /**
+     * P5 — resume a run from its last checkpoint on the same conversation.
+     *
+     * Only meaningful for an interrupted run (its ledger row was left non-terminal by a
+     * killed process, or [me.rerere.rikkahub.data.agentrun.RunResumePolicy] decided it can
+     * be re-entered). Returns null when there is nothing to resume: no checkpoint, the
+     * conversation is gone, or the ledger row cannot be reopened.
+     */
+    suspend fun resume(runId: String): RunResult?
+
     /** The run's journal stream (conversation-scoped), sourced from the P1 journal. */
     fun events(handle: RunHandle): Flow<List<RunEventEntity>>
 }
@@ -58,6 +69,14 @@ data class RunRequest(
     val timeoutMs: Long = DEFAULT_TIMEOUT_MS,
     /** Optional mission coordinate for the journal. */
     val missionId: String? = null,
+    /** Which autonomous path is submitting (ledger discriminator, P5 Run-as-authority). */
+    val kind: AgentRunKind = AgentRunKind.Cron,
+    /** Per-kind domain id for the ledger; defaults to `run:<conversationId>`. */
+    val domainId: String? = null,
+    /** Set when this run was dispatched by another run (P6 orchestration). */
+    val parentRunId: String? = null,
+    /** Optional per-run step cap for the loop; null keeps the global default. */
+    val maxSteps: Int? = null,
 ) {
     companion object {
         const val DEFAULT_TIMEOUT_MS: Long = 15L * 60_000L

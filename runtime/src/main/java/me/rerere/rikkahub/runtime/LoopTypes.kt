@@ -75,3 +75,26 @@ data class RecentChatEntry(
     val title: String,
     val lastChatDate: String,
 )
+
+/**
+ * A durable breakpoint the loop emits at each step boundary (P5).
+ *
+ * :app persists it (run_checkpoints) outside the loop, keyed by run id, so a process
+ * killed mid-run can be resumed from the same step — or, when resuming is unsafe, the
+ * user can be told exactly where it stopped. The loop itself keeps no memory of it.
+ */
+data class LoopCheckpoint(
+    val stepIndex: Int,
+    /** [PHASE_GENERATING] while waiting on the model; [PHASE_EXECUTING_TOOL] when the
+     *  next action is running the tools already listed in [pendingToolCallIds]. */
+    val phase: String,
+    /** Size of the request-visible transcript at this boundary (recovery sanity check). */
+    val messageCount: Int,
+    /** Tool calls that were approved/ready but not yet executed at this boundary. */
+    val pendingToolCallIds: List<String>,
+) {
+    companion object {
+        const val PHASE_GENERATING = "GENERATING"
+        const val PHASE_EXECUTING_TOOL = "EXECUTING_TOOL"
+    }
+}

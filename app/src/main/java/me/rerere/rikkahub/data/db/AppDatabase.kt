@@ -9,7 +9,11 @@ import androidx.room.TypeConverters
 import androidx.room.migration.AutoMigrationSpec
 import me.rerere.ai.core.TokenUsage
 import me.rerere.rikkahub.data.agentrun.AgentRun
-import me.rerere.rikkahub.data.agentrun.AgentRunDao
+import me.rerere.rikkahub.data.agentrun.RunCheckpointDao
+import me.rerere.rikkahub.data.agentrun.RunCheckpointEntity
+import me.rerere.rikkahub.data.agentrun.AgentRun
+import me.rerere.rikkahub.data.agentrun.RunCheckpointDao
+import me.rerere.rikkahub.data.agentrun.RunCheckpointEntityDao
 import me.rerere.rikkahub.data.db.dao.ConversationDAO
 import me.rerere.rikkahub.data.db.dao.ConversationCompactionDAO
 import me.rerere.rikkahub.data.db.dao.FavoriteDAO
@@ -71,8 +75,9 @@ import me.rerere.rikkahub.workflow.db.WorkflowRunEntity
         FolderEntity::class,
         MissionEntity::class,
         RunEventEntity::class,
+        RunCheckpointEntity::class,
     ],
-    version = 33,
+    version = 34,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
@@ -132,6 +137,7 @@ import me.rerere.rikkahub.workflow.db.WorkflowRunEntity
         // throwaway timeline cache, and the moxw line never shipped a workbench before
         // v32, so no user data is lost. run_events is created by Room's auto-diff.
         AutoMigration(from = 32, to = 33, spec = Migration_32_33::class),
+        AutoMigration(from = 33, to = 34),
     ]
 )
 @TypeConverters(TokenUsageConverter::class)
@@ -171,6 +177,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun missionDao(): MissionDao
 
     abstract fun runEventDao(): RunEventDao
+
+    abstract fun runCheckpointDao(): RunCheckpointDao
 }
 
 /**

@@ -439,6 +439,10 @@ class GenerationLoop(
         // evaluated per call, so a settings change takes effect on the next turn.
         maxSteps: Int = ToolRuntimeLimits.maxToolSteps,
         processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
+        // P5 — durable breakpoint per step. :app persists it (run_checkpoints) so a killed
+        // process can resume the run or report exactly where it stopped. Best-effort: a
+        // failing sink must never break generation, hence the runCatching at the call site.
+        onCheckpoint: suspend (LoopCheckpoint) -> Unit = {},
         // Called after a tool result has been emitted and persisted, before the next model
         // request is built. The callback may return a compacted request history; the returned
         // list is request-only and does not replace the conversation's original messages.
@@ -553,6 +557,23 @@ class GenerationLoop(
             val pendingTools = messages.lastOrNull()?.getTools()?.filter {
                 it.canResumeExecution
             } ?: emptyList()
+
+            // P5 checkpoint: step index + what the next action is. Written every iteration,
+            // so the row is always at most one step behind the process.
+            runCatching {
+                onCheckpoint(
+                    LoopCheckpoint(
+                        stepIndex = stepIndex,
+                        phase = if (pendingTools.isNotEmpty()) {
+                            LoopCheckpoint.PHASE_EXECUTING_TOOL
+                        } else {
+                            LoopCheckpoint.PHASE_GENERATING
+                        },
+                        messageCount = messages.size,
+                        pendingToolCallIds = pendingTools.map { it.toolCallId },
+                    )
+                )
+            }
 
             // Mixed-state guard: if the last message has tools STILL in Pending (waiting
             // on user approval keyboard) but nothing canResumeExecution, the existing

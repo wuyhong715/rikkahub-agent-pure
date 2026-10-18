@@ -326,7 +326,8 @@ val appModule = module {
             toolVectors = get(),
             libraryIndex = get(),
             conversationIndex = get(),
-            missionEngine = get()
+            missionEngine = get(),
+            runCheckpointRepository = get()
         )
     }
 
