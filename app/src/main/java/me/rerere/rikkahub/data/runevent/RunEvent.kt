@@ -43,6 +43,14 @@ enum class RunEventType {
      *  payload = {"tool", "args" excerpt}. Emitted for every tool call in the
      *  generation loop, regardless of mission binding. */
     TOOL_RESULT,
+
+    // --- run lifecycle (P3) ---
+    /** A RunService run was submitted. title = run title, payload = {"runId","assistantId"}. */
+    RUN_STARTED,
+
+    /** A RunService run reached a terminal state. detail = status name
+     *  (COMPLETED / TIMED_OUT / FAILED / CANCELLED), payload may carry "failure". */
+    RUN_FINISHED,
 }
 
 /**

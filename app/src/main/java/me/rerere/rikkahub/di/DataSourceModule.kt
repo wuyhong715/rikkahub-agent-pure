@@ -299,6 +299,12 @@ val dataSourceModule = module {
     single { get<AppDatabase>().runEventDao() }
     single { RunEventRepository(get()) }
     single { MissionEngine(repository = get(), runEventRepository = get(), subAgentRegistry = get(), appScope = get<AppScope>()) }
+    // P3 — RunService: the surface-facing run contract. This ChatService-backed facade is
+    // the P3 implementation; P4 swaps in a conversation-free runtime without call sites
+    // noticing. Cron submits through this; Telegram follows when the streaming surface lands.
+    single<me.rerere.rikkahub.service.run.RunService> {
+        me.rerere.rikkahub.service.run.ChatServiceRunService(get(), get(), get())
+    }
     single { AgentRunBootRecovery(context = get(), repository = get()) }
     single {
         OrphanedReasoningRecovery(

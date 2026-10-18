@@ -1,6 +1,5 @@
 package me.rerere.rikkahub.costguards
 
-import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
@@ -9,9 +8,7 @@ import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
-import me.rerere.rikkahub.data.datastore.SettingsStore
-import me.rerere.rikkahub.data.datastore.getCurrentAssistant
-import me.rerere.rikkahub.data.repository.ConversationRepository
+import me.rerere.rikkahub.data.policy.PolicyEngine
 import kotlin.uuid.Uuid
 
 /**
@@ -29,6 +26,17 @@ import kotlin.uuid.Uuid
  * its own Phase 15.7 — touches the screen-automation pipeline deeply and shipping a
  * partial version risks breaking the existing tap/swipe/scroll loop. Documented in
  * status.md.
+ *
+ * P2: the budget read now delegates to [PolicyEngine.tokenBudgetSnapshot] — the same
+ * engine ChatService uses for auto-approval. The tool no longer takes SettingsStore /
+ * ConversationRepository directly; the engine's DI-wired BudgetSnapshotSource resolves
+ * the conversation (by id, or the assistant's most-recent when the id is omitted).
+ *
+ * Note on conversation_id: the pre-P2 tool echoed `conv.id` — the *resolved*
+ * conversation's UUID. The engine returns a [TokenBudgetTracker.Snapshot] which does not
+ * carry the id, so the payload now echoes the *input* parameter: the parsed UUID when one
+ * was supplied, or the literal "current" when the call omitted it. The token numbers
+ * themselves are identical — only the id label differs in the omitted-param case.
  */
 
 private fun errEnv(error: String, detail: String): List<UIMessagePart> {
@@ -40,8 +48,7 @@ private fun errEnv(error: String, detail: String): List<UIMessagePart> {
 }
 
 fun checkTokenUsageTool(
-    settingsStore: SettingsStore,
-    conversationRepo: ConversationRepository,
+    policyEngine: PolicyEngine,
 ): Tool = Tool(
     name = "check_token_usage",
     description = """
@@ -66,25 +73,20 @@ fun checkTokenUsageTool(
     execute = { args ->
         val params = args.jsonObject
         val rawConvId = params["conversation_id"]?.jsonPrimitive?.contentOrNull
-        val settings = settingsStore.settingsFlow.first()
-        val assistant = settings.getCurrentAssistant()
         val convId = rawConvId?.let { runCatching { Uuid.parse(it) }.getOrNull() }
-        val conv = if (convId != null) {
-            conversationRepo.getConversationById(convId)
-        } else {
-            // No conversation specified: pick the most recent for this assistant.
-            conversationRepo.getRecentConversations(assistant.id, 1).firstOrNull()
-        } ?: return@Tool errEnv(
-            "no_conversation",
-            "no conversation found to compute token usage against"
-        )
-        val snapshot = TokenBudgetTracker.snapshot(
-            conversation = conv,
-            softCap = assistant.tokenBudgetSoftCap,
-            hardCap = assistant.tokenBudgetHardCap,
-        )
+        // P2 — budget resolution converged into PolicyEngine. The engine resolves the
+        // conversation (by id, or the assistant's most-recent when null) and returns the
+        // snapshot. Null = no conversation could be resolved → the original error envelope.
+        val snapshot = policyEngine.tokenBudgetSnapshot(convId)
+            ?: return@Tool errEnv(
+                "no_conversation",
+                "no conversation found to compute token usage against"
+            )
         val payload = buildJsonObject {
-            put("conversation_id", conv.id.toString())
+            // The snapshot does not carry the conversation id (see class KDoc). Echo the
+            // input parameter so the caller can correlate the reply with the request;
+            // "current" signals the engine picked the assistant's most-recent conversation.
+            put("conversation_id", convId?.toString() ?: "current")
             put("input_tokens", snapshot.totals.inputTokens)
             put("output_tokens", snapshot.totals.outputTokens)
             put("total_tokens", snapshot.totals.totalTokens)

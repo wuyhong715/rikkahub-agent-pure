@@ -457,7 +457,8 @@ class ChatService(
     val mcpManager: McpManager,
     private val filesManager: FilesManager,
     private val skillManager: SkillManager,
-    private val toolApprovalPreferences: me.rerere.rikkahub.data.preferences.ToolApprovalPreferences,
+    /** P2 — unified policy decision point: auto-approval + token-budget snapshot. */
+    private val policyEngine: me.rerere.rikkahub.data.policy.PolicyEngine,
     private val workspaceRepository: WorkspaceRepository,
     private val folderRepository: FolderRepository,
     /** Moxw - owns the knowledge-base vector index: its background sync and its search. */
@@ -1833,24 +1834,11 @@ class ChatService(
                 systemAddendum = me.rerere.rikkahub.data.ai.tools
                     .ConversationSystemAddendum.get(conversationId),
                 isToolAutoApproved = { toolName ->
-                    // The decision itself is pure — see ToolApprovalPolicy (unit-tested). Here
-                    // we only supply the async inputs: the persisted blacklist + mode (one
-                    // DataStore read), whether this conversation is headless, and any in-memory
-                    // "allow for this chat" grant. The mode decides the posture: Auto approves
-                    // everything but the named floor (relayed mcp__* tools are waived in Auto);
-                    // Semi consults the blacklist; Manual asks on every call. The HARDLINE
-                    // command floor still blocks rm -rf / et al because GenerationLoop checks
-                    // it before this.
-                    val snapshot = toolApprovalPreferences.snapshot()
-                    me.rerere.rikkahub.data.ai.tools.ToolApprovalPolicy.shouldAutoApprove(
-                        toolName = toolName,
-                        blacklist = snapshot.blacklist,
-                        mode = snapshot.mode,
-                        headless = me.rerere.rikkahub.data.ai.tools.HeadlessConversations
-                            .shouldAutoApprove(conversationId),
-                        allowedForChat = me.rerere.rikkahub.data.ai.tools.ToolApprovalAllowList
-                            .isAllowedForChat(conversationId, toolName),
-                    )
+                    // Decision converged into PolicyEngine (P2). Semantics — same sources,
+                    // same pure function, same evaluation order — documented in
+                    // ToolApprovalPolicy. The HARDLINE command floor still blocks
+                    // rm -rf / et al because GenerationLoop checks it before this.
+                    policyEngine.shouldAutoApproveTool(conversationId, toolName)
                 },
                 onAfterToolExecution = { generatedMessages ->
                     if (messageRange != null || !settings.enableAutoCompaction) {

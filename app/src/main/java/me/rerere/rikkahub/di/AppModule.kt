@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.di
 
+import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.Json
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.BuildConfig
@@ -10,6 +11,7 @@ import me.rerere.rikkahub.data.ai.tools.local.BiometricResultBuffer
 import me.rerere.rikkahub.data.ai.tools.local.CameraResultBuffer
 import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.data.ai.tools.local.InteractiveToolStreamer
+import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.repository.ScheduledJobRepository
 import me.rerere.rikkahub.data.repository.SshHostRepository
 import me.rerere.rikkahub.data.repository.TelegramChatRepository
@@ -66,6 +68,29 @@ val appModule = module {
         me.rerere.rikkahub.data.telegram.TelegramInteractiveToolStreamer(get(), get(), get(), get())
     }
     single { me.rerere.rikkahub.data.preferences.ToolApprovalPreferences(get()) }
+    // P2 — unified policy engine. Assembles the approval prefs snapshot (blacklist + mode)
+    // and the token-budget read behind one interface so ChatService's isToolAutoApproved
+    // and the check_token_usage tool consult the same decision point. Behaviour-preserving
+    // port of the pre-P2 inline lambda / direct repo read.
+    single<me.rerere.rikkahub.data.policy.PolicyEngine> {
+        me.rerere.rikkahub.data.policy.DefaultPolicyEngine(
+            approvalSnapshots = me.rerere.rikkahub.data.policy.ToolApprovalSnapshotSource {
+                get<me.rerere.rikkahub.data.preferences.ToolApprovalPreferences>().snapshot()
+            },
+            budgetSnapshots = me.rerere.rikkahub.data.policy.BudgetSnapshotSource { conversationId ->
+                val settings = get<me.rerere.rikkahub.data.datastore.SettingsStore>().settingsFlow.first()
+                val assistant = settings.getCurrentAssistant()
+                val repo = get<me.rerere.rikkahub.data.repository.ConversationRepository>()
+                val conv = conversationId?.let { repo.getConversationById(it) }
+                    ?: repo.getRecentConversations(assistant.id, 1).firstOrNull()
+                conv?.let {
+                    me.rerere.rikkahub.costguards.TokenBudgetTracker.snapshot(
+                        it, assistant.tokenBudgetSoftCap, assistant.tokenBudgetHardCap,
+                    )
+                }
+            },
+        )
+    }
     single {
         TelegramBotClient(
             tokenProvider = { runCatching { kotlinx.coroutines.runBlocking { get<TelegramBotPreferences>().current().token } }.getOrDefault("") },
@@ -222,11 +247,7 @@ val appModule = module {
             providerManager = get(),
             filesManager = get(),
             genMediaRepository = get(),
-        )
-    }
-
-    single {
-        UpdateChecker(
+            policyEngine = get(),
             client = get(),
             appScope = get(),
             // No self-hosted UPDATE_API_URL in this fork — the card reads GitHub Releases.
@@ -293,7 +314,7 @@ val appModule = module {
             mcpManager = get(),
             filesManager = get(),
             skillManager = get(),
-            toolApprovalPreferences = get(),
+            policyEngine = get(),
             workspaceRepository = get(),
             folderRepository = get(),
             memoryIndex = get(),

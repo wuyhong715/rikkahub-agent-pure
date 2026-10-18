@@ -68,4 +68,18 @@ class FakeRunEventDao : RunEventDao {
         }
         publish()
     }
+
+    override suspend fun trimByRun(runId: String, keep: Int) {
+        val scoped = events.values
+            .filter { it.runId == runId && it.missionId == null && it.conversationId == null }
+            .sortedByDescending { it.createdAt }
+        val keepIds = scoped.take(keep).map { it.id }.toSet()
+        events.entries.removeAll {
+            it.value.runId == runId &&
+                it.value.missionId == null &&
+                it.value.conversationId == null &&
+                it.value.id !in keepIds
+        }
+        publish()
+    }
 }

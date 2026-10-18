@@ -230,6 +230,9 @@ class WorkflowEngine(
             dynamicArgs = def.useActionTemplates,
             secretLookup = { name -> secretsStore.get(name) },
             knownSecretNames = { secretsStore.list().toSet() },
+            // P3: journal every action to the run-event stream, scoped by this fire's id
+            // (mirrors the agent_runs "workflow:<id>:<firedAtMs>" domain-id convention).
+            runId = "$workflowId:$firedAtMs",
         )
         val status = if (result.success) WorkflowRunStatus.SUCCESS else WorkflowRunStatus.FAILED
         return persistAndReturn(workflowId, firedAtMs, started, status, result.error, result.summary, ledgerId)
@@ -361,6 +364,45 @@ class WorkflowActionRunner {
     data class RunResult(val success: Boolean, val error: String?, val summary: String)
 
     /**
+     * P3 — run event journal, resolved lazily via Koin (same pattern as
+     * [WorkflowEngine]'s [localTools] / [secretsStore] / [agentRunRepo] lazy lookups).
+     * Tool-result emissions are best-effort: if Koin isn't available (JVM unit tests call
+     * `run()` without a runId, so [emitToolResult] early-returns before touching this), the
+     * lookup is never triggered.
+     */
+    private val runEventRepository: me.rerere.rikkahub.data.runevent.RunEventRepository by lazy {
+        org.koin.java.KoinJavaComponent.getKoin()
+            .get<me.rerere.rikkahub.data.runevent.RunEventRepository>()
+    }
+
+    /**
+     * Journal one workflow action's outcome to the P1 run-event journal (best-effort).
+     *
+     * Events are scoped by [runId] only ("<workflowId>:<firedAtMs>", minted by the caller
+     * of [run]) — workflow runs are deterministic tool pipelines with no conversation and
+     * no mission, so the journal's run-scope retention (trimByRun, 500 newest) applies.
+     * A blank [runId] means the caller opted out (JVM unit tests exercise [run] without a
+     * Koin context); the emission is skipped before the lazy repository lookup is touched.
+     */
+    private suspend fun emitToolResult(tool: String, detail: String?, runId: String) {
+        if (runId.isBlank()) return
+        runCatching {
+            runEventRepository.emit(
+                type = me.rerere.rikkahub.data.runevent.RunEventType.TOOL_RESULT,
+                title = tool,
+                detail = detail,
+                payloadJson = me.rerere.rikkahub.utils.JsonInstant.encodeToString(
+                    kotlinx.serialization.json.buildJsonObject {
+                        kotlinx.serialization.json.put("tool", tool)
+                        kotlinx.serialization.json.put("workflow", true)
+                    }
+                ),
+                runId = runId,
+            )
+        }
+    }
+
+    /**
      * Execute [actions] in order, aborting on the first failure.
      *
      * [dynamicArgs] (T-07) enables `ActionTemplates` substitution for this fire: each action's
@@ -378,6 +420,7 @@ class WorkflowActionRunner {
         dynamicArgs: Boolean = false,
         secretLookup: (String) -> String? = { null },
         knownSecretNames: () -> Set<String> = { emptySet() },
+        runId: String = "",
     ): RunResult {
         val outputs = mutableListOf<String>()
         // T-07: parallel to `outputs` (which stays the 200-char run-history summary) but
@@ -405,6 +448,7 @@ class WorkflowActionRunner {
             val hardlineReason = HardlineCommandGuard.checkTool(action.tool, argsJson)
             if (hardlineReason != null) {
                 logSafe("workflow hardline-blocked action $idx tool=${action.tool}: $hardlineReason")
+                emitToolResult(action.tool, "hardline:$hardlineReason", runId)
                 return RunResult(success = false,
                     error = "action $idx: hardline:$hardlineReason",
                     summary = outputs.joinToString("\n"))
@@ -420,12 +464,16 @@ class WorkflowActionRunner {
             val refusalDetail = HeadlessToolApprovalPolicy.refusalDetail(action.tool)
             if (refusalDetail != null) {
                 logSafe("workflow refused action $idx tool=${action.tool}: ${HeadlessToolApprovalPolicy.ERROR_CODE} — $refusalDetail")
+                emitToolResult(action.tool, "${HeadlessToolApprovalPolicy.ERROR_CODE}:${action.tool}", runId)
                 return RunResult(success = false,
                     error = "action $idx: ${HeadlessToolApprovalPolicy.ERROR_CODE}:${action.tool}",
                     summary = outputs.joinToString("\n"))
             }
             val tool = availableTools.find { it.name == action.tool }
-                ?: return RunResult(false, "action $idx: unknown_tool:${action.tool}", outputs.joinToString("\n"))
+            if (tool == null) {
+                emitToolResult(action.tool, "unknown_tool:${action.tool}", runId)
+                return RunResult(false, "action $idx: unknown_tool:${action.tool}", outputs.joinToString("\n"))
+            }
             val out = try {
                 withTimeoutOrNull(action.timeoutSeconds * 1000L) { tool.execute(effectiveArgs) }
             } catch (c: kotlinx.coroutines.CancellationException) {
@@ -435,11 +483,13 @@ class WorkflowActionRunner {
                 throw c
             } catch (t: Throwable) {
                 logSafe("workflow action $idx tool=${action.tool} threw: ${t.message}")
+                emitToolResult(action.tool, "${t::class.simpleName}: ${t.message.orEmpty()}".take(300), runId)
                 return RunResult(false,
                     "action $idx: ${t::class.simpleName}: ${t.message.orEmpty()}".take(500),
                     outputs.joinToString("\n"))
             }
             if (out == null) {
+                emitToolResult(action.tool, "exceeded ${action.timeoutSeconds}s", runId)
                 return RunResult(false,
                     "action $idx: ${action.tool} exceeded ${action.timeoutSeconds}s",
                     outputs.joinToString("\n"))
@@ -448,6 +498,7 @@ class WorkflowActionRunner {
             val text = out.filterIsInstance<me.rerere.ai.ui.UIMessagePart.Text>()
                 .joinToString("\n") { it.text }
             outputs += "[$idx] ${action.tool}: ${text.take(200)}"
+            emitToolResult(action.tool, text.take(300).ifBlank { null }, runId)
             if (dynamicArgs) captured += text.take(ActionTemplates.MAX_CAPTURED_OUTPUT_CHARS)
         }
         return RunResult(true, null, outputs.joinToString("\n").take(2000))

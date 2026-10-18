@@ -16,21 +16,20 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.agentrun.AgentRunKind
 import me.rerere.rikkahub.data.agentrun.AgentRunRepository
 import me.rerere.rikkahub.data.agentrun.AgentRunStatus
-import me.rerere.rikkahub.data.ai.tools.HeadlessConversations
 import me.rerere.rikkahub.data.ai.AssistantResolver
 import me.rerere.rikkahub.data.ai.ToolSurfaceResolver
 import me.rerere.rikkahub.data.ai.tools.LocalTools
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.db.entity.ScheduledJobEntity
 import me.rerere.rikkahub.data.db.entity.ScheduledJobRunEntity
-import me.rerere.rikkahub.data.model.Conversation
-import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.ScheduledJobRepository
 import me.rerere.rikkahub.data.repository.ScheduledJobRunRepository
+import me.rerere.rikkahub.service.run.RunRequest
+import me.rerere.rikkahub.service.run.RunService
+import me.rerere.rikkahub.service.run.RunStatus
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 
@@ -156,8 +155,7 @@ class CronJobWorker(
     private val repo: ScheduledJobRepository by inject()
     private val runRepo: ScheduledJobRunRepository by inject()
     private val scheduler: CronJobScheduler by inject()
-    private val chatService: ChatService by inject()
-    private val conversationRepo: ConversationRepository by inject()
+    private val runService: RunService by inject()
     private val settingsStore: SettingsStore by inject()
     private val localTools: LocalTools by inject()
     private val directRunner: DirectModeActionRunner by inject()
@@ -323,30 +321,26 @@ class CronJobWorker(
         val assistantUuid = runCatching { Uuid.parse(job.assistantId) }.getOrNull()
             ?: return Triple("failed", "bad_assistant_id:${job.assistantId}", null)
 
-        val conv = Conversation.ofId(
-            id = Uuid.random(),
-            assistantId = assistantUuid,
-            newConversation = true,
-        ).copy(title = "[Scheduled] ${job.name}")
-        conversationRepo.insertConversation(conv)
-        chatService.initializeConversation(conv.id)
-        HeadlessConversations.mark(conv.id)
-        try {
-            chatService.sendMessage(conv.id, listOf(UIMessagePart.Text(CRON_DELIVERY_DIRECTIVE + "\n\n" + prompt)))
-            // Wait for the generation job to clear, with a 15-min wall-clock cap.
-            // See awaitGenerationTerminal's KDoc for the Unit-sentinel rationale.
-            val completed = awaitGenerationTerminal(
-                flow = chatService.getGenerationJobStateFlow(conv.id),
-                timeoutMs = 15L * 60_000L,
+        // P3 — the conversation creation / headless mark / generation kick-off / await /
+        // timeout-stop dance now lives inside RunService (ChatServiceRunService). The
+        // return semantics (Triple outcome strings, conversation id) are preserved exactly.
+        val handle = runService.submit(
+            RunRequest(
+                assistantId = assistantUuid,
+                prompt = prompt,
+                title = "[Scheduled] ${job.name}",
+                promptPrefix = CRON_DELIVERY_DIRECTIVE,
             )
-            return finishRunLlm(completed, conv.id) {
-                runCatching { chatService.stopGeneration(conv.id) }
-                    .onFailure { Log.w(TAG, "runLlm: stopGeneration failed after timeout for ${job.id}", it) }
+        )
+        return try {
+            when (runService.awaitTerminal(handle).status) {
+                RunStatus.COMPLETED -> Triple("success", null, handle.conversationId)
+                RunStatus.TIMED_OUT -> Triple("timed_out", "llm turn exceeded 15min", handle.conversationId)
+                RunStatus.FAILED -> Triple("failed", "run_failed", handle.conversationId)
+                RunStatus.CANCELLED -> Triple("cancelled", null, handle.conversationId)
             }
         } catch (t: Throwable) {
-            return Triple("failed", "${t::class.simpleName}: ${t.message.orEmpty()}", conv.id)
-        } finally {
-            HeadlessConversations.unmark(conv.id)
+            Triple("failed", "${t::class.simpleName}: ${t.message.orEmpty()}", handle.conversationId)
         }
     }
 

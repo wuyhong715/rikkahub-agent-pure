@@ -157,6 +157,8 @@ class RunEventRepositoryTest {
             override suspend fun trimByMission(missionId: String, keep: Int) = backing.trimByMission(missionId, keep)
 
             override suspend fun trimByConversation(conversationId: String, keep: Int) = backing.trimByConversation(conversationId, keep)
+
+            override suspend fun trimByRun(runId: String, keep: Int) = backing.trimByRun(runId, keep)
         }
         val repo = RunEventRepository(throwingDao)
 

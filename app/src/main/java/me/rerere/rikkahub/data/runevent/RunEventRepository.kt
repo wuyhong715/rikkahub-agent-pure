@@ -93,6 +93,7 @@ class RunEventRepository(private val dao: RunEventDao) {
                 when {
                     missionId != null -> dao.trimByMission(missionId)
                     conversationId != null -> dao.trimByConversation(conversationId)
+                    runId != null -> dao.trimByRun(runId)
                 }
             }
         }.onFailure { logSafe { Log.w(TAG, "emit($type, $title) failed", it) } }

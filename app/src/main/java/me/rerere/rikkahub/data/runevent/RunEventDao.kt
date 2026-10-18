@@ -47,4 +47,13 @@ interface RunEventDao {
             "ORDER BY created_at DESC LIMIT :keep)"
     )
     suspend fun trimByConversation(conversationId: String, keep: Int = 500)
+
+    @Query(
+        "DELETE FROM run_events WHERE run_id = :runId " +
+            "AND mission_id IS NULL AND conversation_id IS NULL " +
+            "AND id NOT IN (SELECT id FROM run_events WHERE run_id = :runId " +
+            "AND mission_id IS NULL AND conversation_id IS NULL " +
+            "ORDER BY created_at DESC LIMIT :keep)"
+    )
+    suspend fun trimByRun(runId: String, keep: Int = 500)
 }

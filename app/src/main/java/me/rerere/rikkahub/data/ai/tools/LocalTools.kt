@@ -407,6 +407,10 @@ class LocalTools(
     private val providerManager: me.rerere.ai.provider.ProviderManager,
     private val filesManager: me.rerere.rikkahub.data.files.FilesManager,
     private val genMediaRepository: me.rerere.rikkahub.data.repository.GenMediaRepository,
+    // P2 — unified policy engine: backs check_token_usage's budget snapshot. The same
+    // engine instance powers ChatService's isToolAutoApproved, so the approval decision
+    // and the budget read always agree on the conversation being inspected.
+    private val policyEngine: me.rerere.rikkahub.data.policy.PolicyEngine,
 ) {
     val javascriptTool by lazy {
         Tool(
@@ -1052,7 +1056,7 @@ class LocalTools(
             tools.add(me.rerere.rikkahub.subagent.subagentCancelTool(subAgentRegistry))
         }
         if (options.contains(LocalToolOption.CostGuards)) {
-            tools.add(me.rerere.rikkahub.costguards.checkTokenUsageTool(settingsStore, conversationRepo))
+            tools.add(me.rerere.rikkahub.costguards.checkTokenUsageTool(policyEngine))
         }
         if (options.contains(LocalToolOption.SkillImport)) {
             tools.add(me.rerere.rikkahub.skills.skillInstallFromUrlTool(skillUrlImporter, settingsStore, skillManager))
