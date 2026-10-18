@@ -1,4 +1,4 @@
-package 
+package me.rerere.rikkahub.data.usage
 import me.rerere.rikkahub.runtime.usage.UsagePurpose
 
 /**
