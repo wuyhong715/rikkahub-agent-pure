@@ -27,7 +27,7 @@ import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.ConversationCompaction
 import me.rerere.rikkahub.data.model.MessageNode
-import me.rerere.rikkahub.utils.JsonInstant
+import me.rerere.rikkahub.runtime.util.JsonInstant
 import java.time.Instant
 import kotlin.uuid.Uuid
 

@@ -31,7 +31,7 @@ import me.rerere.rikkahub.data.ai.tools.LenientLocalToolListSerializer
 import me.rerere.rikkahub.data.ai.tools.LocalToolOption
 import me.rerere.rikkahub.data.ai.tools.ToolInvocationContext
 import me.rerere.rikkahub.data.datastore.SettingsStore
-import me.rerere.rikkahub.utils.JsonInstant
+import me.rerere.rikkahub.runtime.util.JsonInstant
 
 /**
  * P2-06b — the expert-library WRITE tools: `subagent_create` / `subagent_update` /

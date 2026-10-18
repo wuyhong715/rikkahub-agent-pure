@@ -8,25 +8,15 @@ import kotlinx.coroutines.launch
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.datastore.AiLogLevel
 import me.rerere.rikkahub.data.datastore.SettingsStore
-import me.rerere.ai.provider.ProviderSetting
-import me.rerere.ai.provider.TextGenerationParams
-import me.rerere.ai.ui.UIMessage
-
-sealed class AILogging {
-    data class Generation(
-        val params: TextGenerationParams,
-        val messages: List<UIMessage>,
-        val providerSetting: ProviderSetting,
-        val stream: Boolean,
-    ) : AILogging()
-}
+import me.rerere.rikkahub.runtime.AILogging
+import me.rerere.rikkahub.runtime.LoopLogSink
 
 private const val MAX_LOGS = 32
 
 class AILoggingManager(
     private val settingsStore: SettingsStore,
     appScope: AppScope,
-) {
+) : LoopLogSink {
     private val logs = MutableStateFlow<List<AILogging>>(emptyList())
     private val logLevel = MutableStateFlow(settingsStore.settingsFlow.value.aiLogLevel)
 
@@ -46,7 +36,7 @@ class AILoggingManager(
         settingsStore.update { it.copy(aiLogLevel = level) }
     }
 
-    fun addLog(log: AILogging) {
+    override fun addLog(log: AILogging) {
         if (logLevel.value == AiLogLevel.OFF) return
         logs.value = logs.value + log
         if (logs.value.size > MAX_LOGS) {

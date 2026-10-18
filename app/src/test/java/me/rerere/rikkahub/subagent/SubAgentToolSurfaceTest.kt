@@ -1,6 +1,6 @@
 package me.rerere.rikkahub.subagent
 
-import me.rerere.rikkahub.data.ai.tools.ToolApprovalDefaults
+import me.rerere.rikkahub.runtime.tools.ToolApprovalDefaults
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull

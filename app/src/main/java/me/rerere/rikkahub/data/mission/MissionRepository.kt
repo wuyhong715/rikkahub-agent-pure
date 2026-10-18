@@ -8,7 +8,7 @@ import kotlinx.serialization.json.put
 import me.rerere.rikkahub.data.runevent.RunEventEntity
 import me.rerere.rikkahub.data.runevent.RunEventRepository
 import me.rerere.rikkahub.data.runevent.RunEventType
-import me.rerere.rikkahub.utils.JsonInstant
+import me.rerere.rikkahub.runtime.util.JsonInstant
 import kotlin.uuid.Uuid
 
 /**

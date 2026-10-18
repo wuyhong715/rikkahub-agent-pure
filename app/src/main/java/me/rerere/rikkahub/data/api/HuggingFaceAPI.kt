@@ -2,7 +2,7 @@ package me.rerere.rikkahub.data.api
 
 import me.rerere.rikkahub.data.model.HfModelDetail
 import me.rerere.rikkahub.data.model.HfModelSearchResult
-import me.rerere.rikkahub.utils.JsonInstant
+import me.rerere.rikkahub.runtime.util.JsonInstant
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit

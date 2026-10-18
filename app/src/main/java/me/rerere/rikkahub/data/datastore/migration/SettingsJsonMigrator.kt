@@ -5,7 +5,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
-import me.rerere.rikkahub.utils.JsonInstant
+import me.rerere.rikkahub.runtime.util.JsonInstant
 
 private const val TAG = "SettingsJsonMigrator"
 

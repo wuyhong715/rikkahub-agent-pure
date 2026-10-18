@@ -1,5 +1,7 @@
 package me.rerere.rikkahub.utils
 
+import me.rerere.rikkahub.runtime.util.JsonInstant
+
 import android.content.Context
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject

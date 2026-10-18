@@ -7,8 +7,8 @@ import kotlinx.datetime.toInstant
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.datastore.SettingsStore
-import me.rerere.rikkahub.utils.toLocalDate
-import me.rerere.rikkahub.utils.toLocalTime
+import me.rerere.rikkahub.runtime.util.toLocalDate
+import me.rerere.rikkahub.runtime.util.toLocalTime
 import java.io.Reader
 import java.io.StringReader
 import java.io.StringWriter

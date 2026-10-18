@@ -151,7 +151,7 @@ data class SubAgentRequest(
      * Per-run thinking depth: one of [SubAgentDefaults.VALID_REASONING_LEVELS], validated by
      * [SubAgentRequestValidator]. Null = inherit the assistant's own reasoning level (the
      * pre-feature behaviour). Applied through
-     * [me.rerere.rikkahub.data.ai.limits.ConversationReasoningOverrides] for exactly the run's
+     * [me.rerere.rikkahub.runtime.limits.ConversationReasoningOverrides] for exactly the run's
      * lifetime; providers whose model lacks the reasoning ability ignore it downstream.
      */
     val reasoningLevel: String? = null,

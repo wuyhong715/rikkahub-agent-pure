@@ -390,6 +390,7 @@ dependencies {
 
     // modules
     implementation(project(":ai"))
+    implementation(project(":runtime"))
     implementation(project(":local-llm"))
     implementation(project(":llama-cpp"))
     implementation(project(":web"))

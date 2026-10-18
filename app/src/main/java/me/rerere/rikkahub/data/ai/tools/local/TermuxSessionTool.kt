@@ -16,7 +16,7 @@ import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
-import me.rerere.rikkahub.data.ai.tools.HardlineCommandGuard
+import me.rerere.rikkahub.runtime.tools.HardlineCommandGuard
 import me.rerere.rikkahub.data.preferences.TermuxRuntime
 import java.util.UUID
 

@@ -44,7 +44,7 @@ import me.rerere.rikkahub.ui.components.richtext.HighlightCodeBlock
 import me.rerere.rikkahub.ui.components.richtext.parseDiffStats
 import me.rerere.rikkahub.ui.modifier.shimmer
 import me.rerere.rikkahub.utils.generateUnifiedDiff
-import me.rerere.rikkahub.utils.jsonPrimitiveOrNull
+import me.rerere.rikkahub.runtime.util.jsonPrimitiveOrNull
 
 /**
  * 工作空间编辑文件: 摘要显示增删统计与精简 diff, 详情为完整 diff view

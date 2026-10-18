@@ -1,6 +1,6 @@
 package me.rerere.rikkahub.subagent
 
-import me.rerere.rikkahub.data.ai.tools.ToolApprovalDefaults
+import me.rerere.rikkahub.runtime.tools.ToolApprovalDefaults
 
 /**
  * T-09 / (8) + P2-04 — the headless **safety floor**: the per-tool predicate that decides

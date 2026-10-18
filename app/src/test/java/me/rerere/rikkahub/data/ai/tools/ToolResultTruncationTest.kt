@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.data.ai.tools
 
-import me.rerere.rikkahub.data.ai.ContextCompactionPlanner
+import me.rerere.rikkahub.runtime.ContextCompactionPlanner
+import me.rerere.rikkahub.runtime.tools.truncateToolResult
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

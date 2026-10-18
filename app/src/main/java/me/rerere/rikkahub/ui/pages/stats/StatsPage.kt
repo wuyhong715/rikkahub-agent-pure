@@ -63,7 +63,7 @@ import me.rerere.rikkahub.data.usage.LedgerStatsView
 import me.rerere.rikkahub.data.usage.OrchestrationNode
 import me.rerere.rikkahub.data.usage.OrchestrationTree
 import me.rerere.rikkahub.data.usage.UsageDaySeries
-import me.rerere.rikkahub.data.usage.UsagePurpose
+import me.rerere.rikkahub.runtime.usage.UsagePurpose
 import me.rerere.rikkahub.data.usage.UsagePurposeGroups
 import me.rerere.rikkahub.data.usage.UsageStatBucket
 import me.rerere.rikkahub.data.usage.UsageStatsFactory

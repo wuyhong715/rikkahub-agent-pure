@@ -47,9 +47,9 @@ import me.rerere.rikkahub.data.agentdef.LocalToolGroups
 import me.rerere.rikkahub.data.ai.tools.LocalToolInventory
 import me.rerere.rikkahub.data.ai.tools.LocalToolPalette
 import me.rerere.rikkahub.data.ai.tools.LocalTools
-import me.rerere.rikkahub.data.ai.tools.ToolApprovalDefaults
+import me.rerere.rikkahub.runtime.tools.ToolApprovalDefaults
 import me.rerere.rikkahub.data.ai.tools.ApprovalMode
-import me.rerere.rikkahub.data.ai.tools.ToolApprovalPolicy
+import me.rerere.rikkahub.runtime.tools.ToolApprovalPolicy
 import me.rerere.rikkahub.data.preferences.ToolApprovalPreferences
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup

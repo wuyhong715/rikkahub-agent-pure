@@ -30,7 +30,7 @@ import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.FolderRepository
 import me.rerere.rikkahub.subagent.SubAgentArchiveRules
 import me.rerere.rikkahub.service.ChatService
-import me.rerere.rikkahub.utils.toLocalString
+import me.rerere.rikkahub.runtime.util.toLocalString
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlin.uuid.Uuid

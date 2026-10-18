@@ -76,10 +76,10 @@ import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
 import me.rerere.rikkahub.ui.components.ui.Favicon
 import me.rerere.rikkahub.ui.components.ui.FaviconRow
 import me.rerere.rikkahub.ui.modifier.shimmer
-import me.rerere.rikkahub.utils.JsonInstantPretty
-import me.rerere.rikkahub.utils.jsonPrimitiveOrNull
+import me.rerere.rikkahub.runtime.util.JsonInstantPretty
+import me.rerere.rikkahub.runtime.util.jsonPrimitiveOrNull
 import me.rerere.rikkahub.utils.openUrl
-import me.rerere.rikkahub.utils.toLocalString
+import me.rerere.rikkahub.runtime.util.toLocalString
 import org.koin.compose.koinInject
 import java.time.LocalDate
 import java.time.LocalDateTime

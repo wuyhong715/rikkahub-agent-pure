@@ -59,7 +59,7 @@ object SubAgentDispatchProfileRules {
 
     /**
      * Process-scoped live profile, set by ChatService before tool construction (non-suspend
-     * factory reads this). Mirrors [me.rerere.rikkahub.data.ai.limits.ToolRuntimeLimits] pattern.
+     * factory reads this). Mirrors [me.rerere.rikkahub.runtime.limits.ToolRuntimeLimits] pattern.
      */
     @Volatile private var liveProfile: SubAgentDispatchProfile = SubAgentDispatchProfile.NEVER
 

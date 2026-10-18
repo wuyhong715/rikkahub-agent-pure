@@ -18,7 +18,7 @@ import me.rerere.rikkahub.data.mission.MissionRepository
 import me.rerere.rikkahub.data.runevent.RunEventDao
 import me.rerere.rikkahub.data.runevent.RunEventRepository
 import me.rerere.rikkahub.data.ai.transformers.AssistantTemplateLoader
-import me.rerere.rikkahub.data.ai.GenerationLoop
+import me.rerere.rikkahub.runtime.GenerationLoop
 import me.rerere.rikkahub.data.ai.TranslationHandler
 import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
 import me.rerere.rikkahub.data.api.HuggingFaceAPI
@@ -317,17 +317,19 @@ val dataSourceModule = module {
 
     single {
         GenerationLoop(
-            context = get(),
+            // P4 — all Android effects go through the host bridge; repositories reach the
+            // loop through the gateway adapters, never as themselves.
+            host = me.rerere.rikkahub.service.AndroidLoopHostBridge(get()),
             providerManager = get(),
             json = get(),
-            memoryRepo = get(),
-            conversationRepo = get(),
+            memoryRepo = me.rerere.rikkahub.data.ai.MemoryGatewayAdapter(get()),
+            conversationRepo = me.rerere.rikkahub.data.ai.RecentChatsProviderAdapter(get()),
             aiLoggingManager = get(),
             systemPromptBuilder = get(),
         )
     }
 
-    single { me.rerere.rikkahub.data.ai.SystemPromptBuilder() }
+    single { me.rerere.rikkahub.runtime.SystemPromptBuilder() }
 
     single {
         TranslationHandler(providerManager = get())

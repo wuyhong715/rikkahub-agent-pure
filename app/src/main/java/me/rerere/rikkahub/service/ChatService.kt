@@ -70,14 +70,17 @@ import me.rerere.rikkahub.utils.sendNotification
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.AssistantResolver
 import me.rerere.rikkahub.data.vector.MemoryIndexCoordinator
-import me.rerere.rikkahub.data.ai.AutomationRecorder
+import me.rerere.rikkahub.runtime.AutomationRecorder
+import me.rerere.rikkahub.data.ai.toLoopAssistant
+import me.rerere.rikkahub.data.ai.toLoopMemory
+import me.rerere.rikkahub.data.ai.toLoopSettings
 import me.rerere.rikkahub.data.ai.tools.AppPlaybookFile
 import me.rerere.rikkahub.data.ai.tools.AppPlaybookRules
-import me.rerere.rikkahub.data.ai.GenerationChunk
-import me.rerere.rikkahub.data.ai.GenerationLoop
+import me.rerere.rikkahub.runtime.GenerationChunk
+import me.rerere.rikkahub.runtime.GenerationLoop
 import me.rerere.rikkahub.data.ai.ModelRouter
 import me.rerere.rikkahub.data.ai.ContextBudgetPlanner
-import me.rerere.rikkahub.data.ai.ContextCompactionPlanner
+import me.rerere.rikkahub.runtime.ContextCompactionPlanner
 import me.rerere.rikkahub.data.ai.ContextCompactionPresentation
 import me.rerere.rikkahub.data.ai.CompactedMessageView
 import me.rerere.rikkahub.data.ai.ContextCompactionView
@@ -123,6 +126,9 @@ import me.rerere.rikkahub.data.ai.transformers.RegexOutputTransformer
 import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
 import me.rerere.rikkahub.data.ai.transformers.ThinkTagTransformer
 import me.rerere.rikkahub.data.ai.transformers.TimeReminderTransformer
+import me.rerere.rikkahub.data.ai.transformers.onGenerationFinish
+import me.rerere.rikkahub.data.ai.transformers.transforms
+import me.rerere.rikkahub.data.ai.transformers.visualTransforms
 import me.rerere.rikkahub.data.ai.transformers.WorkspaceReminderTransformer
 import me.rerere.rikkahub.data.event.AppEvent
 import me.rerere.rikkahub.data.event.AppEventBus
@@ -131,7 +137,7 @@ import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.AutoCompactionThresholdMode
 import me.rerere.rikkahub.data.datastore.DEFAULT_AUTO_MODEL_ID
 import me.rerere.rikkahub.data.datastore.findModelById
-import me.rerere.rikkahub.data.datastore.findProvider
+import me.rerere.rikkahub.runtime.findProvider
 import me.rerere.rikkahub.data.datastore.getContextCompactionTargetTokens
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
@@ -160,8 +166,8 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.uuid.Uuid
-import me.rerere.rikkahub.data.usage.UsageCallContext
-import me.rerere.rikkahub.data.usage.UsagePurpose
+import me.rerere.rikkahub.runtime.usage.UsageCallContext
+import me.rerere.rikkahub.runtime.usage.UsagePurpose
 
 private const val TAG = "ChatService"
 private const val COMPACTION_REQUEST_TIMEOUT_MS = 3 * 60_000L
@@ -1147,7 +1153,7 @@ class ChatService(
         // Defence-in-depth — even though v1's intent set is read-only, run HARDLINE here so
         // that adding a side-effecting intent later (e.g. "set brightness 50%") can't bypass
         // the floor by routing around the LLM-tool-call path that normally enforces it.
-        val hardlineReason = me.rerere.rikkahub.data.ai.tools.HardlineCommandGuard
+        val hardlineReason = me.rerere.rikkahub.runtime.tools.HardlineCommandGuard
             .checkTool(match.toolName, match.args.toString())
         if (hardlineReason != null) {
             android.util.Log.w("FastPathRouter", "hardline-blocked intent=${match.intent} tool=${match.toolName}: $hardlineReason; falling through to LLM")
@@ -1475,7 +1481,7 @@ class ChatService(
                     return RerunToolResult.Failure("tool has not completed its first run yet")
                 }
 
-                val hardlineReason = me.rerere.rikkahub.data.ai.tools.HardlineCommandGuard
+                val hardlineReason = me.rerere.rikkahub.runtime.tools.HardlineCommandGuard
                     .checkTool(toolPart.toolName, toolPart.input)
                 if (hardlineReason != null) {
                     return RerunToolResult.Failure("blocked: $hardlineReason")
@@ -1817,16 +1823,16 @@ class ChatService(
             // call — hence a `var` rather than a value.
             var liveCatalogueTools: (suspend () -> List<Tool>)? = null
             generationLoop.generateText(
-                settings = settings,
+                settings = settings.toLoopSettings(),
                 model = model,
                 processingStatus = session.processingStatus,
                 // Per-conversation tool-step cap: a sub-agent run registers its `max_trips`
                 // here for exactly its own lifetime (see ConversationToolStepLimits); every
                 // other conversation falls through to the global default, read live so a
                 // settings change applies to the next turn.
-                maxSteps = me.rerere.rikkahub.data.ai.limits.ConversationToolStepLimits
+                maxSteps = me.rerere.rikkahub.runtime.limits.ConversationToolStepLimits
                     .get(conversation.id)
-                    ?: me.rerere.rikkahub.data.ai.limits.ToolRuntimeLimits.maxToolSteps,
+                    ?: me.rerere.rikkahub.runtime.limits.ToolRuntimeLimits.maxToolSteps,
                 // Read once per call so the surface that wrote the addendum (Telegram bot,
                 // anything else) gets its runtime context into the system prompt without
                 // having to plumb a parameter all the way through sendMessage. Returns null
@@ -1897,26 +1903,66 @@ class ChatService(
                     missionEngine.onToolExecuted(conversation.id.toString(), toolName, argsJson, outputJson)
                 },
                 messages = messagesForGeneration,
-                assistant = assistant,
+                assistant = assistant.toLoopAssistant(),
                 conversationId = conversationId,
                 conversationSystemPrompt = conversation.customSystemPrompt,
                 conversationModeInjectionIds = conversation.modeInjectionIds,
                 conversationLorebookIds = conversation.lorebookIds,
                 workspaceCwd = conversation.workspaceCwd,
-                memories = if (assistant.useGlobalMemory) {
+                memories = (if (assistant.useGlobalMemory) {
                     memoryRepository.getGlobalMemories()
                 } else {
                     memoryRepository.getMemoriesOfAssistant(assistant.id.toString())
+                }).map { it.toLoopMemory() },
+                // P4 — transformers stay :app. The loop receives four closures over this
+                // turn's TransformerContext instead of the transformer objects themselves.
+                inputTransform = { msgs ->
+                    msgs.transforms(
+                        transformers = buildList {
+                            addAll(inputTransformers)
+                            add(templateTransformer)
+                            add(workspaceReminderTransformer)
+                            add(appEnvironmentTransformer)
+                            // 放在最后: 估算的是已注入模板 / workspace 引导之后的最终请求上下文
+                            add(ContextBudgetReminderTransformer)
+                        },
+                        context = context,
+                        model = model,
+                        assistant = assistant,
+                        settings = settings,
+                        conversationModeInjectionIds = conversation.modeInjectionIds,
+                        conversationLorebookIds = conversation.lorebookIds,
+                        processingStatus = session.processingStatus,
+                        workspaceCwd = conversation.workspaceCwd,
+                    )
                 },
-                inputTransformers = buildList {
-                    addAll(inputTransformers)
-                    add(templateTransformer)
-                    add(workspaceReminderTransformer)
-                    add(appEnvironmentTransformer)
-                    // 放在最后: 估算的是已注入模板 / workspace 引导之后的最终请求上下文
-                    add(ContextBudgetReminderTransformer)
+                outputTransform = { msgs ->
+                    msgs.transforms(
+                        transformers = outputTransformers,
+                        context = context,
+                        model = model,
+                        assistant = assistant,
+                        settings = settings,
+                    )
                 },
-                outputTransformers = outputTransformers,
+                outputVisualTransform = { msgs ->
+                    msgs.visualTransforms(
+                        transformers = outputTransformers,
+                        context = context,
+                        model = model,
+                        assistant = assistant,
+                        settings = settings,
+                    )
+                },
+                outputFinishTransform = { msgs ->
+                    msgs.onGenerationFinish(
+                        transformers = outputTransformers,
+                        context = context,
+                        model = model,
+                        assistant = assistant,
+                        settings = settings,
+                    )
+                },
                 tools = buildList {
                     // Synchronise the live dispatch profile (fixes #291) before tool resolution so
                     // subagent_dispatch is registered when the profile != NEVER.

@@ -3,7 +3,7 @@ package me.rerere.rikkahub.data.db.migrations
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import me.rerere.rikkahub.utils.JsonInstant
+import me.rerere.rikkahub.runtime.util.JsonInstant
 import org.junit.Assert.assertEquals
 import org.junit.Test
 

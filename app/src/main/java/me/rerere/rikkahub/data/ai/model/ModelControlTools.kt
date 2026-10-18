@@ -42,7 +42,7 @@ import kotlin.uuid.Uuid
  * and baseUrl (secrets); this family never touches them, and an unknown or built-in synthetic
  * provider (AICore) is refused rather than half-edited.
  *
- * The write half requires approval ([me.rerere.rikkahub.data.ai.tools.ToolApprovalDefaults])
+ * The write half requires approval ([me.rerere.rikkahub.runtime.tools.ToolApprovalDefaults])
  * and is refused outright in a headless run
  * ([me.rerere.rikkahub.data.ai.tools.HeadlessToolApprovalPolicy]); each attempt is recorded in
  * the `agent_runs` ledger under [AgentRunKind.ModelWrite].

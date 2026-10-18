@@ -1,4 +1,6 @@
 package me.rerere.rikkahub.data.ai.tools
+import me.rerere.rikkahub.runtime.tools.ToolApprovalDefaults
+
 
 import android.view.KeyEvent
 import kotlinx.coroutines.runBlocking

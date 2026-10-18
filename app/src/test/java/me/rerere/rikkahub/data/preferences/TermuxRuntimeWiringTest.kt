@@ -81,12 +81,12 @@ class TermuxRuntimeWiringTest {
 
     @Test
     fun toolRuntimeLimits_turnBudget_writeIsVisibleImmediately() {
-        val prev = me.rerere.rikkahub.data.ai.limits.ToolRuntimeLimits.turnBudgetMs
+        val prev = me.rerere.rikkahub.runtime.limits.ToolRuntimeLimits.turnBudgetMs
         try {
-            me.rerere.rikkahub.data.ai.limits.ToolRuntimeLimits.turnBudgetMs = 5L * 60_000L
-            assertEquals(5L * 60_000L, me.rerere.rikkahub.data.ai.limits.ToolRuntimeLimits.turnBudgetMs)
+            me.rerere.rikkahub.runtime.limits.ToolRuntimeLimits.turnBudgetMs = 5L * 60_000L
+            assertEquals(5L * 60_000L, me.rerere.rikkahub.runtime.limits.ToolRuntimeLimits.turnBudgetMs)
         } finally {
-            me.rerere.rikkahub.data.ai.limits.ToolRuntimeLimits.turnBudgetMs = prev
+            me.rerere.rikkahub.runtime.limits.ToolRuntimeLimits.turnBudgetMs = prev
         }
     }
 

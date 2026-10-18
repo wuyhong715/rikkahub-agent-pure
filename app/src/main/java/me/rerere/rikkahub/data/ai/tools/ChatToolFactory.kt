@@ -8,6 +8,7 @@ import me.rerere.ai.provider.BuiltInTools
 import me.rerere.ai.provider.Model
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.ai.ToolSurfaceResolver
+import me.rerere.rikkahub.data.ai.toLoopMemory
 import me.rerere.rikkahub.data.ai.mcp.McpTool
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.files.SkillManager
@@ -15,6 +16,7 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
+import me.rerere.rikkahub.runtime.tools.buildMemoryTools
 import me.rerere.workspace.WorkspaceShellStatus
 import kotlin.uuid.Uuid
 
@@ -53,8 +55,8 @@ class ChatToolFactory(
             addAll(
                 buildMemoryTools(
                     json = json,
-                    onCreation = { content -> memoryRepository.addMemory(memoryAssistantId, content) },
-                    onUpdate = { id, content -> memoryRepository.updateContent(id, content) },
+                    onCreation = { content -> memoryRepository.addMemory(memoryAssistantId, content).toLoopMemory() },
+                    onUpdate = { id, content -> memoryRepository.updateContent(id, content).toLoopMemory() },
                     onDelete = { id -> memoryRepository.deleteMemory(id) },
                 )
             )

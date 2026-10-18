@@ -1,4 +1,5 @@
-package me.rerere.rikkahub.data.usage
+package 
+import me.rerere.rikkahub.runtime.usage.UsagePurpose
 
 import me.rerere.ai.core.MessageRole
 

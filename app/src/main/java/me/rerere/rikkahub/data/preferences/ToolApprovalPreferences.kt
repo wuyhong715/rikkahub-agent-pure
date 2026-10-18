@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import me.rerere.rikkahub.data.ai.tools.ApprovalMode
-import me.rerere.rikkahub.data.ai.tools.ToolApprovalDefaults
+import me.rerere.rikkahub.runtime.tools.ToolApprovalDefaults
 
 private const val TAG = "ToolApprovalPreferences"
 
@@ -60,7 +60,7 @@ data class ToolApprovalSnapshot(
  *    "only the tool that can do anything asks". Configured from Settings → Tool approvals; each
  *    entry can be removed there to stop it asking (a dangerous default goes through an explicit
  *    confirmation first). The non-waivable floor
- *    ([me.rerere.rikkahub.data.ai.tools.ToolApprovalDefaults.NO_ALWAYS_ALLOW]) asks regardless
+ *    ([me.rerere.rikkahub.runtime.tools.ToolApprovalDefaults.NO_ALWAYS_ALLOW]) asks regardless
  *    of this set and regardless of the mode; opaque relayed `mcp__*` tools ask too, except in
  *    Auto mode which waives them (拍板 2026-10-16).
  *

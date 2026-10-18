@@ -147,7 +147,7 @@ class RikkaNotificationListenerService : NotificationListenerService() {
         // notifications (e.g. a termux-notification the user explicitly asked the agent
         // to send) still go through.
         if (entry.ongoing &&
-            me.rerere.rikkahub.data.ai.AgentTurnTracker.isFreshlyTouched(entry.packageName)) {
+            me.rerere.rikkahub.runtime.AgentTurnTracker.isFreshlyTouched(entry.packageName)) {
             return
         }
 

@@ -45,7 +45,7 @@ import me.rerere.rikkahub.utils.UpdateDownload
 import me.rerere.rikkahub.utils.Version
 import me.rerere.rikkahub.utils.onError
 import me.rerere.rikkahub.utils.onSuccess
-import me.rerere.rikkahub.utils.toLocalDateTime
+import me.rerere.rikkahub.runtime.util.toLocalDateTime
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 import kotlin.time.toJavaInstant

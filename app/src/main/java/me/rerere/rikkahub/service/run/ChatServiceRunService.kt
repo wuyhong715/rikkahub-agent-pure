@@ -13,7 +13,7 @@ import me.rerere.rikkahub.data.runevent.RunEventRepository
 import me.rerere.rikkahub.data.runevent.RunEventType
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.service.awaitGenerationTerminal
-import me.rerere.rikkahub.utils.JsonInstant
+import me.rerere.rikkahub.runtime.util.JsonInstant
 import kotlin.uuid.Uuid
 
 private const val TAG = "ChatServiceRunService"

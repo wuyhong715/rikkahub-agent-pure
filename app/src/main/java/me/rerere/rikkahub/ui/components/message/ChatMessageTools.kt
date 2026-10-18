@@ -66,8 +66,8 @@ import me.rerere.rikkahub.ui.components.ui.ChainOfThoughtScope
 import me.rerere.rikkahub.ui.components.ui.DotLoading
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.modifier.shimmer
-import me.rerere.rikkahub.utils.JsonInstant
-import me.rerere.rikkahub.utils.jsonPrimitiveOrNull
+import me.rerere.rikkahub.runtime.util.JsonInstant
+import me.rerere.rikkahub.runtime.util.jsonPrimitiveOrNull
 
 // Per-tool icon/title/summary/preview rendering now lives in ToolUIRegistry
 // (see message/tools/BuiltinToolUIs.kt). This file only keeps the cross-cutting

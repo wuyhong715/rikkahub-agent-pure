@@ -43,8 +43,8 @@ import me.rerere.rikkahub.data.db.entity.ScheduledJobEntity
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.theme.CustomColors
-import me.rerere.rikkahub.utils.RelativeTimeStrings
-import me.rerere.rikkahub.utils.formatRelativeAgo
+import me.rerere.rikkahub.runtime.util.RelativeTimeStrings
+import me.rerere.rikkahub.runtime.util.formatRelativeAgo
 import me.rerere.rikkahub.utils.plus
 import org.koin.androidx.compose.koinViewModel
 

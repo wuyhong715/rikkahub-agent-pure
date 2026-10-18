@@ -15,8 +15,8 @@ import me.rerere.rikkahub.data.vector.ConversationIndexCoordinator
 import me.rerere.rikkahub.data.vector.ConversationSearchEnvelope
 import me.rerere.rikkahub.data.vector.DEFAULT_SEARCH_LIMIT
 import me.rerere.rikkahub.data.vector.MAX_SEARCH_LIMIT
-import me.rerere.rikkahub.utils.JsonInstantPretty
-import me.rerere.rikkahub.utils.toLocalDate
+import me.rerere.rikkahub.runtime.util.JsonInstantPretty
+import me.rerere.rikkahub.runtime.util.toLocalDate
 import kotlin.uuid.Uuid
 
 /**

@@ -189,7 +189,7 @@ private fun ModelSettingsPage(settings: Settings, vm: SettingVM, contentPadding:
 /**
  * Per-turn generation limits — the wall-clock budget and the tool-step ceiling for one
  * user turn. These are app-wide (they govern every tool family and the model loop itself,
- * see [me.rerere.rikkahub.data.ai.limits.ToolRuntimeLimits]); they live on the model page
+ * see [me.rerere.rikkahub.runtime.limits.ToolRuntimeLimits]); they live on the model page
  * because they shape generation behaviour, not Termux specifically. Persistence stays in
  * TermuxPreferences (the pre-existing store), surfaced here through SettingTermuxViewModel.
  */

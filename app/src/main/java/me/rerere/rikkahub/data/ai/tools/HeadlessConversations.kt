@@ -1,4 +1,5 @@
 package me.rerere.rikkahub.data.ai.tools
+import me.rerere.rikkahub.runtime.tools.HardlineCommandGuard
 
 import android.content.Context
 import android.content.SharedPreferences

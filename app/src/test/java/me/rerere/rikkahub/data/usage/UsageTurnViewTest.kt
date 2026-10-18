@@ -1,4 +1,8 @@
 package me.rerere.rikkahub.data.usage
+import me.rerere.rikkahub.runtime.usage.UsagePurpose
+import me.rerere.rikkahub.runtime.usage.UsageCallContext
+import me.rerere.rikkahub.runtime.usage.UsageRunContexts
+
 
 import me.rerere.ai.core.MessageRole
 import org.junit.Assert.assertEquals

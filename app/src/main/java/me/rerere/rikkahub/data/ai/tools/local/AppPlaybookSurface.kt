@@ -2,7 +2,7 @@ package me.rerere.rikkahub.data.ai.tools.local
 
 import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.put
-import me.rerere.rikkahub.data.ai.AgentTurnTracker
+import me.rerere.rikkahub.runtime.AgentTurnTracker
 import me.rerere.rikkahub.data.ai.tools.AppPlaybookRules
 import me.rerere.rikkahub.data.ai.tools.ToolInvocationContext
 import kotlin.coroutines.cancellation.CancellationException

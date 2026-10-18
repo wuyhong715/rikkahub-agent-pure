@@ -3,7 +3,7 @@ package me.rerere.rikkahub.data.api
 import kotlinx.serialization.decodeFromString
 import me.rerere.rikkahub.data.model.HfModelDetail
 import me.rerere.rikkahub.data.model.HfSibling
-import me.rerere.rikkahub.utils.JsonInstant
+import me.rerere.rikkahub.runtime.util.JsonInstant
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test

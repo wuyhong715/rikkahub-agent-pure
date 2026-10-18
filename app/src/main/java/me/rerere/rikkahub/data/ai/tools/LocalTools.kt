@@ -1,4 +1,6 @@
 package me.rerere.rikkahub.data.ai.tools
+import me.rerere.rikkahub.runtime.tools.ToolApprovalPolicy
+import me.rerere.rikkahub.runtime.tools.ToolApprovalDefaults
 
 import android.content.Context
 import com.whl.quickjs.wrapper.QuickJSContext

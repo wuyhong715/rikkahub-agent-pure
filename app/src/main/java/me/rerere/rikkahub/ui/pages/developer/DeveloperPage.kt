@@ -29,7 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
-import me.rerere.rikkahub.data.ai.AILogging
+import me.rerere.rikkahub.runtime.AILogging
 import me.rerere.rikkahub.data.datastore.AiLogLevel
 import org.koin.androidx.compose.koinViewModel
 

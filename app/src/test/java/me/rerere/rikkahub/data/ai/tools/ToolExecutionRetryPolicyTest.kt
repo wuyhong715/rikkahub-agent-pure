@@ -12,7 +12,8 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.util.HttpException
-import me.rerere.rikkahub.data.ai.tools.ToolExecutionRetryPolicy.RetryOutcome
+import me.rerere.rikkahub.runtime.tools.ToolExecutionRetryPolicy
+import me.rerere.rikkahub.runtime.tools.ToolExecutionRetryPolicy.RetryOutcome
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

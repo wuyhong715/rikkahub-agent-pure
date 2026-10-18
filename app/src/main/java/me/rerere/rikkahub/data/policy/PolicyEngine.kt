@@ -3,7 +3,7 @@ package me.rerere.rikkahub.data.policy
 import me.rerere.rikkahub.costguards.TokenBudgetTracker
 import me.rerere.rikkahub.data.ai.tools.HeadlessConversations
 import me.rerere.rikkahub.data.ai.tools.ToolApprovalAllowList
-import me.rerere.rikkahub.data.ai.tools.ToolApprovalPolicy
+import me.rerere.rikkahub.runtime.tools.ToolApprovalPolicy
 import me.rerere.rikkahub.data.preferences.ToolApprovalSnapshot
 import kotlin.uuid.Uuid
 

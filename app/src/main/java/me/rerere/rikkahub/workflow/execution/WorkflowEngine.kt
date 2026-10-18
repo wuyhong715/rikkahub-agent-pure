@@ -14,7 +14,7 @@ import me.rerere.ai.core.Tool
 import me.rerere.rikkahub.data.ai.AssistantResolver
 import me.rerere.rikkahub.data.ai.ToolSurfaceResolver
 import me.rerere.rikkahub.data.ai.tools.HeadlessToolApprovalPolicy
-import me.rerere.rikkahub.data.ai.tools.HardlineCommandGuard
+import me.rerere.rikkahub.runtime.tools.HardlineCommandGuard
 import me.rerere.rikkahub.data.ai.tools.LocalTools
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.workflow.condition.ConditionEvaluator
@@ -391,7 +391,7 @@ class WorkflowActionRunner {
                 type = me.rerere.rikkahub.data.runevent.RunEventType.TOOL_RESULT,
                 title = tool,
                 detail = detail,
-                payloadJson = me.rerere.rikkahub.utils.JsonInstant.encodeToString(
+                payloadJson = me.rerere.rikkahub.runtime.util.JsonInstant.encodeToString(
                     kotlinx.serialization.json.buildJsonObject {
                         put("tool", tool)
                         put("workflow", true)

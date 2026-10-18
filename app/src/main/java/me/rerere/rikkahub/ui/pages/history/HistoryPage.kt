@@ -55,7 +55,7 @@ import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.utils.navigateToChatPage
 import me.rerere.rikkahub.utils.plus
-import me.rerere.rikkahub.utils.toLocalDateTime
+import me.rerere.rikkahub.runtime.util.toLocalDateTime
 import org.koin.androidx.compose.koinViewModel
 
 @Composable

@@ -53,7 +53,7 @@ class RikkaAccessibilityService : AccessibilityService() {
     /**
      * Class name of the most recent window-state change — in practice the activity the user is
      * on. Screen automation uses it as a *structural* screen key for the app playbook
-     * (see [me.rerere.rikkahub.data.ai.AutomationRecorder]); unlike a window title it can never
+     * (see [me.rerere.rikkahub.runtime.AutomationRecorder]); unlike a window title it can never
      * be a contact or message name, so it is safe to persist.
      */
     @Volatile

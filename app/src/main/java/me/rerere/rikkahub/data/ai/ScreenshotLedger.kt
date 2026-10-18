@@ -1,4 +1,5 @@
 package me.rerere.rikkahub.data.ai
+import me.rerere.rikkahub.runtime.AgentTurnTracker
 
 /**
  * Files produced by `take_screenshot` during the current turn that should not outlive it.

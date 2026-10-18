@@ -1,6 +1,6 @@
 package me.rerere.rikkahub.data.ai
 
-import me.rerere.rikkahub.data.ai.limits.ToolRuntimeLimits
+import me.rerere.rikkahub.runtime.limits.ToolRuntimeLimits
 import me.rerere.rikkahub.data.preferences.TermuxDefaults
 import org.junit.After
 import org.junit.Assert.assertEquals

@@ -31,7 +31,7 @@ import me.rerere.rikkahub.data.ai.tools.local.videoGalleryRelativePath
 import me.rerere.rikkahub.data.ai.tools.local.videoGenFilename
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.findModelById
-import me.rerere.rikkahub.data.datastore.findProvider
+import me.rerere.rikkahub.runtime.findProvider
 import me.rerere.rikkahub.data.db.entity.GenMediaEntity
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.repository.GenMediaRepository

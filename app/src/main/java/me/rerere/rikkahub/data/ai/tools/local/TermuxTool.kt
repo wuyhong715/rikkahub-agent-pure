@@ -21,7 +21,7 @@ import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
-import me.rerere.rikkahub.data.ai.AgentTurnTracker
+import me.rerere.rikkahub.runtime.AgentTurnTracker
 import me.rerere.rikkahub.data.preferences.TermuxDefaults
 import me.rerere.rikkahub.data.preferences.TermuxRuntime
 import java.util.UUID
@@ -225,7 +225,7 @@ internal suspend fun runCommandCapture(
     // flap its notification and the listener forwards each flap to the user's chat.
     // The touch here covers ALL callers of runCommandCapture, so individual tool
     // factories don't have to remember to call it themselves.
-    me.rerere.rikkahub.data.ai.AgentTurnTracker.touchPackage(TERMUX_PACKAGE, "com.termux.api")
+    me.rerere.rikkahub.runtime.AgentTurnTracker.touchPackage(TERMUX_PACKAGE, "com.termux.api")
     val resultDeferred = CompletableDeferred<Bundle>()
     val resultAction = "${ctx.packageName}.TERMUX_RESULT_${UUID.randomUUID()}"
     // Per-call completion marker (see buildMarkerWrappedArgv / isTerminalResult). Termux's

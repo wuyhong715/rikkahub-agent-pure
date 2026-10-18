@@ -1,4 +1,5 @@
-package me.rerere.rikkahub.data.usage
+package 
+import me.rerere.rikkahub.runtime.usage.UsagePurpose
 
 /**
  * D10 — the coarse buckets the statistics page shows a purpose ranking under.
