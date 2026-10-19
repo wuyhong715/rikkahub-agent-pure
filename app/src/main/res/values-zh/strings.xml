@@ -2957,4 +2957,25 @@ HARDLINE 保护仍然生效：rm -rf /、mkfs、shutdown / reboot、向块设备
   <string name="mission_time_minutes_ago">%1$d 分钟前</string>
   <string name="mission_time_hours_ago">%1$d 小时前</string>
   <string name="mission_time_days_ago">%1$d 天前</string>
+  <string name="mission_settlement_title">运行结算</string>
+  <string name="mission_settlement_tool_calls">工具调用</string>
+  <string name="mission_settlement_artifacts">产物</string>
+  <string name="mission_settlement_cost">累计成本</string>
+  <string name="mission_settlement_tokens">累计 tokens</string>
+  <string name="mission_settlement_duration">活跃时长</string>
+  <string name="mission_settlement_acceptance_progress">验收进度</string>
+  <string name="mission_settlement_no_data">暂无数据</string>
+  <string name="mission_artifact_open">打开</string>
+  <string name="mission_artifact_share">分享</string>
+  <string name="mission_artifact_diff">变更内容</string>
+  <string name="mission_artifact_created">新增</string>
+  <string name="mission_artifact_modified">修改</string>
+  <string name="mission_artifact_lines">+%1$d -%2$d</string>
+  <string name="mission_review_panel_title">验收</string>
+  <string name="mission_review_approve">通过</string>
+  <string name="mission_review_reject">打回</string>
+  <string name="mission_review_archive">归档</string>
+  <string name="mission_review_approve_disabled_hint">需先勾选所有验收项</string>
+  <string name="mission_artifact_open_failed">无法读取文件</string>
+  <string name="mission_artifact_close">关闭</string>
 </resources>

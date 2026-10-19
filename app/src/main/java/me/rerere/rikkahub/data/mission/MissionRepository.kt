@@ -163,6 +163,7 @@ class MissionRepository(
         path: String,
         sourceTool: String,
         summary: String? = null,
+        change: ArtifactChange? = null,
     ) {
         runCatching {
             writeMutex.withLock {
@@ -183,6 +184,12 @@ class MissionRepository(
                         buildJsonObject {
                             put("path", path)
                             put("sourceTool", sourceTool)
+                            if (change != null) {
+                                put("changeType", change.changeType)
+                                put("linesAdded", change.linesAdded)
+                                put("linesRemoved", change.linesRemoved)
+                                change.diffExcerpt?.let { put("diffExcerpt", it) }
+                            }
                         }
                     ),
                 )

@@ -205,11 +205,14 @@ class MissionEngine(
                 conversationId = conversationId,
             )
 
-            // (b) ARTIFACT_TOOLS whitelist — attach file artifacts to the bound mission.
+            // (b) ARTIFACT_TOOLS whitelist — attach file artifacts to the bound mission,
+            // with change metadata (diff summary) so the workbench can render a review
+            // view without re-reading files (batch 1: delivery closure).
             if (toolName !in ARTIFACT_TOOLS) return@runCatching
             val path = parsePath(argsJson) ?: return@runCatching
             val missionId = missionIdFor(conversationId) ?: return@runCatching
-            repository.attachArtifact(missionId, path, toolName)
+            val change = computeArtifactChange(toolName, argsJson)
+            repository.attachArtifact(missionId, path, toolName, change = change)
         }.onFailure { Log.w(TAG, "onToolExecuted failed for $toolName", it) }
     }
 
@@ -237,4 +240,44 @@ class MissionEngine(
         val element = json.parseToJsonElement(argsJson.ifBlank { "{}" })
         (element as? JsonObject)?.get("path")?.jsonPrimitive?.content
     }.getOrNull()
+
+    /**
+     * Compute an [ArtifactChange] for a file-writing tool from its args JSON.
+     *
+     * - `workspace_write_file` / `write_text_file`: changeType = "created",
+     *   linesAdded = line count of the `text` arg.
+     * - `workspace_edit_file`: changeType = "modified", linesAdded/linesRemoved
+     *   derived from the `old_text` / `new_text` args (best-effort line delta;
+     *   not a true diff — the workbench only needs a summary).
+     *
+     * Returns null if the args cannot be parsed or the tool is not a file writer.
+     */
+    private fun computeArtifactChange(toolName: String, argsJson: String): ArtifactChange? =
+        runCatching {
+            val element = json.parseToJsonElement(argsJson.ifBlank { "{}" }) as? JsonObject ?: return null
+            when (toolName) {
+                "workspace_write_file", "write_text_file" -> {
+                    val text = element["text"]?.jsonPrimitive?.content.orEmpty()
+                    ArtifactChange(
+                        changeType = "created",
+                        linesAdded = text.count { it == '\n' } + if (text.isNotBlank()) 1 else 0,
+                        linesRemoved = 0,
+                        diffExcerpt = null,
+                    )
+                }
+                "workspace_edit_file" -> {
+                    val oldText = element["old_text"]?.jsonPrimitive?.content.orEmpty()
+                    val newText = element["new_text"]?.jsonPrimitive?.content.orEmpty()
+                    val oldLines = oldText.lines().count { it.isNotBlank() }
+                    val newLines = newText.lines().count { it.isNotBlank() }
+                    ArtifactChange(
+                        changeType = "modified",
+                        linesAdded = newLines,
+                        linesRemoved = oldLines,
+                        diffExcerpt = newText.take(300).ifBlank { null },
+                    )
+                }
+                else -> null
+            }
+        }.getOrNull()
 }

@@ -3242,4 +3242,25 @@ HARDLINE protections still apply: rm -rf /, mkfs, shutdown / reboot, dd to block
   <string name="mission_time_minutes_ago">%1$d min ago</string>
   <string name="mission_time_hours_ago">%1$d h ago</string>
   <string name="mission_time_days_ago">%1$d d ago</string>
+  <string name="mission_settlement_title">Run settlement</string>
+  <string name="mission_settlement_tool_calls">Tool calls</string>
+  <string name="mission_settlement_artifacts">Artifacts</string>
+  <string name="mission_settlement_cost">Cost</string>
+  <string name="mission_settlement_tokens">Tokens</string>
+  <string name="mission_settlement_duration">Duration</string>
+  <string name="mission_settlement_acceptance_progress">Acceptance</string>
+  <string name="mission_settlement_no_data">No data yet</string>
+  <string name="mission_artifact_open">Open</string>
+  <string name="mission_artifact_share">Share</string>
+  <string name="mission_artifact_diff">Change excerpt</string>
+  <string name="mission_artifact_created">Created</string>
+  <string name="mission_artifact_modified">Modified</string>
+  <string name="mission_artifact_lines">+%1$d -%2$d</string>
+  <string name="mission_review_panel_title">Review</string>
+  <string name="mission_review_approve">Approve</string>
+  <string name="mission_review_reject">Send back</string>
+  <string name="mission_review_archive">Archive</string>
+  <string name="mission_review_approve_disabled_hint">Check every acceptance criterion first</string>
+  <string name="mission_artifact_open_failed">Could not read the file</string>
+  <string name="mission_artifact_close">Close</string>
 </resources>

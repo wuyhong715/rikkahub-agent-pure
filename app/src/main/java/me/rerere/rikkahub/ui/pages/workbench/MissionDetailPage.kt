@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.pages.workbench
 
+import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -9,13 +10,16 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
@@ -38,17 +42,20 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.core.content.FileProvider
+import kotlinx.coroutines.launch
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.MessageAdd01
 import me.rerere.hugeicons.stroke.Edit02
@@ -59,6 +66,7 @@ import me.rerere.hugeicons.stroke.Clipboard
 import me.rerere.hugeicons.stroke.BookOpen01
 import me.rerere.hugeicons.stroke.Wrench01
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.mission.Artifact
 import me.rerere.rikkahub.data.mission.MissionStatus
 import me.rerere.rikkahub.data.runevent.RunEventEntity
 import me.rerere.rikkahub.data.runevent.RunEventType
@@ -79,13 +87,17 @@ fun MissionDetailPage(missionId: String) {
     val vm: MissionDetailVM = koinViewModel(parameters = { parametersOf(missionId) })
     val navController = LocalNavController.current
     val toaster = LocalToaster.current
-    val clipboard = LocalClipboardManager.current
     val mission by vm.mission.collectAsStateWithLifecycle()
     val events by vm.events.collectAsStateWithLifecycle()
+    val settlement by vm.settlement.collectAsStateWithLifecycle()
+    val artifacts by vm.artifacts.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    var expandedArtifactId by remember { mutableStateOf<String?>(null) }
+    var previewArtifact by remember { mutableStateOf<Pair<String, String>?>(null) }
     var menuExpanded by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showNoteDialog by remember { mutableStateOf(false) }
-    val copiedMessage = stringResource(R.string.mission_artifact_copied)
 
     Scaffold(
         topBar = {
@@ -198,6 +210,13 @@ fun MissionDetailPage(missionId: String) {
                 }
             }
 
+            // ①b Settlement card (batch 1 — delivery loop)
+            settlement?.let { s ->
+                item {
+                    SettlementCard(settlement = s)
+                }
+            }
+
             // ② Acceptance criteria
             mission?.let { m ->
                 val criteria = m.acceptanceCriteria
@@ -268,60 +287,86 @@ fun MissionDetailPage(missionId: String) {
                     }
                 }
 
-                // ③ Status actions
+                // ③ Status actions — REVIEW uses the acceptance gate, otherwise chips (batch 1)
                 item {
-                    val targets = MissionStatus.entries.filter { to ->
-                        to != MissionStatus.ARCHIVED && m.statusEnum.canTransitionTo(to)
-                    }
-                    if (targets.isNotEmpty()) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            targets.forEach { to ->
-                                AssistChip(
-                                    onClick = { vm.transition(to) },
-                                    label = { Text(text = missionActionLabel(to)) },
-                                )
+                    val s = settlement
+                    if (m.statusEnum == MissionStatus.REVIEW && s != null) {
+                        ReviewPanel(
+                            settlement = s,
+                            onApprove = { vm.transition(MissionStatus.DONE) },
+                            onReject = { vm.transition(MissionStatus.ACTIVE) },
+                            onArchive = { vm.transition(MissionStatus.ARCHIVED) },
+                        )
+                    } else {
+                        val targets = MissionStatus.entries.filter { to ->
+                            to != MissionStatus.ARCHIVED && m.statusEnum.canTransitionTo(to)
+                        }
+                        if (targets.isNotEmpty()) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                targets.forEach { to ->
+                                    AssistChip(
+                                        onClick = { vm.transition(to) },
+                                        label = { Text(text = missionActionLabel(to)) },
+                                    )
+                                }
                             }
                         }
                     }
                 }
             }
 
-            // ④ Artifacts
-            val artifacts = events
-                .filter { it.type == RunEventType.ARTIFACT.name }
-                .sortedByDescending { it.createdAt }
+            // ④ Artifacts (batch 1 — artifact library: open / share / expand)
             if (artifacts.isNotEmpty()) {
                 item {
-                    CardGroup(
-                        title = { Text(text = stringResource(R.string.mission_artifacts_title)) },
-                    ) {
-                        artifacts.forEach { artifact ->
-                            val path = artifact.title
-                            val fileName = path.substringAfterLast('/')
-                            item(
-                                onClick = {
-                                    clipboard.setText(AnnotatedString(path))
-                                    toaster.show(copiedMessage)
-                                },
-                                leadingContent = { Icon(HugeIcons.Clipboard, contentDescription = null) },
-                                headlineContent = {
-                                    Text(text = fileName, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                },
-                                supportingContent = {
-                                    Text(
-                                        text = listOfNotNull(artifact.detail, relativeTime(artifact.createdAt))
-                                            .joinToString(" · "),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
+                    Text(
+                        text = stringResource(R.string.mission_artifacts_title),
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                }
+                items(artifacts, key = { it.id }) { artifact ->
+                    ArtifactRow(
+                        artifact = artifact,
+                        expanded = expandedArtifactId == artifact.id,
+                        onToggleExpand = {
+                            expandedArtifactId =
+                                if (expandedArtifactId == artifact.id) null else artifact.id
+                        },
+                        onOpen = { path ->
+                            scope.launch {
+                                val text = vm.loadArtifactText(path)
+                                if (text != null) {
+                                    previewArtifact = path to text
+                                } else {
+                                    toaster.show(context.getString(R.string.mission_artifact_open_failed))
+                                }
+                            }
+                        },
+                        onShare = { path ->
+                            scope.launch {
+                                val file = vm.exportArtifactToCache(path, context.cacheDir)
+                                if (file == null) {
+                                    toaster.show(context.getString(R.string.mission_artifact_open_failed))
+                                    return@launch
+                                }
+                                runCatching {
+                                    val uri = FileProvider.getUriForFile(
+                                        context,
+                                        "${context.packageName}.fileprovider",
+                                        file,
                                     )
-                                },
-                                trailingContent = { Icon(HugeIcons.Copy01, contentDescription = null) },
-                            )
-                        }
-                    }
+                                    val intent = Intent(Intent.ACTION_SEND).apply {
+                                        type = "application/octet-stream"
+                                        putExtra(Intent.EXTRA_STREAM, uri)
+                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    }
+                                    context.startActivity(Intent.createChooser(intent, null))
+                                }
+                            }
+                        },
+                    )
                 }
             }
 
@@ -409,6 +454,34 @@ fun MissionDetailPage(missionId: String) {
             dismissButton = {
                 TextButton(onClick = { showNoteDialog = false }) {
                     Text(text = stringResource(R.string.mission_cancel))
+                }
+            },
+        )
+    }
+
+    previewArtifact?.let { (path, text) ->
+        AlertDialog(
+            onDismissRequest = { previewArtifact = null },
+            title = {
+                Text(
+                    text = path.substringAfterLast('/'),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            },
+            text = {
+                Text(
+                    text = text.take(20_000),
+                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 400.dp)
+                        .verticalScroll(rememberScrollState()),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { previewArtifact = null }) {
+                    Text(text = stringResource(R.string.mission_artifact_close))
                 }
             },
         )
