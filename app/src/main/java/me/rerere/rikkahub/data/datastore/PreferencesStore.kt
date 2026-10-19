@@ -555,6 +555,7 @@ class SettingsStore(
                         preferences[SUB_AGENT_DISPATCH_PROFILE] ?: ""
                     )
                 }.getOrDefault(SubAgentDispatchProfile.NEVER),
+                dynamicColor = preferences[DYNAMIC_COLOR] != false,
                 themeId = preferences[THEME_ID] ?: PresetThemes[0].id,
                 customThemes = preferences[CUSTOM_THEMES]?.let { raw ->
                     runCatching { JsonInstant.decodeFromString<List<CustomTheme>>(raw) }.getOrElse {
@@ -1391,6 +1392,24 @@ fun List<ProviderSetting>.findModelById(uuid: Uuid): Model? {
 
 fun Settings.getCurrentChatModel(): Model? {
     return findModelById(this.getCurrentAssistant().chatModelId ?: this.chatModelId)
+}
+
+/**
+ * The chat model a conversation will actually talk to: the conversation's own override, then the
+ * model of the assistant the conversation belongs to, then the global default.
+ *
+ * Unlike [getCurrentChatModel], an id that no longer resolves (model deleted, or re-added under a
+ * fresh UUID) is skipped instead of ending the chain. A dangling assistant default used to make
+ * the send guard report "select a model first" while the picker highlighted the conversation's
+ * perfectly valid override, and picking another model could not clear it, because the picker
+ * writes the conversation override, not the assistant default.
+ */
+fun Settings.resolveChatModel(conversationChatModelId: Uuid?, assistantId: Uuid?): Model? {
+    val assistant = assistantId
+        ?.let { AssistantResolver.forConversation(this, it).assistant }
+        ?: getCurrentAssistant()
+    return listOfNotNull(conversationChatModelId, assistant.chatModelId, chatModelId)
+        .firstNotNullOfOrNull { providers.findModelById(it) }
 }
 
 private const val FALLBACK_CONTEXT_COMPACTION_TARGET_TOKENS = 2_000
