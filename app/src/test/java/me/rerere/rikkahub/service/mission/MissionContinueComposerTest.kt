@@ -131,4 +131,25 @@ class MissionContinueComposerTest {
         )
         assertFalse(text.contains("目标分解"))
     }
+
+    @Test
+    fun `the rework prompt carries the change request and keeps the signal contract`() {
+        val text = MissionContinueComposer.composeRework("图表要按周分组")
+
+        assertTrue(text.startsWith("[验收打回]"))
+        assertTrue(text.contains("图表要按周分组"))
+        assertTrue(text.contains("mission_report(done)"))
+        assertFalse(
+            "a filled change request must not also print the empty fallback",
+            text.contains("未填写"),
+        )
+    }
+
+    @Test
+    fun `the rework prompt falls back to a self-check when feedback is blank`() {
+        val text = MissionContinueComposer.composeRework("   ")
+
+        assertTrue(text.contains("未填写"))
+        assertTrue(text.contains("验收标准"))
+    }
 }

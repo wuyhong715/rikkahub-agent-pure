@@ -3,12 +3,14 @@ package me.rerere.rikkahub.service.mission
 /**
  * B1 (批 A · Mission Runtime) — prompt assembly for the mission runtime, as pure functions.
  *
- * Two products, both Chinese, both plain strings:
+ * Three products, all Chinese, all plain strings:
  * - [MissionContinueComposer.composeDirective]: the standing mission rules
  *   (MISSION_DIRECTIVE) that the launcher injects when a mission starts / a mission
  *   conversation is created.
  * - [MissionContinueComposer.compose]: the handoff prompt the supervisor injects when it
  *   auto-continues a mission whose previous round stopped before completion.
+ * - [MissionContinueComposer.composeRework]: the prompt for a user-rejected delivery
+ *   (批 D review gate), carrying the change request back to the model.
  *
  * No Android / Room dependencies — everything here is string building.
  */
@@ -105,5 +107,28 @@ object MissionContinueComposer {
         appendLine("这是第 ${ctx.round}/${ctx.maxRounds} 轮。")
         appendLine()
         appendLine("请继续推进，不要重做已完成的部分；任务完成时用 mission_report(done) 声明完成，确实被卡住时用 mission_report(blocked) 说明原因。")
+    }.trimEnd()
+
+    /**
+     * 批 D — prompt for a rework round after the user rejects a delivery in REVIEW.
+     *
+     * Blank [feedback] is allowed: the round then self-checks against the mission goals and
+     * acceptance criteria instead of following specific notes. The closing line keeps the
+     * signal contract (`mission_report(done)`) so the reworked delivery goes through the same
+     * confirmation gate again.
+     */
+    fun composeRework(feedback: String): String = buildString {
+        appendLine("[验收打回] 用户检查了上一轮的交付，认为还需要修改。")
+        val notes = feedback.trim()
+        if (notes.isNotEmpty()) {
+            appendLine()
+            appendLine("修改意见：")
+            appendLine(notes)
+        } else {
+            appendLine()
+            appendLine("修改意见：未填写，请对照任务目标与验收标准自查并补齐不足。")
+        }
+        appendLine()
+        appendLine("请据此重新执行并交付，不要重做已经符合要求的部分；完成后再次调用 mission_report(done)。")
     }.trimEnd()
 }

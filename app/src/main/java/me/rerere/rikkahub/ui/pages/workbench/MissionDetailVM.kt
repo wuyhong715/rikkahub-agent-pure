@@ -188,16 +188,7 @@ class MissionDetailVM(
             )
             missionRepository.transition(missionId, MissionStatus.ACTIVE, note = "review rework")
             missionRepository.resetResumeCount(missionId)
-            val prompt = buildString {
-                appendLine("[验收打回] 用户检查了上一轮的交付，认为还需要修改。")
-                if (trimmed.isNotBlank()) {
-                    appendLine("修改意见：")
-                    appendLine(trimmed)
-                } else {
-                    appendLine("修改意见：未填写，请对照任务目标与验收标准自查并补齐不足。")
-                }
-                append("请据此重新执行并交付；完成后再次调用 mission_report(done)。")
-            }
+            val prompt = MissionContinueComposer.composeRework(trimmed)
             val outcome = missionLauncher.launch(
                 missionId = missionId,
                 source = LaunchSource.Continue(round = 1),
