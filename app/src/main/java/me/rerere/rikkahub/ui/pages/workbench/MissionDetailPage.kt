@@ -34,6 +34,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -113,6 +114,8 @@ fun MissionDetailPage(missionId: String) {
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showNoteDialog by remember { mutableStateOf(false) }
     var showLimitsDialog by remember { mutableStateOf(false) }
+    var showWorkflowDialog by remember { mutableStateOf(false) }
+    var showReworkDialog by remember { mutableStateOf(false) }
 
     // Batch A — surface launch failures (validation refusals from MissionLauncher) as toasts.
     val launchError by vm.launchError.collectAsStateWithLifecycle()
@@ -157,6 +160,14 @@ fun MissionDetailPage(missionId: String) {
                                 onClick = {
                                     menuExpanded = false
                                     showDeleteDialog = true
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(text = stringResource(R.string.mission_menu_workflow)) },
+                                leadingIcon = { Icon(HugeIcons.BookOpen01, contentDescription = null) },
+                                onClick = {
+                                    menuExpanded = false
+                                    showWorkflowDialog = true
                                 },
                             )
                             DropdownMenuItem(
@@ -425,7 +436,7 @@ fun MissionDetailPage(missionId: String) {
                         ReviewPanel(
                             settlement = s,
                             onApprove = { vm.transition(MissionStatus.DONE) },
-                            onReject = { vm.transition(MissionStatus.ACTIVE) },
+                            onReject = { showReworkDialog = true },
                             onArchive = { vm.transition(MissionStatus.ARCHIVED) },
                         )
                     } else {
@@ -548,6 +559,26 @@ fun MissionDetailPage(missionId: String) {
         }
     }
 
+    if (showWorkflowDialog) {
+        mission?.let { m ->
+            WorkflowDialog(
+                mission = m,
+                vm = vm,
+                onDismiss = { showWorkflowDialog = false },
+            )
+        }
+    }
+
+    if (showReworkDialog) {
+        ReworkDialog(
+            onDismiss = { showReworkDialog = false },
+            onSubmit = { feedback ->
+                showReworkDialog = false
+                vm.requestChanges(feedback)
+            },
+        )
+    }
+
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
@@ -637,6 +668,192 @@ fun MissionDetailPage(missionId: String) {
 }
 
 // ---------------------------------------------------------------------------
+// 批 D — workflow document picker / creator + review rework dialog
+// ---------------------------------------------------------------------------
+
+/**
+ * Pick the playbook this mission follows, or create a new one from the built-in template.
+ *
+ * The list is read from the mission workspace's `workflows/` directory on open — no cache,
+ * because the user may have edited files in the workspace page since the last visit. The
+ * "model chooses" row is the default (`workflowPath == null`). Creating a document writes
+ * the template, pins the mission to it and closes the dialog; a duplicate/invalid name
+ * keeps the dialog open with an error so the text is not lost.
+ */
+@Composable
+private fun WorkflowDialog(
+    mission: MissionEntity,
+    vm: MissionDetailVM,
+    onDismiss: () -> Unit,
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var docs by remember { mutableStateOf<List<String>>(emptyList()) }
+    var loaded by remember { mutableStateOf(false) }
+    var newName by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    val selected = mission.workflowPath?.takeIf { it.isNotBlank() }
+
+    LaunchedEffect(mission.id) {
+        docs = vm.listWorkflowDocs()
+        loaded = true
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(text = stringResource(R.string.mission_workflow_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = stringResource(R.string.mission_workflow_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 260.dp)
+                        .verticalScroll(rememberScrollState()),
+                ) {
+                    WorkflowChoiceRow(
+                        label = stringResource(R.string.mission_workflow_model_chooses),
+                        selected = selected == null,
+                        onClick = {
+                            vm.setWorkflowPath(null)
+                            onDismiss()
+                        },
+                    )
+                    docs.forEach { path ->
+                        WorkflowChoiceRow(
+                            label = path,
+                            selected = selected == path,
+                            onClick = {
+                                vm.setWorkflowPath(path)
+                                onDismiss()
+                            },
+                        )
+                    }
+                }
+                if (loaded && docs.isEmpty()) {
+                    Text(
+                        text = stringResource(R.string.mission_workflow_empty),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                OutlinedTextField(
+                    value = newName,
+                    onValueChange = {
+                        newName = it
+                        error = null
+                    },
+                    label = { Text(text = stringResource(R.string.mission_workflow_new_name)) },
+                    placeholder = { Text(text = "weekly-report") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                error?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+                TextButton(
+                    enabled = newName.isNotBlank() && !busy,
+                    onClick = {
+                        busy = true
+                        scope.launch {
+                            val path = vm.createWorkflowDoc(newName)
+                            busy = false
+                            if (path != null) {
+                                onDismiss()
+                            } else {
+                                error = context.getString(R.string.mission_workflow_new_failed)
+                            }
+                        }
+                    },
+                ) {
+                    Text(text = stringResource(R.string.mission_workflow_new_create))
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(text = stringResource(R.string.cancel))
+            }
+        },
+    )
+}
+
+/** One selectable workflow row: radio dot + relative path. */
+@Composable
+private fun WorkflowChoiceRow(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RadioButton(selected = selected, onClick = onClick)
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+/**
+ * 批 D — 验收打回: collect the change request, then return the mission to ACTIVE and start a
+ * rework round. An empty feedback is allowed (the round self-checks against the goals).
+ */
+@Composable
+private fun ReworkDialog(
+    onDismiss: () -> Unit,
+    onSubmit: (String) -> Unit,
+) {
+    var feedback by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(text = stringResource(R.string.mission_rework_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = stringResource(R.string.mission_rework_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedTextField(
+                    value = feedback,
+                    onValueChange = { feedback = it },
+                    label = { Text(text = stringResource(R.string.mission_rework_field)) },
+                    minLines = 3,
+                    maxLines = 6,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSubmit(feedback) }) {
+                Text(text = stringResource(R.string.mission_rework_confirm))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(text = stringResource(R.string.cancel))
+            }
+        },
+    )
+}
+
+// ---------------------------------------------------------------------------
 // 批 B.5 — runtime limits editor
 // ---------------------------------------------------------------------------
 
@@ -657,6 +874,7 @@ private fun LimitsDialog(
     var resume by remember(limits) { mutableStateOf(limits.maxResumeRounds.toString()) }
     var stall by remember(limits) { mutableStateOf(limits.stallRounds.toString()) }
     var tokens by remember(limits) { mutableStateOf(limits.tokenBudget.toString()) }
+    var requireConfirm by remember(limits) { mutableStateOf(limits.requireConfirmation) }
 
     val resumeValue = resume.toIntOrNull()?.takeIf { it >= 0 }
     val stallValue = stall.toIntOrNull()?.takeIf { it >= 0 }
@@ -697,6 +915,29 @@ private fun LimitsDialog(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth(),
                 )
+                // 批 D — completion gate: a model-declared done parks in REVIEW instead of
+                // closing the mission, so the delivery is confirmed by the user.
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(R.string.mission_limits_confirm),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Text(
+                            text = stringResource(R.string.mission_limits_confirm_desc),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = requireConfirm,
+                        onCheckedChange = { requireConfirm = it },
+                    )
+                }
             }
         },
         confirmButton = {
@@ -708,6 +949,7 @@ private fun LimitsDialog(
                                 maxResumeRounds = resumeValue!!,
                                 stallRounds = stallValue!!,
                                 tokenBudget = tokensValue!!,
+                                requireConfirmation = requireConfirm,
                             )
                         )
                     }

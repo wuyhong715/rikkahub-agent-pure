@@ -76,9 +76,16 @@ data class MissionSettlement(
     val acceptanceProgress: Float
         get() = if (acceptanceTotal == 0) 0f else acceptanceChecked.toFloat() / acceptanceTotal
 
-    /** True when every acceptance criterion is checked — the gate for REVIEW → DONE. */
+    /**
+     * True when every acceptance criterion is checked — the gate for REVIEW → DONE.
+     *
+     * A mission without a criterion list is trivially satisfied: the review exists to
+     * confirm a delivery, not to force goals to exist. (Before 批 D this returned false for
+     * `acceptanceTotal == 0`, which dead-ended such a mission in REVIEW because the approve
+     * button could never be enabled.)
+     */
     val canComplete: Boolean
-        get() = acceptanceTotal > 0 && acceptanceChecked >= acceptanceTotal
+        get() = acceptanceTotal == 0 || acceptanceChecked >= acceptanceTotal
 }
 
 // ---------------------------------------------------------------------------

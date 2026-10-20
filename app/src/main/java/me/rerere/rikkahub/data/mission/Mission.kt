@@ -189,12 +189,18 @@ val MissionEntity.acceptanceChecked: List<Int>
  *   the loop even before [maxResumeRounds] is reached.
  * - [tokenBudget]: cumulative token ceiling for the whole mission (checked when the usage
  *   aggregation lands; kept here so the wire format does not change later).
+ * - [requireConfirmation]: 批 D — when true, a model-declared `done` parks the mission in
+ *   [MissionStatus.REVIEW] instead of closing it, so the user confirms the delivery first.
+ *   Recurring (trigger-driven) missions ignore it: a done signal only ends the occurrence.
+ *   Default false keeps the batch-A/B behaviour for existing rows (JSON decode fills the
+ *   default, so no schema migration is involved).
  */
 @Serializable
 data class MissionLimits(
     val maxResumeRounds: Int = 5,
     val stallRounds: Int = 2,
     val tokenBudget: Long = 500_000L,
+    val requireConfirmation: Boolean = false,
 )
 
 /** Decode [MissionEntity.limitsJson]; null / blank / malformed → balanced defaults. */

@@ -114,13 +114,16 @@ class WorkbenchVM(
             )
             missionRepository.updateWorkspaceAndAssistant(mission.id, draft.workspaceId, draft.assistantId)
             draft.approvalMode?.let { missionRepository.updateApprovalMode(mission.id, it) }
-            if (draft.maxResumeRounds != null || draft.stallRounds != null || draft.tokenBudget != null) {
+            if (draft.maxResumeRounds != null || draft.stallRounds != null || draft.tokenBudget != null ||
+                draft.requireConfirmation
+            ) {
                 missionRepository.updateLimits(
                     mission.id,
                     MissionLimits(
                         maxResumeRounds = draft.maxResumeRounds ?: 5,
                         stallRounds = draft.stallRounds ?: 2,
                         tokenBudget = draft.tokenBudget ?: 500_000L,
+                        requireConfirmation = draft.requireConfirmation,
                     )
                 )
             }

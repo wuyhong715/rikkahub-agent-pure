@@ -366,6 +366,27 @@ class MissionSupervisor(
             return
         }
 
+        // 批 D — completion gate: when the mission opts in (`requireConfirmation`), a done
+        // signal parks it in REVIEW and waits for the user to accept the delivery. The
+        // supervisor must not touch it again; approving (REVIEW -> DONE) or sending it back
+        // (REVIEW -> ACTIVE) is the user's call from the detail page.
+        if (mission.limits.requireConfirmation) {
+            missionRepository.transition(
+                mission.id,
+                MissionStatus.REVIEW,
+                note = "mission_report(done) · 待用户确认",
+            )
+            missionRepository.updateExecutionState(mission.id, MissionExecutionState.IDLE)
+            missionRepository.logEvent(
+                missionId = mission.id,
+                type = RunEventType.NOTE,
+                title = "awaiting_review",
+                detail = summary,
+            )
+            notify("任务待确认：${mission.title}", summary)
+            return
+        }
+
         missionRepository.transition(mission.id, MissionStatus.DONE, note = "mission_report(done)")
         missionRepository.updateExecutionState(mission.id, MissionExecutionState.IDLE)
         notify("任务完成：${mission.title}", summary)

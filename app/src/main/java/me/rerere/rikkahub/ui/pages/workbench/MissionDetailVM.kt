@@ -25,6 +25,9 @@ import me.rerere.rikkahub.data.runevent.RunEventType
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.service.mission.LaunchSource
 import me.rerere.rikkahub.service.mission.MissionLauncher
+import me.rerere.rikkahub.service.mission.MissionWorkflowDocs
+import me.rerere.rikkahub.service.mission.WORKFLOW_DIR
+import me.rerere.workspace.WorkspaceStorageArea
 import java.io.ByteArrayOutputStream
 import java.io.File
 import kotlin.uuid.Uuid
@@ -95,6 +98,112 @@ class MissionDetailVM(
     fun setTriggerEnabled(id: String, enabled: Boolean) {
         viewModelScope.launch {
             missionRepository.setTriggerEnabled(id, enabled)
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // 批 D — workflow documents (pick / create / follow-up on review)
+    // ------------------------------------------------------------------
+
+    /**
+     * Lists the workspace's `workflows/ 下的 .md` as relative paths (`workflows/x.md`),
+     * sorted. Empty when the mission has no resolvable workspace or the directory is
+     * missing — the dialog then shows only the "model chooses" option.
+     */
+    suspend fun listWorkflowDocs(): List<String> = runCatching {
+        val workspaceId = resolveWorkspaceId() ?: return@runCatching emptyList()
+        workspaceRepository.listFiles(
+            id = workspaceId,
+            area = WorkspaceStorageArea.FILES,
+            path = WORKFLOW_DIR,
+        )
+            .filter { !it.isDirectory && it.name.endsWith(".md", ignoreCase = true) }
+            .map { MissionWorkflowDocs.pathOf(it.name) }
+            .filter { MissionWorkflowDocs.isWorkflowDoc(it) }
+            .sorted()
+    }.getOrDefault(emptyList())
+
+    /** Pin the mission to [path] (`workflows/x.md`) or back to model-chooses (`null`). */
+    fun setWorkflowPath(path: String?) {
+        viewModelScope.launch {
+            missionRepository.updateWorkflowPath(missionId, path)
+            missionRepository.logEvent(
+                missionId = missionId,
+                type = RunEventType.NOTE,
+                title = "workflow_set",
+                detail = path ?: "model chooses",
+            )
+        }
+    }
+
+    /**
+     * Creates `workflows/<sanitized-name>.md` from the built-in template and pins the
+     * mission to it. Returns the new relative path, or null when the input is unusable,
+     * the mission has no workspace, or a document with that name already exists (the
+     * dialog keeps the user's text so they can pick another name).
+     */
+    suspend fun createWorkflowDoc(rawName: String): String? = runCatching {
+        val workspaceId = resolveWorkspaceId() ?: return@runCatching null
+        val path = MissionWorkflowDocs.sanitizeDocName(rawName) ?: return@runCatching null
+        if (path in listWorkflowDocs()) return@runCatching null
+        val title = rawName.trim().removeSuffix(".md").ifBlank { "工作流程" }
+        workspaceRepository.writeText(
+            id = workspaceId,
+            path = path,
+            text = MissionWorkflowDocs.template(
+                title = title,
+                goal = mission.value?.description.orEmpty(),
+            ),
+            overwrite = false,
+        )
+        missionRepository.updateWorkflowPath(missionId, path)
+        missionRepository.logEvent(
+            missionId = missionId,
+            type = RunEventType.NOTE,
+            title = "workflow_created",
+            detail = path,
+        )
+        path
+    }.getOrNull()
+
+    /**
+     * 批 D — a review rejection: record the user's change request, return the mission to
+     * ACTIVE and start a fresh round in the same conversation carrying the feedback.
+     *
+     * The resume counter is reset first: the rejection is a deliberate user action, so the
+     * auto-continue breaker should give the rework its full budget rather than inheriting
+     * an exhausted one. If the launch fails (no conversation yet, no assistant), the
+     * mission stays ACTIVE so the user can start it manually; the toast carries the reason.
+     */
+    fun requestChanges(feedback: String) {
+        viewModelScope.launch {
+            val m = runCatching { missionRepository.getById(missionId) }.getOrNull() ?: return@launch
+            val trimmed = feedback.trim()
+            missionRepository.logEvent(
+                missionId = missionId,
+                type = RunEventType.NOTE,
+                title = "review_rework",
+                detail = trimmed.ifBlank { null },
+                runId = m.lastRunId,
+            )
+            missionRepository.transition(missionId, MissionStatus.ACTIVE, note = "review rework")
+            missionRepository.resetResumeCount(missionId)
+            val prompt = buildString {
+                appendLine("[验收打回] 用户检查了上一轮的交付，认为还需要修改。")
+                if (trimmed.isNotBlank()) {
+                    appendLine("修改意见：")
+                    appendLine(trimmed)
+                } else {
+                    appendLine("修改意见：未填写，请对照任务目标与验收标准自查并补齐不足。")
+                }
+                append("请据此重新执行并交付；完成后再次调用 mission_report(done)。")
+            }
+            val outcome = missionLauncher.launch(
+                missionId = missionId,
+                source = LaunchSource.Continue(round = 1),
+                continuePrompt = prompt,
+            )
+            if (!outcome.ok) launchError.value = outcome.error
         }
     }
 

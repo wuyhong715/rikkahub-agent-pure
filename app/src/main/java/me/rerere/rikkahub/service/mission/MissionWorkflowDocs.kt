@@ -31,6 +31,9 @@ const val WORKFLOW_MAX_CHARS: Int = 6_000
 /** Upper bound on how many documents the chooser block lists. */
 const val WORKFLOW_MAX_LISTED: Int = 20
 
+/** Upper bound on the file-name stem produced by [MissionWorkflowDocs.sanitizeDocName]. */
+const val WORKFLOW_NAME_MAX_CHARS: Int = 60
+
 /**
  * Where the launcher gets workflow documents from. The DI wires this to
  * [me.rerere.rikkahub.data.repository.WorkspaceRepository] (FILES area); tests use a fake.
@@ -59,6 +62,66 @@ object MissionWorkflowDocs {
 
     /** Full relative path for a bare file name in the workflow directory. */
     fun pathOf(name: String): String = "$WORKFLOW_DIR/${name.trim()}"
+
+    /**
+     * 批 D — turn free-form user input into a safe workflow document path.
+     *
+     * Accepts "周报", "周报.md", " work/week report.md" … and returns `workflows/<name>.md`.
+     * Rules: strip a trailing `.md` (any case), drop path separators and characters that
+     * are illegal in workspace paths / awkward in prompts, collapse whitespace to `-`,
+     * cap the stem at [WORKFLOW_NAME_MAX_CHARS]. Returns null when nothing usable remains
+     * (`""`, `"."`, `".."`), so callers can keep the dialog open instead of writing a
+     * garbage file.
+     */
+    fun sanitizeDocName(raw: String): String? {
+        var name = raw.trim().trim('"', '\'', '\u201c', '\u201d')
+        if (name.endsWith(".md", ignoreCase = true)) name = name.dropLast(3)
+        // Path separators and the Windows-reserved set; also strip control chars.
+        name = name
+            .replace('\\', ' ')
+            .replace('/', ' ')
+            .replace(Regex("""[:*?"<>|]"""), " ")
+            .replace(Regex("""\s+"""), "-")
+            .trim('-', '.')
+            .take(WORKFLOW_NAME_MAX_CHARS)
+        if (name.isBlank() || name == "." || name == "..") return null
+        return pathOf("$name.md")
+    }
+
+    /**
+     * 批 D — starter document written by the detail page's "new workflow" action.
+     *
+     * Deliberately short and structural: headings the model can follow, no invented domain
+     * content. The user (or the mission itself) fills the blanks; keeping the skeleton tiny
+     * means the first round does not spend 6k characters of prompt on boilerplate.
+     */
+    fun template(title: String, goal: String = ""): String = buildString {
+        appendLine("# ${title.trim().ifBlank { "工作流程" }}")
+        appendLine()
+        appendLine("> 本文件是任务的工作流程（playbook）。每轮启动时会被注入提示词；直接编辑本文件即可改变下一轮的执行方式。")
+        appendLine()
+        appendLine("## 目标")
+        appendLine(goal.trim().ifBlank { "- （写清这一流程要产出什么）" })
+        appendLine()
+        appendLine("## 输入")
+        appendLine("- 需要读取的文件 / 数据：")
+        appendLine("- 前置条件：")
+        appendLine()
+        appendLine("## 步骤")
+        appendLine("1. ")
+        appendLine("2. ")
+        appendLine("3. ")
+        appendLine()
+        appendLine("## 产出")
+        appendLine("- 写到工作区的路径：")
+        appendLine("- 交付要求（格式 / 篇幅）：")
+        appendLine()
+        appendLine("## 验收")
+        appendLine("- [ ] ")
+        appendLine()
+        appendLine("## 注意事项")
+        appendLine("- 流程与任务目标冲突时，以任务目标为准，并在时间线里说明。")
+    }
 
     /** Truncates a document body to [WORKFLOW_MAX_CHARS], marking the cut. */
     fun trimContent(content: String): String =

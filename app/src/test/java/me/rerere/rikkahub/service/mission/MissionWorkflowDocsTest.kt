@@ -84,4 +84,34 @@ class MissionWorkflowDocsTest {
         assertTrue(hint.contains("workflows/周报.md"))
         assertFalse("no newline — it is a single reminder line", hint.contains("\n"))
     }
+
+    // ---------------------------------------------------------------- 批 D — authoring helpers
+
+    @Test
+    fun `doc names are sanitized into safe workflow paths`() {
+        assertEquals("workflows/周报.md", MissionWorkflowDocs.sanitizeDocName("周报"))
+        assertEquals("workflows/周报.md", MissionWorkflowDocs.sanitizeDocName("  周报.md  "))
+        assertEquals("workflows/weekly-report.md", MissionWorkflowDocs.sanitizeDocName("weekly report"))
+        assertEquals("workflows/a-b.md", MissionWorkflowDocs.sanitizeDocName("a/b.md"))
+        assertEquals(
+            "path traversal cannot escape the workflow directory",
+            "workflows/etc-passwd.md",
+            MissionWorkflowDocs.sanitizeDocName("../etc/passwd"),
+        )
+        assertEquals("empty input is rejected", null, MissionWorkflowDocs.sanitizeDocName("   "))
+        assertEquals("a bare .md is rejected", null, MissionWorkflowDocs.sanitizeDocName(".md"))
+        assertEquals("dots are rejected", null, MissionWorkflowDocs.sanitizeDocName(".."))
+    }
+
+    @Test
+    fun `the template names the document and keeps the expected sections`() {
+        val doc = MissionWorkflowDocs.template("周报流程", "每周五汇总进展")
+
+        assertTrue(doc.startsWith("# 周报流程"))
+        assertTrue(doc.contains("每周五汇总进展"))
+        listOf("## 目标", "## 输入", "## 步骤", "## 产出", "## 验收", "## 注意事项").forEach {
+            assertTrue("missing section: $it", doc.contains(it))
+        }
+        assertTrue("the conflict rule matches composePinned", doc.contains("以任务目标为准"))
+    }
 }

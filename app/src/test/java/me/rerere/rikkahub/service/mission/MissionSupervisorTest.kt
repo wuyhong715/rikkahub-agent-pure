@@ -670,6 +670,75 @@ class MissionSupervisorTest {
         assertEquals("本轮交付：电源事件周报已更新", notice.second)
     }
 
+    // ---------------------------------------------------------------- completion gate (批 D)
+
+    @Test
+    fun `done with confirmation required parks the mission in review`() = runBlocking {
+        val fx = Fixture()
+        fx.seed(
+            mission(
+                id = "m15",
+                conversationId = CONV1,
+                acceptanceJson = JsonInstant.encodeToString(listOf("完成大纲")),
+                limitsJson = """{"maxResumeRounds":5,"stallRounds":2,"tokenBudget":500000,"requireConfirmation":true}""",
+            )
+        )
+        fx.runStatuses["r15"] = "succeeded"
+        fx.runEvents.emit(
+            type = RunEventType.NOTE,
+            title = "mission_report: done",
+            payloadJson = """{"mission_signal":"done","note":"交付摘要：周报已写入工作区"}""",
+            missionId = "m15",
+            conversationId = CONV1,
+            runId = "r15",
+        )
+        fx.supervisor.handleRunFinished(fx.finishedEvent(runId = "r15", missionId = "m15"))
+
+        val row = fx.missionDao.getById("m15")!!
+        assertEquals("a done signal must not close a gated mission", MissionStatus.REVIEW.name, row.status)
+        assertEquals(MissionExecutionState.IDLE.name, row.executionState)
+        assertTrue("the gate must never submit another round", fx.runService.submitted.isEmpty())
+        assertEquals("the self-assessment still runs", "[0]", row.acceptanceCheckedJson)
+
+        val awaiting = fx.runEventDao.snapshot().single {
+            it.missionId == "m15" && it.title == "awaiting_review"
+        }
+        assertEquals(RunEventType.NOTE.name, awaiting.type)
+        assertEquals("交付摘要：周报已写入工作区", awaiting.detail)
+
+        val notice = fx.notifications.single()
+        assertEquals("任务待确认：写周报", notice.first)
+        assertEquals("交付摘要：周报已写入工作区", notice.second)
+    }
+
+    @Test
+    fun `a recurring mission ignores the confirmation gate`() = runBlocking {
+        val fx = Fixture()
+        val recurring = mission(
+            id = "m16",
+            conversationId = CONV1,
+            limitsJson = """{"maxResumeRounds":5,"stallRounds":2,"tokenBudget":500000,"requireConfirmation":true}""",
+        ).copy(triggerJson = """{"type":"power_connected"}""")
+        fx.seed(recurring)
+        fx.runStatuses["r16"] = "succeeded"
+        fx.runEvents.emit(
+            type = RunEventType.NOTE,
+            title = "mission_report: done",
+            payloadJson = """{"mission_signal":"done","note":"本轮完成"}""",
+            missionId = "m16",
+            conversationId = CONV1,
+            runId = "r16",
+        )
+        fx.supervisor.handleRunFinished(fx.finishedEvent(runId = "r16", missionId = "m16"))
+
+        assertEquals(
+            "an occurrence end stays ACTIVE for the next fire",
+            MissionStatus.ACTIVE.name,
+            fx.missionDao.getById("m16")!!.status,
+        )
+        assertTrue(fx.runEventDao.snapshot().any { it.missionId == "m16" && it.title == "occurrence_done" })
+    }
+
     // ---------------------------------------------------------------- mission_report tool
 
     @Test

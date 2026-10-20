@@ -19,6 +19,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -91,6 +92,8 @@ data class MissionDraft(
     val maxResumeRounds: Int?,     // 高级；null = 均衡默认
     val stallRounds: Int?,
     val tokenBudget: Long?,
+    // 批 D — 完成后需用户确认（done → REVIEW 而非直接 DONE）
+    val requireConfirmation: Boolean = false,
     // 批 B — 开始方式；trigger == null = 立即开始
     val startMode: MissionStartMode = MissionStartMode.IMMEDIATE,
     val trigger: TriggerSpec? = null,
@@ -121,6 +124,8 @@ fun CreateMissionSheet(
     var maxResumeRounds by remember { mutableStateOf("") }
     var stallRounds by remember { mutableStateOf("") }
     var tokenBudget by remember { mutableStateOf("") }
+    // 批 D — completion gate
+    var requireConfirmation by remember { mutableStateOf(false) }
     var showAssistantSheet by remember { mutableStateOf(false) }
     var showWorkspaceSheet by remember { mutableStateOf(false) }
     // 批 B — 开始方式
@@ -475,6 +480,27 @@ fun CreateMissionSheet(
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(R.string.mission_limits_confirm),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Text(
+                            text = stringResource(R.string.mission_limits_confirm_desc),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = requireConfirmation,
+                        onCheckedChange = { requireConfirmation = it },
+                    )
+                }
             }
 
             Button(
@@ -501,6 +527,7 @@ fun CreateMissionSheet(
                             maxResumeRounds = maxResumeRounds.toIntOrNull(),
                             stallRounds = stallRounds.toIntOrNull(),
                             tokenBudget = tokenBudget.toLongOrNull(),
+                            requireConfirmation = requireConfirmation,
                             startMode = startMode,
                             trigger = trigger,
                             cooldownSeconds = cooldownText.toIntOrNull() ?: 60,
