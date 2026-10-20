@@ -121,8 +121,25 @@ class MemoryIndexCoordinator(
 
         _status.value = _status.value.copy(running = true, lastError = null)
         return try {
-            val docs = readDocuments(workspaceId, dir)
-            val report = source.sync(dir, docs, System.currentTimeMillis())
+            val listing = readDocuments(workspaceId, dir)
+            if (listing == null) {
+                // The directory could not be listed at all. Calling sync with an empty list here
+                // would read as "every document was deleted" and wipe a perfectly good index, so
+                // this round does nothing and says so.
+                _status.value = Status(
+                    running = false,
+                    lastError = "cannot list knowledge base directory '$dir'",
+                    lastRunAtMs = System.currentTimeMillis(),
+                )
+                Log.d(TAG, "cannot list '$dir'; leaving the index untouched")
+                return null
+            }
+            val report = source.sync(
+                dir = dir,
+                docs = listing.docs,
+                nowMs = System.currentTimeMillis(),
+                forgetMissing = listing.complete,
+            )
             _status.value = Status(
                 running = false,
                 lastReport = report,
@@ -142,34 +159,49 @@ class MemoryIndexCoordinator(
         }
     }
 
+    /** A listing plus whether every file in it could actually be read. */
+    private data class Listing(
+        val docs: List<MemoryVectorSource.Doc>,
+        val complete: Boolean,
+    )
+
     /**
      * Reads every Markdown document in [dir].
      *
-     * A file that cannot be read is dropped from the listing, and that is the one place this
-     * design can lose index rows: the sync treats a missing document as deleted. It is the
-     * lesser evil against the alternative - refusing to sync at all because one file is
-     * unreadable - but it is why the read failure is logged loudly rather than swallowed.
+     * Returns null when the directory itself cannot be listed: the caller must not feed an empty
+     * list to [MemoryVectorSource.sync], because that is indistinguishable from "all documents
+     * were deleted". A single unreadable file is dropped from the listing but marks it
+     * incomplete, so the sync keeps that file's previous rows instead of forgetting them.
      */
-    private suspend fun readDocuments(workspaceId: String, dir: String): List<MemoryVectorSource.Doc> {
+    private suspend fun readDocuments(workspaceId: String, dir: String): Listing? {
+        // listFiles() answers "not found" with an empty list, which is indistinguishable from a
+        // genuinely empty directory. Treat a missing workspace as an unlistable one so the sync
+        // below cannot wipe the index over a deleted or not-yet-restored workspace record.
+        if (workspaceRepository.getById(workspaceId) == null) {
+            Log.d(TAG, "workspace '$workspaceId' is missing; leaving the index untouched")
+            return null
+        }
         val entries = try {
             workspaceRepository.listFiles(workspaceId, WorkspaceStorageArea.FILES, dir)
                 .filter { !it.isDirectory && ColdMemoryRules.isMarkdown(it.name) }
         } catch (e: Throwable) {
             // The directory may not exist yet; cold memory creates it on first write.
             Log.d(TAG, "cannot list '$dir'", e)
-            return emptyList()
+            return null
         }
 
         val docs = mutableListOf<MemoryVectorSource.Doc>()
+        var complete = true
         for (entry in entries) {
             val path = if (dir.isEmpty()) entry.name else "$dir/${entry.name}"
             try {
                 docs += MemoryVectorSource.Doc(entry.name, workspaceRepository.readText(workspaceId, path))
             } catch (e: Throwable) {
-                Log.d(TAG, "cannot read '$path', skipping it this round", e)
+                complete = false
+                Log.d(TAG, "cannot read '$path', keeping its old index rows this round", e)
             }
         }
-        return docs
+        return Listing(docs = docs, complete = complete)
     }
 
     /**

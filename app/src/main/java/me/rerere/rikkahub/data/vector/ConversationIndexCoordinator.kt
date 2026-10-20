@@ -4,6 +4,7 @@ import android.util.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -14,6 +15,7 @@ import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import java.time.Instant
 import java.time.ZoneId
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.uuid.Uuid
 
 private const val TAG = "ConversationIndex"
@@ -85,6 +87,13 @@ class ConversationIndexCoordinator(
 
     private val lastAttemptAtMs = mutableMapOf<String, Long>()
 
+    /**
+     * One whole-history sweep at a time. The search page, the settings page and a conversation
+     * open can all ask for one within the same minute; without this they would run concurrently,
+     * fight for the same CPU and each report "indexing" while making the others slower.
+     */
+    private val sweepInFlight = AtomicBoolean(false)
+
     /** Sweeps the whole history, unless one ran within [minIntervalMs]. */
     fun requestSync(minIntervalMs: Long = DEFAULT_MIN_INTERVAL_MS): Boolean {
         val key = "all"
@@ -98,6 +107,10 @@ class ConversationIndexCoordinator(
         // `scope` is AppScope, whose dispatcher is Dispatchers.Main (see RikkaHubApp.AppScope),
         // and this body lists directories, reads files and runs the embedding model. Pinned to
         // IO here so "runs in the background" in the KDoc above is what actually happens.
+        //
+        // One sweep walks the history once and then runs several budgeted rounds over that walk;
+        // see [runReport]. That keeps a large first sync moving without re-walking the whole
+        // history for every forty messages.
         scope.launch(Dispatchers.IO) { runCatching { syncNow() }.onFailure { Log.d(TAG, "sweep failed", it) } }
         return true
     }
@@ -141,87 +154,145 @@ class ConversationIndexCoordinator(
             return null
         }
 
-        _status.value = _status.value.copy(running = true, lastError = null)
-        return try {
-            val scoped = scopedToConversation != null
-            val ids = if (scoped) listOf(scopedToConversation!!) else conversationRepository.getAllConversationIds()
-            val candidates = collectCandidates(ids)
-            val round = ConversationSearchRules.planRound(
-                candidates = candidates,
-                indexed = source.indexedPaths(),
-            )
+        val scoped = scopedToConversation != null
+        // A whole-history sweep is exclusive; a scoped turn sync is short and is allowed to run
+        // alongside one. Two sweeps at once would only halve each other's speed.
+        if (!scoped && !sweepInFlight.compareAndSet(false, true)) {
+            Log.d(TAG, "history sweep already running; not starting another")
+            return null
+        }
 
-            // Read only what the round chose, and only once per conversation: the walk that picked
-            // the candidates deliberately never held their text.
-            var read = 0
-            var skipped = 0
-            val docs = mutableListOf<ConversationVectorSource.Doc>()
-            round.take.groupBy { it.conversationId }.forEach { (conversationId, group) ->
-                val conversation = loadConversation(conversationId) ?: return@forEach
-                val wanted = group.map { it.messageId }.toSet()
-                conversation.messageNodes.forEach { node ->
-                    node.messages.forEach { message ->
-                        val messageId = message.id.toString()
-                        if (messageId !in wanted) return@forEach
-                        val text = messageText(message)
-                        if (!ConversationSearchRules.isIndexable(text)) {
-                            skipped++
-                            return@forEach
-                        }
-                        docs += ConversationVectorSource.Doc(conversationId, messageId, text)
-                        read++
-                    }
+        try {
+            _status.value = _status.value.copy(running = true, lastError = null)
+            return try {
+                val ids = if (scoped) listOf(scopedToConversation!!) else conversationRepository.getAllConversationIds()
+                // Walk once. Every round below plans against this same walk, so a large first
+                // sync does not re-read every conversation in the history once per forty messages.
+                val walk = collectCandidates(ids)
+                var report: Report? = null
+                var rounds = 0
+                val maxRounds = if (scoped) 1 else MAX_ROUNDS_PER_SWEEP
+                while (rounds < maxRounds) {
+                    val roundReport = syncRound(walk, scopedToConversation)
+                    report = roundReport
+                    rounds++
+                    if (!roundReport.hasMore || roundReport.read == 0 || roundReport.indexedNow == 0) break
+                    if (rounds < maxRounds) delay(INTER_ROUND_DELAY_MS)
                 }
+                _status.value = Status(
+                    running = false,
+                    lastReport = report,
+                    lastRunAtMs = System.currentTimeMillis(),
+                )
+                report
+            } catch (e: CancellationException) {
+                // The sweep was cancelled (app going away, scope torn down). Leaving `running`
+                // true is what makes the next screen show "building index" forever.
+                _status.value = _status.value.copy(
+                    running = false,
+                    lastError = "cancelled",
+                    lastRunAtMs = System.currentTimeMillis(),
+                )
+                throw e
+            } catch (e: Throwable) {
+                _status.value = Status(
+                    running = false,
+                    lastError = e.message ?: e::class.java.simpleName,
+                    lastRunAtMs = System.currentTimeMillis(),
+                )
+                Log.d(TAG, "history index failed", e)
+                null
             }
-
-            val synced = source.sync(
-                docs = docs,
-                // Everything the walk saw - including the messages it did not read this round and
-                // the ones too short to index - stays. Only a message that vanished from the
-                // history is forgotten.
-                seen = candidates.map { it.docKey }.toSet() + round.take.map { it.docKey },
-                nowMs = System.currentTimeMillis(),
-                scope = scopedToConversation,
-            )
-
-            val report = Report(
-                candidates = candidates.size,
-                read = read,
-                skipped = skipped,
-                deferred = round.deferred,
-                tooBig = round.tooBig.size,
-                indexedNow = synced.indexed,
-                unchanged = synced.unchanged,
-                indexedTotal = source.indexedMessages(),
-                chunks = synced.chunks,
-                embeddedChunks = synced.embeddedChunks,
-                scopedToConversation = scoped,
-                reason = synced.reason,
-            )
-            _status.value = Status(
-                running = false,
-                lastReport = report,
-                lastRunAtMs = System.currentTimeMillis(),
-            )
-            Log.d(
-                TAG,
-                "history index: ${report.read} read, ${report.indexedNow} indexed, " +
-                    "${report.embeddedChunks} embedded, ${report.deferred} deferred, " +
-                    "${report.indexedTotal} in the index",
-            )
-            report
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Throwable) {
-            _status.value = Status(
-                running = false,
-                lastError = e.message ?: e::class.java.simpleName,
-                lastRunAtMs = System.currentTimeMillis(),
-            )
-            Log.d(TAG, "history index failed", e)
-            null
+        } finally {
+            if (!scoped) sweepInFlight.set(false)
         }
     }
+
+    /**
+     * One budgeted round over a walk that has already been collected.
+     *
+     * Updates [status] with the round's numbers while keeping `running` true; the caller clears
+     * it when the whole sweep is done. That way the settings row shows progress rather than
+     * flickering between "indexing" and "idle" between rounds.
+     */
+    private suspend fun syncRound(walk: Walk, scopedToConversation: String?): Report {
+        val round = ConversationSearchRules.planRound(
+            candidates = walk.candidates,
+            indexed = source.indexedPaths(),
+        )
+
+        // Read only what the round chose, and only once per conversation: the walk that picked
+        // the candidates deliberately never held their text.
+        var read = 0
+        var skipped = 0
+        val missed = walk.failedConversations.toMutableSet()
+        val docs = mutableListOf<ConversationVectorSource.Doc>()
+        round.take.groupBy { it.conversationId }.forEach { (conversationId, group) ->
+            val conversation = loadConversation(conversationId)
+            if (conversation == null) {
+                missed += conversationId
+                return@forEach
+            }
+            val wanted = group.map { it.messageId }.toSet()
+            conversation.messageNodes.forEach { node ->
+                node.messages.forEach { message ->
+                    val messageId = message.id.toString()
+                    if (messageId !in wanted) return@forEach
+                    val text = messageText(message)
+                    if (!ConversationSearchRules.isIndexable(text)) {
+                        skipped++
+                        return@forEach
+                    }
+                    docs += ConversationVectorSource.Doc(conversationId, messageId, text)
+                    read++
+                }
+            }
+        }
+
+        val synced = source.sync(
+            docs = docs,
+            // Everything the walk saw - including the messages it did not read this round and
+            // the ones too short to index - stays. Only a message that vanished from the history
+            // is forgotten.
+            seen = walk.candidates.map { it.docKey }.toSet() + round.take.map { it.docKey },
+            nowMs = System.currentTimeMillis(),
+            scope = scopedToConversation,
+            // A conversation that could not be read is not a conversation that was deleted.
+            // Forgetting on a read failure is how an index silently empties itself; the next
+            // sweep will try these conversations again.
+            forgetMissing = missed.isEmpty(),
+        )
+
+        val report = Report(
+            candidates = walk.candidates.size,
+            read = read,
+            skipped = skipped,
+            deferred = round.deferred,
+            tooBig = round.tooBig.size,
+            indexedNow = synced.indexed,
+            unchanged = synced.unchanged,
+            indexedTotal = source.indexedMessages(),
+            chunks = synced.chunks,
+            embeddedChunks = synced.embeddedChunks,
+            scopedToConversation = scopedToConversation != null,
+            reason = synced.reason,
+        )
+        _status.value = _status.value.copy(running = true, lastReport = report)
+        Log.d(
+            TAG,
+            "history index: ${report.read} read, ${report.indexedNow} indexed, " +
+                "${report.embeddedChunks} embedded, ${report.deferred} deferred, " +
+                "${report.indexedTotal} in the index" +
+                if (missed.isEmpty()) "" else ", ${missed.size} unreadable",
+        )
+        return report
+    }
+
+    private data class Walk(
+        val candidates: List<ConversationSearchRules.Candidate>,
+        /** Conversation ids that could not be read this round; never treated as deletions. */
+        val failedConversations: Set<String>,
+    )
 
     /**
      * Metadata for every indexable message of [conversationIds].
@@ -229,13 +300,21 @@ class ConversationIndexCoordinator(
      * Deliberately returns lengths rather than text: a history can hold hundreds of thousands of
      * messages, and a round needs their identity and their cost, not their prose. The chosen ones
      * are read afterwards.
+     *
+     * Conversations that fail to load are reported rather than skipped silently: the caller must
+     * not let a read failure look like a deletion.
      */
     private suspend fun collectCandidates(
         conversationIds: List<String>,
-    ): List<ConversationSearchRules.Candidate> {
+    ): Walk {
         val candidates = mutableListOf<ConversationSearchRules.Candidate>()
+        val failed = mutableSetOf<String>()
         for (id in conversationIds) {
-            val conversation = loadConversation(id) ?: continue
+            val conversation = loadConversation(id)
+            if (conversation == null) {
+                failed += id
+                continue
+            }
             conversation.messageNodes.forEach { node ->
                 node.messages.forEach { message ->
                     val text = messageText(message)
@@ -248,7 +327,7 @@ class ConversationIndexCoordinator(
                 }
             }
         }
-        return candidates
+        return Walk(candidates = candidates, failedConversations = failed)
     }
 
     private suspend fun loadConversation(conversationId: String): Conversation? = try {
@@ -331,5 +410,15 @@ class ConversationIndexCoordinator(
          * asks about it, without paying a model call per message in a burst.
          */
         const val DEFAULT_TURN_INTERVAL_MS = 30 * 1000L
+
+        /**
+         * How many budgeted rounds one sweep may run over the same walk. The first sweep over a
+         * large history is the only time this matters; a bound keeps a background catch-up from
+         * monopolising the CPU indefinitely.
+         */
+        private const val MAX_ROUNDS_PER_SWEEP = 6
+
+        /** A breath between rounds so the UI and the rest of the app get a slot. */
+        private const val INTER_ROUND_DELAY_MS = 1_500L
     }
 }

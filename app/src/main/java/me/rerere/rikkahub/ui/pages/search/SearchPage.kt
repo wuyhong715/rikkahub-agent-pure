@@ -163,19 +163,10 @@ fun SearchPage(vm: SearchVM = koinViewModel()) {
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 }
 
+                // Rebuilding is a background catch-up, not a reason to take the page away: the
+                // index that already exists is still searchable, and blocking on a first sweep
+                // over a year of chat made the page look hung for as long as the sweep ran.
                 when {
-                    vm.isRebuilding -> {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = stringResource(R.string.search_page_rebuilding_simple),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
                     vm.searchQuery.isBlank() -> {
                         Box(
                             modifier = Modifier.fillMaxSize(),

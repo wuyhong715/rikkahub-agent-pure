@@ -268,7 +268,10 @@ private fun ChatListNormal(
             .associateBy { it.id }
     }
     val displayGroups = remember(conversation.messageNodes) {
-        conversation.messageNodes.groupAutomaticCompactionMessages()
+        // Duplicate node ids in a stored conversation (a bad merge, a hand-edited backup) would
+        // make every LazyColumn key repeat and crash the chat page. The same node twice is the
+        // same card, so keep the first.
+        conversation.messageNodes.distinctBy { it.id }.groupAutomaticCompactionMessages()
     }
     val lastMessageNodeId = conversation.messageNodes.lastOrNull()?.id
 
@@ -701,7 +704,7 @@ private fun ChatListPreview(
         ) {
             itemsIndexed(
                 items = filteredMessages,
-                key = { index, item -> item.second.id },
+                key = { _, item -> "${item.second.id}:${item.first}" },
             ) { _, (originalIndex, node) ->
                 val message = node.currentMessage
                 val isUser = message.role == me.rerere.ai.core.MessageRole.USER

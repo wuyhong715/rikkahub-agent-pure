@@ -176,6 +176,13 @@ class EmbeddingService(
 
     private val lock = Mutex()
 
+    /**
+     * Serialises forward passes. The native engine runs one inference at a time, and search can
+     * now legitimately run while an index round is embedding; two threads in the interpreter is
+     * undefined behaviour, not merely slower.
+     */
+    private val forwardLock = Mutex()
+
     @Volatile
     private var active: ActiveModel? = null
 
@@ -406,10 +413,12 @@ class EmbeddingService(
      * Throws when no model is available; callers that can live without embeddings check
      * [ensureLoaded] first and skip instead.
      */
-    suspend fun embedDocuments(texts: List<String>): List<FloatArray> = onWorker {
-        val model = ensureLoaded() ?: error("no embedding model is installed")
-        if (model.isCloud) embedCloud(model, texts)
-        else texts.map { text -> embedWith(model, model.documentPrefix + text) }
+    suspend fun embedDocuments(texts: List<String>): List<FloatArray> = forwardLock.withLock {
+        onWorker {
+            val model = ensureLoaded() ?: error("no embedding model is installed")
+            if (model.isCloud) embedCloud(model, texts)
+            else texts.map { text -> embedWith(model, model.documentPrefix + text) }
+        }
     }
 
     /**
@@ -432,15 +441,17 @@ class EmbeddingService(
      * Throws when the model in effect cannot see - the caller is expected to have asked
      * [canEmbedImages] first and taken the fallback path otherwise.
      */
-    suspend fun embedImage(bytes: ByteArray): FloatArray = onWorker {
-        val model = ensureLoaded() ?: error("no embedding model is installed")
-        require(model.vision) { "the embedding model in effect cannot embed images" }
-        if (model.isCloud) error("a cloud embedding model cannot embed images")
-        val vector = litert.embedImage(bytes)
-        require(vector.size == model.dim) {
-            "the model returned ${vector.size} values, expected ${model.dim}"
+    suspend fun embedImage(bytes: ByteArray): FloatArray = forwardLock.withLock {
+        onWorker {
+            val model = ensureLoaded() ?: error("no embedding model is installed")
+            require(model.vision) { "the embedding model in effect cannot embed images" }
+            if (model.isCloud) error("a cloud embedding model cannot embed images")
+            val vector = litert.embedImage(bytes)
+            require(vector.size == model.dim) {
+                "the model returned ${vector.size} values, expected ${model.dim}"
+            }
+            vector
         }
-        vector
     }
 
     /**
@@ -459,16 +470,18 @@ class EmbeddingService(
      * decoder that produces it is [MediaAudio]. Throws when the model in effect has no audio
      * encoder - callers are expected to have asked [canEmbedAudio] first.
      */
-    suspend fun embedAudio(bytes: ByteArray): FloatArray = onWorker {
-        val model = ensureLoaded() ?: error("no embedding model is installed")
-        require(model.audio) { "the embedding model in effect cannot embed audio" }
-        if (model.isCloud) error("a cloud embedding model cannot embed audio")
-        val vector = litert.embedAudio(bytes)
-        require(vector.size == model.dim) {
-            "the model returned ${vector.size} values, expected ${model.dim}"
+    suspend fun embedAudio(bytes: ByteArray): FloatArray = forwardLock.withLock {
+            onWorker {
+                val model = ensureLoaded() ?: error("no embedding model is installed")
+                require(model.audio) { "the embedding model in effect has no audio encoder" }
+                if (model.isCloud) error("a cloud embedding model cannot embed audio")
+                val vector = litert.embedAudio(bytes)
+                require(vector.size == model.dim) {
+                    "the model returned ${vector.size} values, expected ${model.dim}"
+                }
+                vector
+            }
         }
-        vector
-    }
 
     /**
      * Embeds one *query* with the model's query-side task prefix applied.
@@ -478,10 +491,12 @@ class EmbeddingService(
      * a mistake that returns plausible results rather than an error, so the two cases are told
      * apart by the type system rather than by a comment.
      */
-    suspend fun embedQuery(text: String): FloatArray = onWorker {
-        val model = ensureLoaded() ?: error("no embedding model is installed")
-        if (model.isCloud) embedCloud(model, listOf(text)).single()
-        else embedWith(model, model.queryPrefix + text)
+    suspend fun embedQuery(text: String): FloatArray = forwardLock.withLock {
+        onWorker {
+            val model = ensureLoaded() ?: error("no embedding model is installed")
+            if (model.isCloud) embedCloud(model, listOf(text)).single()
+            else embedWith(model, model.queryPrefix + text)
+        }
     }
 
     private suspend fun embedWith(model: ActiveModel, text: String): FloatArray {
@@ -518,7 +533,7 @@ class EmbeddingService(
      * megabytes of idle weights through a phone's whole idle period is exactly the kind of thing
      * that makes a background feature feel expensive.
      */
-    suspend fun release() = onWorker { lock.withLock { releaseHoldingLock() } }
+    suspend fun release() = forwardLock.withLock { onWorker { lock.withLock { releaseHoldingLock() } } }
 
     /**
      * The body of [release]; the caller must already hold [lock].

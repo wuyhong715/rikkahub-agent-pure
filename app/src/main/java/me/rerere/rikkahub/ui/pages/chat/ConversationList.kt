@@ -25,6 +25,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -51,8 +52,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.paging.LoadState
 import androidx.paging.compose.LazyPagingItems
-import androidx.paging.compose.itemKey
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.ui.theme.extendColors
@@ -107,6 +108,25 @@ fun ConversationList(
         }
     }
 
+    // A composite key keeps a duplicated row from crashing the whole app (Compose throws on
+    // a repeated key while measuring). Duplicates are possible in a paged list while the sort
+    // key - update_at - is being written during generation; showing one of them is better than
+    // killing the process.
+    val itemKeys = remember(conversations.itemSnapshotList, conversations.itemCount) {
+        val occurrences = HashMap<String, Int>()
+        conversations.itemSnapshotList.items.map { item ->
+            val base = when (item) {
+                null -> return@map null
+                is ConversationListItem.DateHeader -> "date_${item.date}"
+                is ConversationListItem.PinnedHeader -> "pinned_header"
+                is ConversationListItem.Item -> item.conversation.id.toString()
+            }
+            val seen = (occurrences[base] ?: 0) + 1
+            occurrences[base] = seen
+            if (seen == 1) base else "$base#$seen"
+        }
+    }
+
     LazyColumn(
         state = listState,
         modifier = modifier.padding(horizontal = 8.dp),
@@ -114,33 +134,41 @@ fun ConversationList(
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         if (conversations.itemCount == 0) {
-            item {
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerLow
-                ) {
-                    Text(
-                        text = stringResource(id = R.string.chat_page_no_conversations),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.padding(16.dp)
-                    )
+            item(key = "empty_state") {
+                // An empty page and an empty database look identical until the first page has
+                // loaded. Saying "no conversations" while the query is still running is how a
+                // slow start reads as "my history is gone".
+                if (conversations.loadState.refresh is LoadState.Loading) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(24.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                    }
+                } else {
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerLow
+                    ) {
+                        Text(
+                            text = stringResource(id = R.string.chat_page_no_conversations),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(16.dp)
+                        )
+                    }
                 }
             }
         }
 
         items(
             count = conversations.itemCount,
-            key = conversations.itemKey { item ->
-                when (item) {
-                    is ConversationListItem.DateHeader -> "date_${item.date}"
-                    is ConversationListItem.PinnedHeader -> "pinned_header"
-                    is ConversationListItem.Item -> item.conversation.id.toString()
-                }
-            }
+            key = { index -> itemKeys.getOrNull(index) ?: "placeholder_$index" },
         ) { index ->
             when (val item = conversations[index]) {
                 is ConversationListItem.DateHeader -> {

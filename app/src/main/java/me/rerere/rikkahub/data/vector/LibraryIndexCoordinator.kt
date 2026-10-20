@@ -193,6 +193,16 @@ class LibraryIndexCoordinator(
         return try {
             ensureDirectory(workspaceId, dir)
             val walk = walk(workspaceId, dir)
+            if (!walk.readable) {
+                // Never let a failed listing look like "every file was deleted".
+                _status.value = Status(
+                    running = false,
+                    lastError = "cannot list library directory '$dir'",
+                    lastRunAtMs = System.currentTimeMillis(),
+                )
+                Log.d(TAG, "cannot list '$dir'; leaving the index untouched")
+                return null
+            }
             val round = WorkspaceLibraryRules.planRound(
                 candidates = walk.candidates,
                 indexed = source.indexedPaths(workspaceId, dir),
@@ -280,6 +290,8 @@ class LibraryIndexCoordinator(
     private data class Walk(
         val candidates: List<WorkspaceLibraryRules.Candidate>,
         val truncated: Boolean,
+        /** False when the listing itself failed; an empty list then means "unknown", not "empty". */
+        val readable: Boolean = true,
     )
 
     /**
@@ -299,7 +311,7 @@ class LibraryIndexCoordinator(
             // The directory does not exist yet, or the workspace is gone. Either way: nothing to
             // index, and not an error worth failing the round over.
             Log.d(TAG, "cannot list '$root': ${e.message}")
-            return Walk(emptyList(), truncated = false)
+            return Walk(emptyList(), truncated = false, readable = false)
         }
 
         val candidates = tree.entries

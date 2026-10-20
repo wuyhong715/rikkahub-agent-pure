@@ -48,6 +48,12 @@ class ConversationVectorSource(
         seen: Set<String>,
         nowMs: Long,
         scope: String? = null,
+        /**
+         * False when this round could not read every conversation it meant to. A missing key is
+         * then not evidence of a deleted message, so nothing is forgotten: a transient read
+         * failure must not silently delete the part of the index it touched.
+         */
+        forgetMissing: Boolean = true,
     ): SyncReport {
         val model = embeddings.ensureLoaded()
             ?: return SyncReport(
@@ -88,13 +94,15 @@ class ConversationVectorSource(
             indexed++
         }
 
-        val indexedKeys = store.docKeys(SOURCE)
-        val forget = if (scope == null) {
-            ConversationSearchRules.toForget(indexedKeys, seen)
-        } else {
-            ConversationSearchRules.toForgetIn(scope, indexedKeys, seen)
+        if (forgetMissing) {
+            val indexedKeys = store.docKeys(SOURCE)
+            val forget = if (scope == null) {
+                ConversationSearchRules.toForget(indexedKeys, seen)
+            } else {
+                ConversationSearchRules.toForgetIn(scope, indexedKeys, seen)
+            }
+            forget.forEach { store.forget(SOURCE, it) }
         }
-        forget.forEach { store.forget(SOURCE, it) }
 
         return SyncReport(
             documents = docs.size,

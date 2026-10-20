@@ -34,9 +34,14 @@ object ConversationSearchRules {
      * One round's budget. A history is the largest thing in the app - it grows with every
      * conversation the user ever had - so this is the number that keeps the first sync from
      * embedding for an hour on a phone.
+     *
+     * Deliberately small. A round that takes minutes leaves the status stuck on "indexing" for
+     * that whole time, and on a phone the embedding model is slow enough that the old 600k/300
+     * round could run for an hour. Small rounds finish, and [RoundBudget] resumes where the last
+     * one stopped, so a large history converges in many short steps instead of one endless one.
      */
-    const val MAX_CHARS_PER_ROUND = 600_000
-    const val MAX_MESSAGES_PER_ROUND = 300
+    const val MAX_CHARS_PER_ROUND = 40_000
+    const val MAX_MESSAGES_PER_ROUND = 40
 
     private const val SEPARATOR = '|'
 

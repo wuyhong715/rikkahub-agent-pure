@@ -73,7 +73,7 @@ internal fun MessageQueuePanel(
                 LazyColumn(modifier = Modifier.heightIn(max = 180.dp)) {
                     itemsIndexed(
                         state.messages,
-                        key = { _, message -> message.id }) { index, message ->
+                        key = { _, message -> "${message.id}:$index" }) { index, message ->
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp),

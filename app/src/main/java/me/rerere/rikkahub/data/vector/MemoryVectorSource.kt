@@ -62,7 +62,17 @@ class MemoryVectorSource(
      * must not call this with an empty list - that would wipe a good index because a disk hiccup
      * happened at the wrong moment.
      */
-    suspend fun sync(dir: String, docs: List<Doc>, nowMs: Long): SyncReport {
+    suspend fun sync(
+        dir: String,
+        docs: List<Doc>,
+        nowMs: Long,
+        /**
+         * False when the listing was incomplete (a directory or file could not be read). A
+         * document missing from an incomplete listing is not a deleted document, so nothing is
+         * forgotten: otherwise one transient read error empties the knowledge-base index.
+         */
+        forgetMissing: Boolean = true,
+    ): SyncReport {
         val model = embeddings.ensureLoaded()
             ?: return SyncReport(
                 documents = docs.size,
@@ -109,8 +119,10 @@ class MemoryVectorSource(
 
         // Documents that vanished from the listing. Done last, and only for this source, so a
         // failure above leaves the previous index intact rather than half-destroyed.
-        val live = docs.map { it.name }.toSet()
-        store.docKeys(source).filter { it !in live }.forEach { store.forget(source, it) }
+        if (forgetMissing) {
+            val live = docs.map { it.name }.toSet()
+            store.docKeys(source).filter { it !in live }.forEach { store.forget(source, it) }
+        }
 
         return SyncReport(
             documents = docs.size,
