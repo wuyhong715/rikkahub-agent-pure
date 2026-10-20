@@ -24,6 +24,7 @@ import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.data.runevent.RunEventType
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.service.mission.LaunchSource
+import me.rerere.rikkahub.service.mission.MissionContinueComposer
 import me.rerere.rikkahub.service.mission.MissionLauncher
 import me.rerere.rikkahub.service.mission.MissionWorkflowDocs
 import me.rerere.rikkahub.service.mission.WORKFLOW_DIR
