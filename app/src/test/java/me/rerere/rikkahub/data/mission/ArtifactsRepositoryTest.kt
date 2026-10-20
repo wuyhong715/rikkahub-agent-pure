@@ -241,7 +241,7 @@ class ArtifactsRepositoryTest {
     }
 
     @Test
-    fun `acceptanceProgress is zero and canComplete false with no acceptance criteria`() =
+    fun `acceptanceProgress is zero and canComplete with no acceptance criteria`() =
         runBlocking {
             val f = Fixture()
             val mission = f.missionRepository.create(title = "M5")
@@ -250,7 +250,11 @@ class ArtifactsRepositoryTest {
 
             assertEquals(0, settlement.acceptanceTotal)
             assertEquals(0f, settlement.acceptanceProgress, 1e-6f)
-            assertFalse(settlement.canComplete)
+            assertTrue(
+                "批 D: a review without goals is confirmable — the gate is the delivery, " +
+                    "not the existence of a checklist",
+                settlement.canComplete,
+            )
             assertNotNull("mission row is always carried through", settlement.mission)
         }
 }
