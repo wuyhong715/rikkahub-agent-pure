@@ -89,6 +89,7 @@ import me.rerere.rikkahub.data.mission.MissionStatus
 import me.rerere.rikkahub.data.runevent.RunEventEntity
 import me.rerere.rikkahub.data.runevent.RunEventType
 import me.rerere.rikkahub.data.mission.acceptanceChecked
+import me.rerere.rikkahub.data.mission.AcceptanceCheckSpec
 import me.rerere.rikkahub.data.mission.acceptanceCriteria
 import me.rerere.rikkahub.data.mission.executionStateEnum
 import me.rerere.rikkahub.data.mission.limits
@@ -929,11 +930,30 @@ private fun LimitsDialog(
     var stall by remember(limits) { mutableStateOf(limits.stallRounds.toString()) }
     var tokens by remember(limits) { mutableStateOf(limits.tokenBudget.toString()) }
     var requireConfirm by remember(limits) { mutableStateOf(limits.requireConfirmation) }
+    // 批 H — 时间维度与结构化验收。截止时间用「从现在起多少小时」输入：绝对时间戳对用户
+    // 没有意义，而这个对话框本来就只在「我现在想调整任务」时打开。
+    var roundTimeout by remember(limits) { mutableStateOf(limits.roundTimeoutMinutes.toString()) }
+    var deadlineHours by remember(limits) {
+        mutableStateOf(
+            limits.deadlineAt
+                ?.let { ((it - System.currentTimeMillis()).coerceAtLeast(0L) / 3_600_000L).toString() }
+                .orEmpty()
+        )
+    }
+    var wrapUp by remember(limits) { mutableStateOf(limits.wrapUpMinutes.toString()) }
+    var checksText by remember(limits) {
+        mutableStateOf(AcceptanceCheckSpec.toEditorLines(limits.acceptanceChecks))
+    }
 
     val resumeValue = resume.toIntOrNull()?.takeIf { it >= 0 }
     val stallValue = stall.toIntOrNull()?.takeIf { it >= 0 }
     val tokensValue = tokens.toLongOrNull()?.takeIf { it >= 0 }
-    val valid = resumeValue != null && stallValue != null && tokensValue != null
+    val roundTimeoutValue = roundTimeout.toIntOrNull()?.takeIf { it in 1..10_000 }
+    val wrapUpValue = wrapUp.toIntOrNull()?.takeIf { it >= 0 }
+    val deadlineHoursValue = deadlineHours.takeIf { it.isNotBlank() }?.toIntOrNull()?.takeIf { it >= 0 }
+    val valid = resumeValue != null && stallValue != null && tokensValue != null &&
+        roundTimeoutValue != null && wrapUpValue != null &&
+        (deadlineHours.isBlank() || deadlineHoursValue != null)
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -967,6 +987,38 @@ private fun LimitsDialog(
                     label = { Text(text = stringResource(R.string.mission_limits_tokens)) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = roundTimeout,
+                    onValueChange = { roundTimeout = it.filter(Char::isDigit).take(3) },
+                    label = { Text(text = stringResource(R.string.mission_limits_round_time)) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = deadlineHours,
+                    onValueChange = { deadlineHours = it.filter(Char::isDigit).take(4) },
+                    label = { Text(text = stringResource(R.string.mission_limits_deadline)) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = wrapUp,
+                    onValueChange = { wrapUp = it.filter(Char::isDigit).take(2) },
+                    label = { Text(text = stringResource(R.string.mission_limits_wrapup)) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = checksText,
+                    onValueChange = { checksText = it },
+                    label = { Text(text = stringResource(R.string.mission_limits_acceptance)) },
+                    minLines = 3,
+                    maxLines = 8,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 // 批 D — completion gate: a model-declared done parks in REVIEW instead of
@@ -1008,6 +1060,11 @@ private fun LimitsDialog(
                                 // 否则「改个轮数」会把用户配的 hook 一并抹掉。
                                 maxCheckFailures = limits.maxCheckFailures,
                                 hooks = limits.hooks,
+                                roundTimeoutMinutes = roundTimeoutValue!!,
+                                wrapUpMinutes = wrapUpValue!!,
+                                deadlineAt = deadlineHoursValue
+                                    ?.let { System.currentTimeMillis() + it * 3_600_000L },
+                                acceptanceChecks = AcceptanceCheckSpec.parseEditorLines(checksText),
                             )
                         )
                     }

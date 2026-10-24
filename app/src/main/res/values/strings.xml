@@ -643,6 +643,7 @@
   <string name="notification_channel_chat_completed">Chat Completed</string>
   <string name="notification_channel_chat_live_update">Chat Generation Progress</string>
   <string name="notification_channel_web_server">Web Server</string>
+  <string name="notification_channel_mission_active">Task runs</string>
   <string name="notification_live_update_chip_thinking">Thinking</string>
   <string name="notification_live_update_chip_tool">Tool</string>
   <string name="notification_live_update_chip_writing">Writing</string>
@@ -3253,6 +3254,10 @@ HARDLINE protections still apply: rm -rf /, mkfs, shutdown / reboot, dd to block
   <string name="mission_workflow_new_name">New document name</string>
   <string name="mission_workflow_new_create">Create and use</string>
   <string name="mission_workflow_new_failed">That name is unusable or the document already exists.</string>
+  <string name="mission_limits_round_time">Round timeout (minutes)</string>
+  <string name="mission_limits_deadline">Deadline (hours from now; empty = none)</string>
+  <string name="mission_limits_wrapup">Wrap-up window (minutes, 0 = off)</string>
+  <string name="mission_limits_acceptance">Acceptance checks (one per line: command: / file: / contains: path | text / not_contains: path | text / size: path | bytes)</string>
   <string name="mission_limits_confirm">Confirm before completing</string>
   <string name="mission_limits_confirm_desc">A reported done stays in review until you approve the delivery.</string>
   <string name="mission_rework_title">Send back for rework</string>

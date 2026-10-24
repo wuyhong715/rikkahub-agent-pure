@@ -18,6 +18,8 @@ import me.rerere.rikkahub.data.mission.MissionHookWhen
 import me.rerere.rikkahub.data.mission.MissionRepository
 import me.rerere.rikkahub.data.mission.MissionStatus
 import me.rerere.rikkahub.data.mission.MissionTaskState
+import me.rerere.rikkahub.data.mission.MissionTimeBudget
+import me.rerere.rikkahub.data.mission.AcceptanceOutcome
 import me.rerere.rikkahub.data.mission.executionStateEnum
 import me.rerere.rikkahub.data.mission.isLive
 import me.rerere.rikkahub.data.mission.acceptanceCriteria
@@ -59,6 +61,12 @@ private const val FAILURE_CHECK_FAILED_TITLE: String = "failure_check_failed"
 
 /** 本轮结束时 task-state.md 没有变化的标记。 */
 private const val STATE_UNCHANGED_TITLE: String = "state_unchanged"
+
+/** 批 H — 结构化验收逐条结果的 journal 标题。 */
+private const val ACCEPTANCE_TITLE: String = "acceptance"
+
+/** 批 H — 到截止时间、任务被 park 给用户的 journal 标题。 */
+private const val DEADLINE_TITLE: String = "deadline"
 
 /** How many recent journal entries [MissionSupervisor.start] subscribes to. */
 private const val OBSERVE_RECENT_LIMIT: Int = 200
@@ -137,6 +145,18 @@ class MissionSupervisor(
      * 批 F — 任务状态文件读取出口（DI 接 WorkspaceRepository）。null = 不做「状态有没有更新」判断。
      */
     private val stateSource: MissionStateSource? = null,
+    /**
+     * 批 H — 结构化验收执行器（DI 接 workspace shell）。null = 不做机器判定，行为与批 F 一致。
+     */
+    private val acceptanceVerifier: MissionAcceptanceVerifier? = null,
+    /** 批 H — 时钟注入（截止时间判断）；测试钉住时间点。 */
+    private val now: () -> Long = { System.currentTimeMillis() },
+    /**
+     * 批 H — 任务收尾时熄灭它的前台服务登记（DI 接 [MissionForegroundService.stop]）。
+     *
+     * 只摘掉自己这一条：别的任务还在跑时，前台服务必须继续活着。
+     */
+    private val onMissionIdle: (missionId: String) -> Unit = {},
 ) {
 
     /** run id → ledger status name; null when the run is unknown to the ledger. */
@@ -257,6 +277,7 @@ class MissionSupervisor(
     private suspend fun parkIfRunning(mission: MissionEntity) {
         if (mission.executionStateEnum.isLive) {
             missionRepository.updateExecutionState(mission.id, MissionExecutionState.IDLE)
+            markIdle(mission.id)
         }
     }
 
@@ -358,16 +379,21 @@ class MissionSupervisor(
             }
             if (userStopped) {
                 missionRepository.updateExecutionState(mission.id, MissionExecutionState.IDLE)
+                markIdle(mission.id)
                 return@runCatching
             }
 
+            // 批 H — 设了截止时间的任务，真正的约束是时间而不是轮数。
+            // 默认 maxResumeRounds=5 在 30 分钟一轮下只有三个小时，和「跑到 8 小时」直接矛盾；
+            // 有了 deadline + 收尾轮 + token 预算三道闸之后，轮数不必再当第二把锁。
+            val deadlineBounded = mission.limits.deadlineAt != null
             val input = ContinueInput(
                 missionStatus = mission.status,
                 hasDoneSignal = hasDoneSignal,
                 hasBlockedSignal = hasBlockedSignal,
                 resumeCount = mission.resumeCount,
                 stallRounds = stallRounds,
-                maxResumeRounds = mission.limits.maxResumeRounds,
+                maxResumeRounds = if (deadlineBounded) Int.MAX_VALUE else mission.limits.maxResumeRounds,
                 stallThreshold = mission.limits.stallRounds,
                 // Token breaker: cumulative usage of the execution conversation. Wired
                 // through the usage ledger (see tokenProbe); 0 when unavailable.
@@ -404,6 +430,7 @@ class MissionSupervisor(
         // fire can launch a fresh round. The user archives it when they no longer want it.
         if (mission.isRecurring) {
             missionRepository.updateExecutionState(mission.id, MissionExecutionState.IDLE)
+            markIdle(mission.id)
             missionRepository.resetResumeCount(mission.id)
             missionRepository.logEvent(
                 missionId = mission.id,
@@ -433,12 +460,19 @@ class MissionSupervisor(
                 detail = summary,
             )
             notify("任务待确认：${mission.title}", summary)
+            markIdle(mission.id)
             return
         }
 
         missionRepository.transition(mission.id, MissionStatus.DONE, note = "mission_report(done)")
         missionRepository.updateExecutionState(mission.id, MissionExecutionState.IDLE)
+        markIdle(mission.id)
         notify("任务完成：${mission.title}", summary)
+    }
+
+    /** 批 H — 任务收尾：熄灭前台服务里属于它的那一条（不影响别的任务）。 */
+    private fun markIdle(missionId: String) {
+        runCatching { onMissionIdle(missionId) }
     }
 
     /**
@@ -485,6 +519,7 @@ class MissionSupervisor(
     private suspend fun block(mission: MissionEntity, reason: String) {
         missionRepository.transition(mission.id, MissionStatus.BLOCKED, note = reason)
         missionRepository.updateExecutionState(mission.id, MissionExecutionState.BLOCKED)
+        markIdle(mission.id)
         notify("任务已停下：${mission.title}", reason)
     }
 
@@ -495,6 +530,12 @@ class MissionSupervisor(
      * for the user to handle.
      */
     private suspend fun resume(mission: MissionEntity, checkNote: String? = null) {
+        // 批 H — 截止时间优先于一切：轮末检查、续跑预算都不该在超时之后继续花。
+        val timePlan = MissionTimeBudget.plan(mission.limits, now())
+        if (timePlan.expired) {
+            parkExpired(mission)
+            return
+        }
         // 批 F — 轮末检查：续跑之前先跑。blocking 的失败直接停任务（这就是「一道门」），
         // warn 的失败只把输出带进下一轮交接。
         val roundEnd = runRoundEndHook(mission)
@@ -531,9 +572,132 @@ class MissionSupervisor(
         }
     }
 
+    /**
+     * 批 H — 到截止时间：把任务交给用户，而不是静默停在那里。
+     *
+     * 刻意停在 REVIEW 而不是 DONE：没做完就是没做完，让用户看到「时间到了、还差什么」，
+     * 由他决定续期还是收下当前产物。
+     */
+    private suspend fun parkExpired(mission: MissionEntity) {
+        val reason = "${MissionTimeBudget.expiredReason(mission.limits)}，已交给你确认"
+        runCatching {
+            missionRepository.transition(mission.id, MissionStatus.REVIEW, note = reason)
+            missionRepository.updateExecutionState(mission.id, MissionExecutionState.IDLE)
+        }
+        runCatching {
+            runEventRepository.emit(
+                type = RunEventType.NOTE,
+                title = DEADLINE_TITLE,
+                detail = reason,
+                missionId = mission.id,
+            )
+        }
+        markIdle(mission.id)
+        notify("任务到时间了：${mission.title}", reason)
+    }
+
     // ---------------------------------------------------------------------------------------
     // 批 F — 检查命令（hooks）与任务状态
     // ---------------------------------------------------------------------------------------
+
+    /**
+     * 批 H — 结构化验收门。
+     *
+     * 返回 true = 全部通过（或没有配置），可以继续走检查命令 / 落 DONE；
+     * false = 已经拦下（发了返工轮，或失败次数用尽 park 给用户）。
+     *
+     * 三条与 hooks 对齐的规则：没配就放行；跑不起来不阻断（基础设施故障不等于工作不合格）；
+     * `MANUAL` 项只记录不判定。唯一新增的语义是 **全部 machine-checkable 项都通过才算过**——
+     * hooks 是「最后一道命令」，验收是「逐条对账」，两者职责不同，所以分层而不是合并。
+     */
+    private suspend fun acceptanceGate(mission: MissionEntity, runId: String?): Boolean {
+        val verifier = acceptanceVerifier ?: return true
+        val outcomes = runCatching { verifier.verify(mission, runId) }
+            .getOrElse { emptyList<AcceptanceOutcome>() }
+        if (outcomes.isEmpty()) return true
+
+        outcomes.forEach { outcome ->
+            runCatching {
+                runEventRepository.emit(
+                    type = RunEventType.NOTE,
+                    title = ACCEPTANCE_TITLE,
+                    detail = outcome.describe(),
+                    missionId = mission.id,
+                    conversationId = mission.conversationId,
+                    runId = runId,
+                )
+            }
+        }
+        // 模型自报的 goals 不再单独决定验收勾选：机器能判的以机器为准。
+        runCatching {
+            val passedIndices = outcomes.mapIndexedNotNull { index, outcome ->
+                index.takeIf { outcome.passed == true }
+            }
+            if (passedIndices.isNotEmpty()) missionRepository.setAcceptanceChecked(mission.id, passedIndices)
+        }
+
+        val failed = outcomes.filter { it.blocking }
+        if (failed.isEmpty()) {
+            runCatching {
+                runEventRepository.emit(
+                    type = RunEventType.NOTE,
+                    title = CHECK_PASSED_TITLE,
+                    detail = "验收通过：${outcomes.count { it.passed == true }}/${outcomes.size} 项",
+                    missionId = mission.id,
+                    conversationId = mission.conversationId,
+                    runId = runId,
+                )
+            }
+            return true
+        }
+
+        // 记成 check_failed，让「连续失败次数」这套现有熔断继续生效，不另起一套计数。
+        runCatching {
+            runEventRepository.emit(
+                type = RunEventType.NOTE,
+                title = CHECK_FAILED_TITLE,
+                detail = failed.joinToString("\n") { it.describe() },
+                missionId = mission.id,
+                conversationId = mission.conversationId,
+                runId = runId,
+            )
+        }
+        val failures = countCheckFailures(mission.id)
+        val maxReworks = mission.limits.maxCheckFailures.coerceAtLeast(0)
+        if (failures > maxReworks) {
+            val reason = "验收连续 ${failures} 次未通过，已交给用户"
+            missionRepository.transition(mission.id, MissionStatus.REVIEW, note = reason)
+            missionRepository.updateExecutionState(mission.id, MissionExecutionState.IDLE)
+            markIdle(mission.id)
+            notify("任务待确认：${mission.title}", "$reason\n\n${failed.joinToString("\n") { it.describe() }}")
+            return false
+        }
+
+        val prompt = composeAcceptanceRework(failed, failures, maxReworks)
+        val launch = launcher.launch(
+            missionId = mission.id,
+            source = LaunchSource.Continue(mission.resumeCount + 1),
+            continuePrompt = prompt,
+        )
+        if (!launch.ok) {
+            notify("任务返工启动失败：${mission.title}", launch.error ?: "unknown")
+        }
+        return false
+    }
+
+    /** 验收失败后的返工提示词：逐条列出差在哪，要求只补差的部分。 */
+    private fun composeAcceptanceRework(
+        failed: List<AcceptanceOutcome>,
+        attempt: Int,
+        maxReworks: Int,
+    ): String = buildString {
+        appendLine("[系统] 你报告了完成，但验收条件没有通过（第 $attempt/$maxReworks 次返工）。")
+        appendLine("未通过的项：")
+        failed.forEach { appendLine("- ${it.describe()}") }
+        appendLine()
+        appendLine("要求：只补这些没通过的部分，不要重做已完成的工作；改完后更新 task-state.md，再调用 mission_report(done)。")
+        appendLine("如果这些条件本身无法满足（需求矛盾/环境不支持），调用 mission_report(blocked) 说明原因，不要反复重试同一种做法。")
+    }
 
     /**
      * 完成前检查门。
@@ -549,6 +713,8 @@ class MissionSupervisor(
         runId: String?,
         events: List<RunEventEntity>,
     ): Boolean {
+        // 批 H — 结构化验收先于检查命令：能机器判定的条件优先，判不了的交给人。
+        if (!acceptanceGate(mission, runId)) return false
         val executor = hookExecutor ?: return true
         val hook = MissionHookSpec.runnable(mission.limits, MissionHookWhen.BEFORE_DONE).firstOrNull()
             ?: return true
@@ -587,6 +753,7 @@ class MissionSupervisor(
             val reason = "完成前检查连续 ${failures} 次未通过，已交给用户"
             missionRepository.transition(mission.id, MissionStatus.REVIEW, note = reason)
             missionRepository.updateExecutionState(mission.id, MissionExecutionState.IDLE)
+            markIdle(mission.id)
             notify("任务待确认：${mission.title}", "$reason\n\n${outcome.describe()}")
             return false
         }

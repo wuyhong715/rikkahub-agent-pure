@@ -499,6 +499,7 @@
   <string name="notification_channel_chat_completed">聊天完成</string>
   <string name="notification_channel_chat_live_update">聊天生成进度</string>
   <string name="notification_channel_web_server">Web服务器</string>
+  <string name="notification_channel_mission_active">任务运行</string>
   <string name="notification_live_update_chip_thinking">思考中</string>
   <string name="notification_live_update_chip_tool">工具</string>
   <string name="notification_live_update_chip_writing">正在书写</string>
@@ -2968,6 +2969,10 @@ HARDLINE 保护仍然生效：rm -rf /、mkfs、shutdown / reboot、向块设备
   <string name="mission_workflow_new_name">新文档名称</string>
   <string name="mission_workflow_new_create">新建并选用</string>
   <string name="mission_workflow_new_failed">名称不可用，或同名文档已存在。</string>
+  <string name="mission_limits_round_time">单轮上限（分钟）</string>
+  <string name="mission_limits_deadline">截止时间（从此刻起多少小时，留空=不限）</string>
+  <string name="mission_limits_wrapup">收尾窗口（分钟，0=关闭）</string>
+  <string name="mission_limits_acceptance">验收条件（每行一条：命令: / 文件: / 包含: 路径 | 文本 / 不含: 路径 | 文本 / 大小: 路径 | 字节数）</string>
   <string name="mission_limits_confirm">完成后需我确认</string>
   <string name="mission_limits_confirm_desc">模型报告完成后先进入待验收，由你确认交付才会关闭任务。</string>
   <string name="mission_rework_title">打回重做</string>

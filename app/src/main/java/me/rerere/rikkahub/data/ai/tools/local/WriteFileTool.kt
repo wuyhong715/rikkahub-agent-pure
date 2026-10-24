@@ -11,8 +11,11 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
+import me.rerere.ai.ui.DiffMetadata
+import me.rerere.ai.ui.toMetadata
 import me.rerere.ai.ui.UIMessagePart
 import java.io.File
+import me.rerere.rikkahub.utils.generateUnifiedDiff
 
 /**
  * Writes text content to an arbitrary path on shared storage. Uses the same direct
@@ -142,6 +145,14 @@ fun writeTextFileTool(context: Context): Tool = Tool(
 
         val bytes = content.toByteArray(Charsets.UTF_8)
         val priorSize = if (file.exists()) file.length() else 0L
+        // 批 H — 覆盖写要留下 diff：这是用户判断「它到底改了什么」的唯一依据。
+        // append 模式不生成 diff（追加没有「旧版本被替换」的概念），超大文件也跳过，
+        // 免得为了展示一行改动把几十 MB 读进内存。
+        val beforeText = if (!append && file.exists() && priorSize in 1..MAX_DIFF_READ_BYTES) {
+            runCatching { file.readText() }.getOrNull()
+        } else {
+            null
+        }
 
         return@Tool try {
             if (append) {
@@ -169,19 +180,31 @@ fun writeTextFileTool(context: Context): Tool = Tool(
                     throw e
                 }
             }
-            listOf(UIMessagePart.Text(buildJsonObject {
-                put("success", true)
-                put("path", file.absolutePath)
-                put("bytes_written", bytes.size)
-                put("appended", append)
-                put("prior_size", priorSize)
-                put("new_size", file.length())
-            }.toString()))
+            val diff = beforeText?.let { previous ->
+                runCatching { generateUnifiedDiff(previous, content, file.absolutePath) }.getOrNull()
+            }
+            listOf(
+                UIMessagePart.Text(
+                    text = buildJsonObject {
+                        put("success", true)
+                        put("path", file.absolutePath)
+                        put("bytes_written", bytes.size)
+                        put("appended", append)
+                        put("prior_size", priorSize)
+                        put("new_size", file.length())
+                        if (diff != null) put("has_diff", true)
+                    }.toString(),
+                    // diff 存 metadata：UI 能渲染改动，但不会把全文再发一遍给模型。
+                    metadata = diff?.let { DiffMetadata(diff = it).toMetadata() },
+                )
+            )
         } catch (e: Throwable) {
             errEnvelope("write_failed", "${e::class.simpleName}: ${e.message ?: "unknown"}")
         }
     }
 )
+
+private const val MAX_DIFF_READ_BYTES = 256L * 1024L
 
 private fun errEnvelope(code: String, detail: String): List<UIMessagePart> =
     listOf(UIMessagePart.Text(buildJsonObject {

@@ -421,6 +421,17 @@
         android:value="interactive chat generation and tool execution" />
     </service>
 
+    <!-- 批 H — 任务在跑期间的常驻前台服务：覆盖「轮与轮之间」没有生成在跑的窗口。 -->
+    <service
+      android:name=".service.mission.MissionForegroundService"
+      android:exported="false"
+      android:foregroundServiceType="specialUse"
+      android:stopWithTask="false">
+      <property
+        android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+        android:value="keep an autonomous mission alive between execution rounds" />
+    </service>
+
     <provider
       android:name="androidx.core.content.FileProvider"
       android:authorities="${applicationId}.fileprovider"

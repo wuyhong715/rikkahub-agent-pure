@@ -4,13 +4,16 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.agentrun.AgentRunKind
 import me.rerere.rikkahub.data.ai.tools.ConversationSystemAddendum
+import me.rerere.rikkahub.data.mission.AcceptanceCheckSpec
 import me.rerere.rikkahub.data.mission.MissionEntity
 import me.rerere.rikkahub.data.mission.MissionExecutionState
 import me.rerere.rikkahub.data.mission.MissionRepository
 import me.rerere.rikkahub.data.mission.MissionStatus
 import me.rerere.rikkahub.data.mission.MissionSnapshotStore
 import me.rerere.rikkahub.data.mission.MissionTaskState
+import me.rerere.rikkahub.data.mission.MissionTimeBudget
 import me.rerere.rikkahub.data.mission.acceptanceCriteria
+import me.rerere.rikkahub.data.mission.limits
 import me.rerere.rikkahub.data.mission.statusEnum
 import me.rerere.rikkahub.data.mission.workspaceIdOrNull
 import me.rerere.rikkahub.data.runevent.RunEventRepository
@@ -23,7 +26,7 @@ import kotlin.uuid.Uuid
 private const val CREATE_KICKOFF =
     "现在开始执行这个任务：先给出简短计划，然后立即动手。产出放进工作区。"
 
-/** Wall-clock cap for every mission round; retry/continue decisions belong to the supervisor. */
+/** Wall-clock fallback for a mission round when the mission carries no usable limit. */
 private const val LAUNCH_TIMEOUT_MS: Long = 30L * 60_000L
 
 /** Where a launch originated — the wish-style first run ("Create") or a supervisor continuation. */
@@ -103,6 +106,18 @@ class MissionLauncher(
     private val snapshotStore: MissionSnapshotStore? = null,
     /** 批 F — 把工作区 id 解析成 FILES 区目录（快照拷贝的源）；null = 不快照。 */
     private val workspaceFiles: MissionWorkspaceFiles? = null,
+    /**
+     * 批 H — 时钟注入。截止时间、收尾窗口、单轮超时全都要「现在几点」；测试钉住时间点，
+     * 生产用系统时钟。
+     */
+    private val now: () -> Long = { System.currentTimeMillis() },
+    /**
+     * 批 H — 轮次开始时点亮任务前台服务（DI 接 [MissionForegroundService.start]）。
+     *
+     * 用回调而不是直接依赖 Service：launcher 是纯逻辑层，JVM 测试没有 Context，
+     * 也不能拉起前台服务。默认空实现让所有旧构造点行为不变。
+     */
+    private val onRoundStarted: (missionId: String, label: String) -> Unit = { _, _ -> },
 ) {
 
     /** Launch (or continue) mission [missionId]; see the class KDoc for the full dance. */
@@ -140,6 +155,34 @@ class MissionLauncher(
                 mission.description,
                 mission.acceptanceCriteria,
             )
+            // 批 H — 时间预算：到点不启动、接近截止进收尾轮。判断放在 launcher 而不是督导，
+            // 因为 Trigger（定时/事件唤醒）也可能绕过督导直接起轮。
+            val limits = mission.limits
+            val timePlan = MissionTimeBudget.plan(
+                limits = limits,
+                now = now(),
+                defaultTimeoutMs = LAUNCH_TIMEOUT_MS,
+            )
+            if (timePlan.expired) {
+                runCatching {
+                    runEventRepository.emit(
+                        type = RunEventType.NOTE,
+                        title = DEADLINE_TITLE,
+                        detail = MissionTimeBudget.expiredReason(limits),
+                        missionId = missionId,
+                    )
+                }
+                return LaunchOutcome(
+                    ok = false,
+                    error = "${MissionTimeBudget.expiredReason(limits)}，未启动新一轮",
+                )
+            }
+            val acceptanceBlock = AcceptanceCheckSpec.composePromptBlock(limits.acceptanceChecks)
+            val wrapUpBlock = if (timePlan.wrapUp && timePlan.remainingMs != null) {
+                MissionTimeBudget.wrapUpDirective(timePlan.remainingMs)
+            } else {
+                ""
+            }
             // 批 F — 跨轮状态：每轮都注入。读不到就退化成「先建档」的指令，绝不让一轮任务因为
             // 状态文件缺失而失败。
             val stateText = mission.workspaceIdOrNull?.let { workspaceId ->
@@ -147,12 +190,21 @@ class MissionLauncher(
             }
             val stateBlock = stateSource?.let { MissionTaskState.composeBlock(stateText) }.orEmpty()
             val prompt = when (source) {
-                LaunchSource.Create -> joinBlocks(directive, missionWorkflowBlock(mission), stateBlock, CREATE_KICKOFF)
+                LaunchSource.Create -> joinBlocks(
+                    directive,
+                    acceptanceBlock,
+                    missionWorkflowBlock(mission),
+                    stateBlock,
+                    wrapUpBlock,
+                    CREATE_KICKOFF,
+                )
                 is LaunchSource.Trigger ->
                     joinBlocks(
                         directive,
+                        acceptanceBlock,
                         missionWorkflowBlock(mission),
                         stateBlock,
+                        wrapUpBlock,
                         "[系统] 本任务的开始方式被触发（${source.label}）。" +
                             "现在开始执行本轮任务：先给简短计划，然后立即动手；完成后调用 mission_report(done)。",
                     )
@@ -162,7 +214,13 @@ class MissionLauncher(
                             ok = false,
                             error = "Continue refused: continuePrompt is required",
                         )
-                    joinBlocks(missionWorkflowContinueHint(mission), continueText, stateBlock)
+                    joinBlocks(
+                        missionWorkflowContinueHint(mission),
+                        acceptanceBlock,
+                        continueText,
+                        stateBlock,
+                        wrapUpBlock,
+                    )
                 }
             }
 
@@ -201,7 +259,7 @@ class MissionLauncher(
                     missionId = missionId,
                     conversationId = conversationUuid,
                     headless = headless,
-                    timeoutMs = LAUNCH_TIMEOUT_MS,
+                    timeoutMs = timePlan.timeoutMs,
                 )
             )
 
@@ -239,6 +297,29 @@ class MissionLauncher(
                     conversationId = handle.conversationId.toString(),
                     runId = handle.id,
                 )
+            }
+            // 批 H — 收尾轮留痕：时间线上能看出「这轮是被截止时间逼出来的」，而不是模型自己
+            // 决定收工。detail 里带剩余时间，复盘时能算清是收尾太早还是太晚。
+            if (timePlan.wrapUp && timePlan.remainingMs != null) {
+                runCatching {
+                    runEventRepository.emit(
+                        type = RunEventType.NOTE,
+                        title = WRAP_UP_TITLE,
+                        detail = "收尾轮 · 剩余 ${MissionTimeBudget.formatRemaining(timePlan.remainingMs)}",
+                        missionId = missionId,
+                        conversationId = handle.conversationId.toString(),
+                        runId = handle.id,
+                    )
+                }
+            }
+            // 批 H — 点亮任务前台服务：从这里开始到任务收尾，进程不该被厂商省电策略回收。
+            runCatching {
+                val roundLabel = when (source) {
+                    LaunchSource.Create -> "启动"
+                    is LaunchSource.Continue -> "第 ${source.round} 轮"
+                    is LaunchSource.Trigger -> source.label
+                }
+                onRoundStarted(missionId, "${mission.title} · $roundLabel")
             }
             // 批 F — 记下本轮开跑时的状态指纹，督导用它判断这一轮到底有没有更新 task-state.md。
             runCatching {
@@ -356,5 +437,11 @@ class MissionLauncher(
 
         /** 本轮开跑时 task-state.md 的指纹；督导用它对比轮末状态。 */
         const val STATE_HASH_TITLE: String = "state_hash"
+
+        /** 批 H — 到截止时间、被拒绝启动时的 journal 标题。 */
+        const val DEADLINE_TITLE: String = "deadline"
+
+        /** 批 H — 收尾轮的 journal 标题。 */
+        const val WRAP_UP_TITLE: String = "wrap_up"
     }
 }

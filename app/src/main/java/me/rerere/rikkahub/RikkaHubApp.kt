@@ -58,6 +58,7 @@ const val CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID = "chat_completed"
 const val CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID = "chat_live_update"
 const val WEB_SERVER_NOTIFICATION_CHANNEL_ID = "web_server"
 const val FLOATING_BALL_NOTIFICATION_CHANNEL_ID = "floating_ball"
+const val MISSION_ACTIVE_NOTIFICATION_CHANNEL_ID = "mission_active"
 
 /**
  * How long a spilled tool result stays readable.
@@ -348,6 +349,9 @@ class RikkaHubApp : Application() {
      * [runAgentRunBootRecovery].
      */
     private fun runMissionSupervisor() {
+        // 批 H — 先把看门狗排上：即使这次启动之后进程被杀，系统也会在 15 分钟内把我们叫起来
+        // 扫一遍中断的任务。放在 coroutine 外面，避免 AppScope 还没跑起来时漏掉。
+        me.rerere.rikkahub.service.mission.MissionWatchdogWorker.enqueue(this)
         get<AppScope>().launch(Dispatchers.IO) {
             runCatching {
                 val supervisor = get<me.rerere.rikkahub.service.mission.MissionSupervisor>()
@@ -657,6 +661,19 @@ class RikkaHubApp : Application() {
             .setVibrationEnabled(false)
             .build()
         notificationManager.createNotificationChannel(chatLiveUpdateChannel)
+
+        // 批 H — 任务运行的常驻通知。与 chat live-update 同属「低打扰」，但单独一个频道：
+        // 用户想关掉「任务在跑」的常驻条时，不该顺手把聊天生成的保活也关掉。
+        val missionActiveChannel = NotificationChannelCompat
+            .Builder(
+                MISSION_ACTIVE_NOTIFICATION_CHANNEL_ID,
+                NotificationManagerCompat.IMPORTANCE_LOW
+            )
+            .setName(getString(R.string.notification_channel_mission_active))
+            .setVibrationEnabled(false)
+            .setShowBadge(false)
+            .build()
+        notificationManager.createNotificationChannel(missionActiveChannel)
 
         val webServerChannel = NotificationChannelCompat
             .Builder(WEB_SERVER_NOTIFICATION_CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_LOW)

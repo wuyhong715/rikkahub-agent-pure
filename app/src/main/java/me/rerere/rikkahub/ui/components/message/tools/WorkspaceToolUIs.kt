@@ -209,10 +209,48 @@ object WriteFileToolUI : ToolUIRenderer {
     private fun textOf(context: ToolUIContext): String? =
         context.arguments.getStringContent("text")
 
-    override fun hasSummary(context: ToolUIContext): Boolean = textOf(context) != null
+    /**
+     * 批 H — 覆盖写也会带全文件 diff（metadata）。新建文件没有旧版本，diff 为 null，
+     * 此时退回「内容摘要」视图。
+     */
+    private fun diffOf(context: ToolUIContext): String? =
+        if (context.tool.isExecuted) {
+            context.tool.output.firstOrNull()?.metadataAs<DiffMetadata>()?.diff
+        } else {
+            null
+        }
+
+    override fun hasSummary(context: ToolUIContext): Boolean =
+        diffOf(context) != null || textOf(context) != null
 
     @Composable
     override fun Summary(context: ToolUIContext) {
+        val diff = remember(context) { diffOf(context) }
+        if (diff != null) {
+            val stats = remember(diff) { parseDiffStats(diff) }
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "+${stats.additions}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = DiffAddedColor,
+                    )
+                    Text(
+                        text = "-${stats.deletions}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = DiffRemovedColor,
+                    )
+                }
+                DiffView(
+                    diff = diff,
+                    modifier = Modifier.fillMaxWidth(),
+                    // 文件级常量，与「文件内容摘要」共用同一个行数上限。
+                    maxLines = FILE_SUMMARY_MAX_LINES,
+                    showFileHeader = false,
+                )
+            }
+            return
+        }
         val text = remember(context) { textOf(context) } ?: return
         FileContentSummary(
             text = text,
@@ -223,6 +261,29 @@ object WriteFileToolUI : ToolUIRenderer {
 
     @Composable
     override fun Preview(context: ToolUIContext, onDismissRequest: () -> Unit) {
+        val diff = remember(context) { diffOf(context) }
+        if (diff != null) {
+            Column(
+                modifier = Modifier
+                    .fillMaxHeight(0.8f)
+                    .padding(16.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = context.arguments.getStringContent("path") ?: toolName,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                DiffView(
+                    diff = diff,
+                    modifier = Modifier.fillMaxWidth(),
+                    showFileHeader = false,
+                )
+            }
+            return
+        }
         val text = remember(context) { textOf(context) }
         if (text == null) {
             DefaultToolPreview(context = context)

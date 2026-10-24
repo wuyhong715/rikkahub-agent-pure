@@ -215,9 +215,41 @@ data class MissionLimits(
      * 存进这个 JSON 列是刻意的：加字段不迁移 schema，旧任务读出来就是空列表。
      */
     val hooks: List<MissionHook> = emptyList(),
+    /**
+     * 批 H — 每一轮（一次 run）的墙钟上限，分钟。
+     *
+     * 此前是 `MissionLauncher` 里的 30 分钟常量，长任务没法按任务类型调整：调研类适合短轮次
+     * 多衔接，写代码适合一轮跑久一点。夹在 [MissionTimeBudget.MIN_ROUND_MIN]–[MAX_ROUND_MIN]
+     * 之间；无截止时间的任务用它当单轮上限，有截止时间的任务取它与剩余时间的较小值。
+     */
+    val roundTimeoutMinutes: Int = MissionTimeBudget.DEFAULT_ROUND_MIN,
+    /**
+     * 批 H — 任务截止时间（epoch millis）。null = 不限时。
+     *
+     * 到达之后：正在跑的一轮不再续跑，督导把任务 park 到 REVIEW 并把剩余产物/状态交给用户；
+     * 截止前 [wrapUpMinutes] 分钟内启动的一轮被标记为「收尾轮」，提示词要求只做总结与交付，
+     * 不再开新战线。这是把「跑 8 小时」从愿望变成可控承诺的那一半。
+     */
+    val deadlineAt: Long? = null,
+    /**
+     * 批 H — 截止前多少分钟进入收尾轮。0 表示不设收尾窗口（到点硬停）。
+     */
+    val wrapUpMinutes: Int = MissionTimeBudget.DEFAULT_WRAPUP_MIN,
+    /**
+     * 批 H — 结构化验收条件（[AcceptanceCheck]）。空列表 = 沿用批 A 的字符串验收（模型自评）。
+     *
+     * 与 [hooks] 同在 limits_json 里，同样不触碰 schema。有结构化验收时，
+     * `mission_report(done)` 先过验收判定：全部通过才落 DONE，否则把未通过项当返工要求。
+     */
+    val acceptanceChecks: List<AcceptanceCheck> = emptyList(),
 ) {
-    /** 只保留可执行的 hook（丢掉空白命令、越界超时），写库前统一走这里。 */
-    fun sanitized(): MissionLimits = copy(hooks = MissionHookSpec.sanitize(hooks))
+    /** 只保留可执行的 hook / 验收项（丢掉空命令、越界超时、空目标），写库前统一走这里。 */
+    fun sanitized(): MissionLimits = copy(
+        hooks = MissionHookSpec.sanitize(hooks),
+        roundTimeoutMinutes = MissionTimeBudget.clampRoundMinutes(roundTimeoutMinutes),
+        wrapUpMinutes = MissionTimeBudget.clampWrapUpMinutes(wrapUpMinutes),
+        acceptanceChecks = AcceptanceCheckSpec.sanitize(acceptanceChecks),
+    )
 }
 
 /** Decode [MissionEntity.limitsJson]; null / blank / malformed → balanced defaults. */

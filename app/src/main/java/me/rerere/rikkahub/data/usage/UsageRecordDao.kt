@@ -49,6 +49,26 @@ interface UsageRecordDao {
     suspend fun tokensForConversation(conversationId: String): Long
 
     /**
+     * 批 H — 净消耗：命中缓存的输入 token 不计入任务预算。
+     *
+     * 原来的 [tokensForConversation] 把每一步重发的整段上下文都算一次「消耗」，于是一个
+     * 90 步的任务在第一轮就把 500k 预算烧光——而它真正新增的工作量可能只有十分之一。
+     * 缓存命中部分按折扣计费，甚至免费（视供应商而定），把它算满额等于惩罚「长任务本来就
+     * 需要长上下文」这件事，任务系统因此永远跑不到 8 小时。
+     *
+     * 只对**明确上报过缓存字段**的行做扣减（`cached_tokens_reported = 1`）：没上报的供应商
+     * 里 `cached_tokens` 恒为 0，不能当作「没有缓存」也不能当作「全命中」。
+     * 输出 token 全额计入——它是真正的新工作。
+     */
+    @Query(
+        "SELECT COALESCE(SUM(CASE WHEN cached_tokens_reported = 1 " +
+            "THEN MAX(input_tokens - cached_tokens, 0) ELSE input_tokens END), 0) " +
+            "+ COALESCE(SUM(output_tokens), 0) " +
+            "FROM usage_records WHERE conversation_id = :conversationId"
+    )
+    suspend fun billableTokensForConversation(conversationId: String): Long
+
+    /**
      * P2-12b — every row for one conversation, oldest first, for the turn view. Bounded by
      * [UsageLedgerDefaults.QUERY_LIMIT] so a long conversation cannot load an unbounded list.
      */

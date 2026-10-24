@@ -340,23 +340,34 @@ val dataSourceModule = module {
         )
     }
     // 批 F — 检查命令（hook）：在任务工作区的 shell 里跑，与模型自己的 shell 工具同一环境。
-    single {
+    // 批 H — shell 出口独立成 single：验收判定（MissionAcceptanceVerifier）与 hook 共用同一个
+    // 执行环境，避免「模型看到的世界」和「验收看到的世界」出现两套。
+    single<me.rerere.rikkahub.service.mission.MissionHookShell> {
         val ws = get<me.rerere.rikkahub.data.repository.WorkspaceRepository>()
+        me.rerere.rikkahub.service.mission.MissionHookShell { workspaceId, command, timeoutMs ->
+            val result = ws.executeCommand(workspaceId, command, timeoutMillis = timeoutMs)
+            me.rerere.rikkahub.service.mission.HookResult(
+                exitCode = result.exitCode,
+                stdout = result.stdout,
+                stderr = result.stderr,
+                timedOut = result.timedOut,
+            )
+        }
+    }
+    single {
         me.rerere.rikkahub.service.mission.MissionHookExecutor(
-            shell = me.rerere.rikkahub.service.mission.MissionHookShell { workspaceId, command, timeoutMs ->
-                val result = ws.executeCommand(workspaceId, command, timeoutMillis = timeoutMs)
-                me.rerere.rikkahub.service.mission.HookResult(
-                    exitCode = result.exitCode,
-                    stdout = result.stdout,
-                    stderr = result.stderr,
-                    timedOut = result.timedOut,
-                )
-            },
+            shell = get<me.rerere.rikkahub.service.mission.MissionHookShell>(),
+        )
+    }
+    single {
+        me.rerere.rikkahub.service.mission.MissionAcceptanceVerifier(
+            shell = get<me.rerere.rikkahub.service.mission.MissionHookShell>(),
         )
     }
     single {
         val settingsStore = get<SettingsStore>()
         val workspaceRepository = get<me.rerere.rikkahub.data.repository.WorkspaceRepository>()
+        val appContext = get<Context>()
         me.rerere.rikkahub.service.mission.MissionLauncher(
             missionRepository = get(),
             runService = get(),
@@ -400,6 +411,11 @@ val dataSourceModule = module {
             snapshotStore = get(),
             workspaceFiles = me.rerere.rikkahub.service.mission.MissionWorkspaceFiles { workspaceId ->
                 runCatching { workspaceRepository.filesDir(workspaceId) }.getOrNull()
+            },
+            // 批 H — 每轮开跑点亮任务前台服务（轮与轮之间的空窗也要有前台保护）。
+            onRoundStarted = { missionId, label ->
+                me.rerere.rikkahub.service.mission.MissionForegroundService
+                    .start(appContext, missionId, label)
             },
         )
     }
@@ -475,7 +491,11 @@ val dataSourceModule = module {
             appScope = get<AppScope>(),
             // Token breaker: everything billed under the mission's execution conversation.
             // The probe is a suspend lambda, so it runs on the supervisor's coroutine.
-            tokenProbe = { conversationId -> usageRecordDao.tokensForConversation(conversationId) },
+            tokenProbe = { conversationId ->
+                // 批 H — 净消耗语义：缓存命中的输入 token 不算任务预算（见
+                // UsageRecordDao.billableTokensForConversation 的注释）。
+                usageRecordDao.billableTokensForConversation(conversationId)
+            },
             // 批 F — 检查命令 + 状态文件对比。
             hookExecutor = get(),
             stateSource = me.rerere.rikkahub.service.mission.MissionStateSource { workspaceId ->
@@ -485,6 +505,13 @@ val dataSourceModule = module {
                         me.rerere.rikkahub.data.mission.MissionTaskState.PATH,
                     )
                 }.getOrNull()
+            },
+            // 批 H — 完成前先跑结构化验收（机器判定），再走检查命令。
+            acceptanceVerifier = get(),
+            // 批 H — 任务收尾时摘掉自己的前台服务登记。
+            onMissionIdle = { missionId ->
+                me.rerere.rikkahub.service.mission.MissionForegroundService
+                    .stop(appContext, missionId)
             },
         )
     }

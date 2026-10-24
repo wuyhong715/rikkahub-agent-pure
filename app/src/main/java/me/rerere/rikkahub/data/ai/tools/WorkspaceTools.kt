@@ -142,8 +142,23 @@ private fun createWriteFileTool(
         val path = params.absolutePath("path")
         val text = params.string("text") ?: error("text is required")
         val overwrite = params["overwrite"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull() ?: true
+        // 批 H — 覆盖写留 diff（新建文件没有旧版本，diff 为 null）。读旧内容失败不阻断写入：
+        // 一个读不出来的旧文件不该让「保存」这件事失败。
+        val previous = if (overwrite) {
+            runCatching { workspaceRepository.readTextInRootfs(workspaceId, path) }.getOrNull()
+        } else {
+            null
+        }
         val entry = workspaceRepository.writeTextInRootfs(workspaceId, path, text, overwrite)
-        listOf(UIMessagePart.Text(entry.toJson().toString()))
+        val diff = previous?.let { old ->
+            runCatching { generateUnifiedDiff(old, text, entry.path) }.getOrNull()
+        }
+        listOf(
+            UIMessagePart.Text(
+                text = entry.toJson().toString(),
+                metadata = diff?.let { DiffMetadata(diff = it).toMetadata() },
+            )
+        )
     },
 )
 

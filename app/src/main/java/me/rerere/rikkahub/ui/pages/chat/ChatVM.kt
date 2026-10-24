@@ -299,6 +299,17 @@ class ChatVM(
     fun handleMessageSend(content: List<UIMessagePart>,answer: Boolean = true) {
         if (content.isEmptyInputMessage()) return
 
+        // 批 H — 任务运行中发消息 = 插话：直接送进本轮下一个模型请求，而不是排到队尾等这一轮
+        // 跑完。只处理纯文本（带图片/文件的消息语义复杂，仍按普通排队走）。
+        val plainText = content
+            .takeIf { parts -> parts.all { it is UIMessagePart.Text } }
+            ?.joinToString("\n") { (it as UIMessagePart.Text).text }
+            ?.trim()
+            .orEmpty()
+        if (answer && plainText.isNotEmpty() && chatService.steer(_conversationId, plainText)) {
+            return
+        }
+
         chatService.sendMessage(_conversationId, content, answer)
     }
 
