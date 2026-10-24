@@ -48,7 +48,6 @@ import me.rerere.ai.ui.ToolApprovalState
 import me.rerere.ai.ui.StreamChunk
 import me.rerere.ai.ui.StreamChunkHandler
 import me.rerere.ai.ui.handleTextGenerationResult
-import me.rerere.ai.ui.limitContext
 import me.rerere.ai.util.HttpException
 import me.rerere.ai.util.redactSecrets
 import me.rerere.rikkahub.data.repository.ConversationRepository
@@ -64,6 +63,7 @@ import me.rerere.rikkahub.data.ai.transformers.visualTransforms
 import me.rerere.rikkahub.data.ai.limits.ToolRuntimeLimits
 import me.rerere.rikkahub.data.ai.tools.ToolExecutionRetryPolicy
 import me.rerere.rikkahub.data.ai.tools.buildMemoryTools
+import me.rerere.rikkahub.data.ai.tools.ToolOutputNames
 import me.rerere.rikkahub.data.ai.tools.truncateToolResult
 import me.rerere.rikkahub.data.datastore.NetworkSetting
 import me.rerere.rikkahub.data.datastore.Settings
@@ -1609,7 +1609,7 @@ class GenerationLoop(
             // upstream's isSynthetic marker (keeps this built-up system prompt out of
             // TemplateTransformer) and its stepped truncation (which now preserves
             // prompt caching instead of trimming one message at a time).
-            addAll(messages.limitContext(assistant.contextMessageLimit).ageOldToolImages())
+            addAll(messages.limitContextPreservingLeadingSynthetic(assistant.contextMessageLimit).ageOldToolImages())
             // Cross-model continuation: when the previous model's generation failed
             // mid-stream and routing switched to this model, append a synthetic user
             // instruction so the new model continues from the partial assistant text
@@ -2058,7 +2058,7 @@ class GenerationLoop(
         val fullText = textParts.joinToString("\n") { it.text }
         val preview = fullText.take(TOOL_OUTPUT_PREVIEW_CHARS)
 
-        val fileName = "${toolCallId}.txt"
+        val fileName = ToolOutputNames.fileNameFor(toolCallId)
         val outputDir = File(context.filesDir, FileFolders.TOOL_OUTPUTS).apply { mkdirs() }
         File(outputDir, fileName).writeText(fullText)
 
@@ -2082,7 +2082,7 @@ class GenerationLoop(
      * without a spill — losing the tail of a log must never fail the tool call itself.
      */
     private fun spillToolOutput(toolCallId: String, fullText: String): String? = runCatching {
-        val fileName = "${toolCallId}.txt"
+        val fileName = ToolOutputNames.fileNameFor(toolCallId)
         val outputDir = File(context.filesDir, FileFolders.TOOL_OUTPUTS).apply { mkdirs() }
         File(outputDir, fileName).writeText(fullText)
         fileName
