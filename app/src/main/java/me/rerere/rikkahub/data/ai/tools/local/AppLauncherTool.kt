@@ -130,7 +130,7 @@ fun launchAppTool(
             } else {
                 AgentTurnTracker.recordNavigatedAway(pkg)
                 AgentTurnTracker.touchPackage(pkg)
-                AutomationRecorder.recordEntry(pkg, "launch_app")
+                AutomationRecorder.recordEntry(pkg, "launch_app", scope = invocationContext.callerConversationId)
                 // Screen-automation experience memory: surface this app's stored playbook (or a
                 // one-line nudge to write one) right where an app task begins, so the agent
                 // starts from what worked last time. No-op when cold memory is not configured.
@@ -413,7 +413,7 @@ fun openUrlTool(
             AgentTurnTracker.recordNavigatedAway(handlerPkg)
             if (!handlerPkg.isNullOrBlank()) {
                 AgentTurnTracker.touchPackage(handlerPkg)
-                AutomationRecorder.recordEntry(handlerPkg, "open_url")
+                AutomationRecorder.recordEntry(handlerPkg, "open_url", scope = invocationContext.callerConversationId)
             }
             listOf(
                 UIMessagePart.Text(
@@ -626,7 +626,7 @@ fun launchActivityTool(
             val finalForeground: String? = if (accessibilityRunning && !keyLocked) {
                 waitForForegroundPackage(pkg)
             } else null
-            AutomationRecorder.recordEntry(pkg, "launch_activity")
+            AutomationRecorder.recordEntry(pkg, "launch_activity", scope = invocationContext.callerConversationId)
             listOf(
                 UIMessagePart.Text(
                     buildJsonObject {

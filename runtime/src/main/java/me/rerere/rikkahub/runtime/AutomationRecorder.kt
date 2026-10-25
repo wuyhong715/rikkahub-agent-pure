@@ -36,14 +36,31 @@ object AutomationRecorder {
 
     private val logs = java.util.concurrent.ConcurrentHashMap<String, Log>()
 
-    /** Drops everything. Called at the start of a generation, alongside AgentTurnTracker.reset(). */
-    fun reset() {
-        logs.clear()
+    /**
+     * 键是「会话 + 应用」：观测必须跟着产生它的那个会话走。
+     *
+     * 只按包名存时，两个并行会话（用户聊天 + 子代理/任务轮次）会写进同一个桶：先结束的那一方
+     * `drain()` 会把另一方还没 flush 的观测一起拿走，再写进自己的工作区。
+     * `scope == null` 保留给没有会话上下文的调用方（测试、旧路径），落进全局桶。
+     */
+    private fun keyOf(scope: String?, packageName: String): String =
+        scope.orEmpty() + '\u0000' + packageName
+
+    private fun packageOf(key: String): String = key.substringAfter('\u0000')
+
+    /** 丢掉某个会话的观测（null = 全部）。生成开始时调，与 AgentTurnTracker.reset() 同步。 */
+    fun reset(scope: String? = null) {
+        if (scope == null) {
+            logs.clear()
+            return
+        }
+        val prefix = scope + '\u0000'
+        logs.keys.filter { it.startsWith(prefix) }.forEach { logs.remove(it) }
     }
 
-    private fun add(packageName: String, line: String) {
+    private fun add(scope: String?, packageName: String, line: String) {
         if (packageName.isBlank()) return
-        val log = logs.computeIfAbsent(packageName) { Log() }
+        val log = logs.computeIfAbsent(keyOf(scope, packageName)) { Log() }
         synchronized(log) {
             log.lines.add(line)
             while (log.lines.size > MAX_LINES_PER_PACKAGE) {
@@ -54,8 +71,8 @@ object AutomationRecorder {
     }
 
     /** Records how an app was entered: `launch_app`, `launch_activity`, `open_url`. */
-    fun recordEntry(packageName: String, via: String) {
-        add(packageName, "- 入口 $via")
+    fun recordEntry(packageName: String, via: String, scope: String? = null) {
+        add(scope, packageName, "- 入口 $via")
     }
 
     /**
@@ -69,10 +86,11 @@ object AutomationRecorder {
         action: String,
         selector: String?,
         ok: Boolean,
+        scope: String? = null,
     ) {
         val where = screen?.substringAfterLast('.')?.takeIf { it.isNotBlank() } ?: "?"
         val what = if (selector.isNullOrBlank()) action else "$action $selector"
-        add(packageName, "- $where｜$what｜${if (ok) "ok" else "miss"}")
+        add(scope, packageName, "- $where｜$what｜${if (ok) "ok" else "miss"}")
     }
 
     /** A compact label for a `by` + `value` selector, or null when there is nothing to record. */
@@ -97,13 +115,19 @@ object AutomationRecorder {
     private fun clip(value: String): String =
         value.replace('\n', ' ').replace('\r', ' ').trim().take(MAX_VALUE_CHARS)
 
-    /** Returns every app observed this turn and clears the recorder, so a flush cannot repeat. */
-    fun drain(): List<Snapshot> {
-        val snapshot = logs.entries.mapNotNull { (packageName, log) ->
+    /**
+     * 取走某个会话（null = 全部）观测到的应用并清除，保证一次 flush 不会重复写。
+     *
+     * 只取自己的那一份：以前任何一方 flush 都把整个进程的观测取走，别人的轮次就再也拿不到。
+     */
+    fun drain(scope: String? = null): List<Snapshot> {
+        val prefix = scope?.let { it + '\u0000' }
+        val selected = logs.entries.filter { prefix == null || it.key.startsWith(prefix) }
+        val snapshot = selected.mapNotNull { (key, log) ->
             val lines = synchronized(log) { log.lines.toList() }
-            if (lines.isEmpty()) null else Snapshot(packageName, lines)
+            if (lines.isEmpty()) null else Snapshot(packageOf(key), lines)
         }
-        logs.clear()
+        selected.forEach { logs.remove(it.key) }
         return snapshot
     }
 }
