@@ -64,9 +64,15 @@ class SkillUrlImporterTest {
         assertTrue(importer.isLoopback("[0:0:0:0:0:0:0:1]"))
     }
 
-    @Test fun `isLoopback does not over-match`() {
-        for (host in listOf("example.com", "127.example.com", "192.168.1.1", "10.0.0.1")) {
-            assertFalse("expected non-loopback for $host", importer.isLoopback(host))
+    @Test fun `isLoopback refuses every non-routable range, not just loopback`() {
+        // The name is historical: this is the egress check, and loopback alone let `skill_install`
+        // reach 169.254.169.254 (cloud metadata), the whole LAN (10/8, 172.16/12, 192.168/16),
+        // CGNAT and IPv6 unique-local.
+        for (host in listOf("127.0.0.1", "localhost", "10.0.0.1", "192.168.1.1", "169.254.169.254")) {
+            assertTrue("expected $host to be refused", importer.isLoopback(host))
+        }
+        for (host in listOf("example.com", "127.example.com")) {
+            assertFalse("expected $host to be allowed", importer.isLoopback(host))
         }
     }
 

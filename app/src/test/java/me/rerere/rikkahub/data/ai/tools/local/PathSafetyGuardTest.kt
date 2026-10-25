@@ -22,8 +22,20 @@ class PathSafetyGuardTest {
         assertNull(PathSafetyGuard.check("/data/data/${BuildConfig.APPLICATION_ID}/files/prefs.json"))
     }
 
-    @Test fun `own debug app data path is allowed`() {
-        assertNull(PathSafetyGuard.check("/data/data/${BuildConfig.APPLICATION_ID}/cache/tmp.bin"))
+    @Test fun `our own cache and datastore are blocked`() {
+        // The file tools run without approval, and these two hold the plaintext provider keys
+        // (datastore/) and decoded payloads (cache/). BrowserTools and JsSkillRunner already fence
+        // them off from prompt injection; a direct read_file must not be the way around it.
+        assertNotNull(PathSafetyGuard.check("/data/data/${BuildConfig.APPLICATION_ID}/cache/tmp.bin"))
+        assertNotNull(
+            PathSafetyGuard.check("/data/data/${BuildConfig.APPLICATION_ID}/files/datastore/settings.preferences_pb"),
+        )
+        assertNotNull(
+            PathSafetyGuard.check("/data/data/${BuildConfig.APPLICATION_ID}/databases/rikkahub.db"),
+        )
+        // The workspace and the media folders keep working.
+        assertNull(PathSafetyGuard.check("/data/data/${BuildConfig.APPLICATION_ID}/files/agent_workspace/notes.md"))
+        assertNull(PathSafetyGuard.check("/data/data/${BuildConfig.APPLICATION_ID}/files/upload/x.png"))
     }
 
     @Test fun `external files dir is allowed`() {
@@ -79,13 +91,10 @@ class PathSafetyGuardTest {
     @Test fun `data data root itself is blocked`() {
         // /data/data (no package suffix) — treated as another-app path
         val v = PathSafetyGuard.check("/data/data")
-        // /data/data does NOT start with our own app prefix and it starts with /data/data/
-        // but "/data/data" itself does not start with "/data/data/". Allow or block:
-        // Our guard checks startsWith("/data/data/"), so "/data/data" itself falls through
-        // the prefix filter. This is a benign edge case — listing /data/data would fail at
-        // the OS level anyway. We assert null (allowed) rather than blocked.
-        // If the guard becomes stricter we can update this test.
-        assertNull(v)
+        // The guard now matches the sandbox roots themselves as well as their descendants, so
+        // listing /data/user/* / /data/user_de/* is refused too (before, the check keyed on
+        // "/data/data/" only — a path that a canonical path never has).
+        assertNotNull(v)
     }
 
     // ---- empty / null ----
