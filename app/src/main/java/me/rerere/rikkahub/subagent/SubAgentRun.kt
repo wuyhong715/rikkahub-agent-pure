@@ -11,6 +11,30 @@ import kotlinx.serialization.Serializable
  * The run is FROZEN once it reaches a terminal status. Mutations are done by replacing
  * the entry in the registry's StateFlow rather than mutating in place.
  */
+/**
+ * Whether [callerChatId] may read, resume or cancel this run.
+ *
+ * A sub-agent id is a bare string in every tool call, so the id alone cannot be the credential:
+ * without this check any conversation (including one the user never opened) could list another
+ * conversation's sub-agents, cancel them, or `subagent_send` a follow-up that spends tokens on
+ * someone else's run. Two conversations may touch a run:
+ *
+ *  - the one that dispatched it ([parentChatId]), and
+ *  - the root of its dispatch tree ([rootChatId]) — the user's own chat, which started the chain
+ *    and is the one place a `/stop` or a "cancel my children" belongs.
+ *
+ * A null caller chat (no conversation context at all) never matches: failing closed is the whole
+ * point of this function.
+ */
+fun SubAgentRun.isOwnedBy(callerChatId: String?): Boolean {
+    if (callerChatId.isNullOrBlank()) return false
+    return parentChatId == callerChatId || rootChatId == callerChatId
+}
+
+/** True while this run is still occupying a slot (queued or actually generating). */
+val SubAgentRun.isActive: Boolean
+    get() = status == SubAgentStatus.PENDING || status == SubAgentStatus.RUNNING
+
 @Serializable
 data class SubAgentRun(
     val id: String,

@@ -478,7 +478,12 @@ fun subagentListTool(
                     "kind must be one of \"$KIND_RUNS\", \"$KIND_EXPERTS\" or \"$KIND_ALL\"; got \"$kind\"",
                 )
             }
-            val runsJson = if (kind != KIND_EXPERTS) encodeRuns(registry.list(activeOnly)) else null
+            // Only this conversation's own runs. A bare `subagent_list` used to return every run in
+            // the process — ids, labels, tasks and results of chats the user never opened, which is
+            // both a leak and the way a model discovers ids to cancel or resume.
+            val visibleRuns = registry.list(activeOnly)
+                .filter { it.isOwnedBy(callerContext.callerConversationId) }
+            val runsJson = if (kind != KIND_EXPERTS) encodeRuns(visibleRuns) else null
             val expertsJson = if (kind != KIND_RUNS) encodeDefinitions(definitions) else null
             listOf(UIMessagePart.Text(buildJsonObject {
                 if (runsJson != null) put("runs", runsJson)
@@ -513,6 +518,9 @@ fun subagentGetTool(registry: SubAgentRegistry): Tool = Tool(
         registry.ensureHydrated()
         val run = registry.get(id) ?: SubAgentRunPersistence.load(id)
             ?: return@Tool errEnv("unknown_id", "no sub-agent run with id $id")
+        if (!run.isOwnedBy(callerContext.callerConversationId)) {
+            return@Tool errEnv("not_your_run", "run $id was not dispatched from this conversation")
+        }
         listOf(UIMessagePart.Text(encodeRun(run).toString()))
     },
 )
@@ -535,6 +543,12 @@ fun subagentCancelTool(registry: SubAgentRegistry): Tool = Tool(
     execute = { args ->
         val id = args.jsonObject["id"]?.jsonPrimitive?.contentOrNull
             ?: return@Tool errEnv("invalid_id", "id is required")
+        registry.ensureHydrated()
+        val run = registry.get(id) ?: SubAgentRunPersistence.load(id)
+            ?: return@Tool errEnv("unknown_id", "no sub-agent run with id $id")
+        if (!run.isOwnedBy(callerContext.callerConversationId)) {
+            return@Tool errEnv("not_your_run", "run $id was not dispatched from this conversation")
+        }
         val cancelled = registry.requestCancel(id)
         if (cancelled) {
             registry.update(id) { it.copy(status = SubAgentStatus.CANCELLED, finishedAtMs = System.currentTimeMillis()) }
@@ -599,12 +613,6 @@ fun subagentSendTool(
     },
     needsApproval = { true },
     execute = { args ->
-        if (callerContext.isHeadless) {
-            return@Tool errEnv(
-                "no_recursion",
-                "sub-agent dispatch is not allowed from inside a headless run. Run the work inline instead.",
-            )
-        }
         val params = args.jsonObject
         val runId = params["run_id"]?.jsonPrimitive?.contentOrNull?.trim()
             ?: return@Tool errEnv("invalid_run_id", "run_id is required")
@@ -696,12 +704,6 @@ fun subagentFanoutTool(
     },
     needsApproval = { true },
     execute = { args ->
-        if (callerContext.isHeadless) {
-            return@Tool errEnv(
-                "no_recursion",
-                "sub-agent dispatch is not allowed from inside a headless run. Run the work inline instead.",
-            )
-        }
         val params = args.jsonObject
         val runInBackground = params["run_in_background"]?.jsonPrimitive?.booleanOrNull ?: false
         val plan = SubAgentFanoutRules.plan(

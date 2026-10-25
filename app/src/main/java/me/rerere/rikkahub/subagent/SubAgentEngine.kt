@@ -147,6 +147,12 @@ class SubAgentEngine(
     private val ledgerIds = java.util.concurrent.ConcurrentHashMap<String, String>()
 
     /**
+     * Per-run serialisation for [resume]: two `subagent_send`s racing on one run must not both get
+     * past the "is it resumable?" check and start a generation each.
+     */
+    private val resumeLocks = java.util.concurrent.ConcurrentHashMap<String, Mutex>()
+
+    /**
      * Serialises the "is there a free concurrency slot?" check and the [SubAgentRegistry.addPending]
      * that claims it, so two dispatches waking at the same instant cannot both see the last slot as
      * free. Held only for those few non-suspending map operations — the actual waiting happens
@@ -422,6 +428,15 @@ class SubAgentEngine(
         val previous = registry.get(runId)
             ?: runCatching { SubAgentRunPersistence.load(runId) }.getOrNull()
             ?: return DispatchResult.Reject("unknown_id", "no sub-agent run with id $runId")
+        // Ownership before anything else: the run id is the only thing the caller sends, so
+        // without this any conversation could resume another conversation's sub-agent and spend
+        // its budget. Same rule as subagent_get / subagent_cancel (see `isOwnedBy`).
+        if (!previous.isOwnedBy(parentChatId)) {
+            return DispatchResult.Reject(
+                "not_your_run",
+                "run $runId was not dispatched from this conversation",
+            )
+        }
         val verdict = SubAgentResumeRules.canResume(previous)
         if (verdict is SubAgentResumeRules.Verdict.Refused) {
             return DispatchResult.Reject(verdict.code, verdict.reason)
@@ -429,18 +444,43 @@ class SubAgentEngine(
         if (message.isBlank()) {
             return DispatchResult.Reject("invalid_task", "message must not be blank")
         }
-        val request = SubAgentResumeRules.resumeRequest(
-            run = previous,
-            message = message.trim(),
-            timeoutSeconds = timeoutSeconds,
-            runInBackground = runInBackground,
-        )
-        return dispatch(
-            parentAssistantId = parentAssistantId,
-            parentChatId = parentChatId,
-            request = request,
-            resumeOf = previous,
-        )
+        // One live generation per sub-agent conversation. Two `subagent_send`s racing on the same
+        // run both passed `canResume` (the old run is terminal), then both dispatched: two
+        // generations on one conversation — interleaved history, two tool loops, twice the bill.
+        // tryLock rather than lock: the second caller should be told, not queued behind a run that
+        // may last minutes.
+        val lock = resumeLocks.computeIfAbsent(runId) { Mutex() }
+        if (!lock.tryLock()) {
+            return DispatchResult.Reject("already_running", "another resume is already in flight for run $runId")
+        }
+        try {
+            val conversation = previous.conversationId
+            if (conversation != null) {
+                val live = registry.runs.value.values.any { other ->
+                    other.id != runId && other.conversationId == conversation && other.isActive
+                }
+                if (live) {
+                    return DispatchResult.Reject(
+                        "already_running",
+                        "sub-agent conversation $conversation still has a live run",
+                    )
+                }
+            }
+            val request = SubAgentResumeRules.resumeRequest(
+                run = previous,
+                message = message.trim(),
+                timeoutSeconds = timeoutSeconds,
+                runInBackground = runInBackground,
+            )
+            return dispatch(
+                parentAssistantId = parentAssistantId,
+                parentChatId = parentChatId,
+                request = request,
+                resumeOf = previous,
+            )
+        } finally {
+            lock.unlock()
+        }
     }
 
     private suspend fun currentAssistantCap(parentAssistantId: String): Int {
@@ -736,6 +776,11 @@ class SubAgentEngine(
         HeadlessConversations.mark(conv.id)
         // 记下执行会话，`subagent_send` 与 `subagent_get` 都靠它找回上下文。
         registry.update(runId) { it.copy(conversationId = conv.id.toString()) }
+        // Persist the conversation id NOW. The first save (before the body ran) carried a null
+        // conversationId and nothing wrote it again: after a process death the hydrated record had
+        // no conversation, so `subagent_send` answered "no_conversation" for a run whose transcript
+        // was sitting on disk. This is the only place that knows the id.
+        registry.get(runId)?.let { SubAgentRunPersistence.save(it) }
         // P5/P6 — this conversation belongs to the sub-agent's ledger run, so its per-step
         // checkpoints land on that run and the run shows up as a first-class parent-linked
         // Run instead of an anonymous chat.
