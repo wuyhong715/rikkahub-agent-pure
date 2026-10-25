@@ -29,6 +29,8 @@ class WorkbenchVM(
     private val missionLauncher: MissionLauncher,
     private val workspaceRepository: me.rerere.rikkahub.data.repository.WorkspaceRepository,
     private val missionCreation: me.rerere.rikkahub.service.mission.MissionCreationService,
+    /** Deleted tasks drop their round snapshots with them — see [delete]. */
+    private val snapshotStore: me.rerere.rikkahub.data.mission.MissionSnapshotStore,
     subAgentRegistry: SubAgentRegistry,
 ) : ViewModel() {
 
@@ -178,6 +180,10 @@ class WorkbenchVM(
 
     fun delete(id: String) {
         viewModelScope.launch {
+            // The detail page already purges before deleting; this list path did not, so every
+            // task deleted from the workbench left up to 12 × 128 MB of round snapshots on disk
+            // forever. Deleting the row must not be the only thing that happens.
+            runCatching { snapshotStore.purge(id) }
             missionRepository.delete(id)
         }
     }

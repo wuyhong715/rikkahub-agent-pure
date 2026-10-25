@@ -85,7 +85,10 @@ class ConversationIndexCoordinator(
     private val _status = MutableStateFlow(Status())
     val status: StateFlow<Status> = _status.asStateFlow()
 
-    private val lastAttemptAtMs = mutableMapOf<String, Long>()
+    // Concurrent: requestSync reads and writes it on the caller's thread (Main), while a failed
+    // round removes the key on Dispatchers.IO. A plain HashMap mutated from both is a
+    // ConcurrentModificationException waiting for a failed sync.
+    private val lastAttemptAtMs = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
     /**
      * One whole-history sweep at a time. The search page, the settings page and a conversation
@@ -216,9 +219,11 @@ class ConversationIndexCoordinator(
      * flickering between "indexing" and "idle" between rounds.
      */
     private suspend fun syncRound(walk: Walk, scopedToConversation: String?): Report {
+        val modelId = embeddings.ensureLoaded()?.modelId
         val round = ConversationSearchRules.planRound(
             candidates = walk.candidates,
-            indexed = source.indexedPaths(),
+            // Model-scoped: "indexed" has to mean "has a vector from the model running now".
+            indexed = modelId?.let { source.indexedPaths(it) }.orEmpty(),
         )
 
         // Read only what the round chose, and only once per conversation: the walk that picked

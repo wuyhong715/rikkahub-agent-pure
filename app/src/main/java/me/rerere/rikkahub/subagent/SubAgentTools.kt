@@ -553,16 +553,20 @@ fun subagentCancelTool(
     execute = { args ->
         val id = args.jsonObject["id"]?.jsonPrimitive?.contentOrNull
             ?: return@Tool errEnv("invalid_id", "id is required")
+        // Ownership first: the run id is the only thing the caller sends, so without this any
+        // conversation could cancel another conversation's run.
         registry.ensureHydrated()
         val run = registry.get(id) ?: SubAgentRunPersistence.load(id)
             ?: return@Tool errEnv("unknown_id", "no sub-agent run with id $id")
         if (!run.isOwnedBy(callerContext.callerConversationId)) {
             return@Tool errEnv("not_your_run", "run $id was not dispatched from this conversation")
         }
+        // Cancel and let the run unwind. The status flip deliberately does NOT happen here: a
+        // terminal write first made the run look finished while the generation was still alive,
+        // and it also short-circuited the completion handler (which skips already-terminal runs)
+        // — so nothing persisted the cancellation and the ledger row was never settled. The
+        // engine's cancellation path now owns both, inside NonCancellable.
         val cancelled = registry.requestCancel(id)
-        if (cancelled) {
-            registry.update(id) { it.copy(status = SubAgentStatus.CANCELLED, finishedAtMs = System.currentTimeMillis()) }
-        }
         listOf(UIMessagePart.Text(buildJsonObject {
             put("ok", cancelled)
             put("id", id)

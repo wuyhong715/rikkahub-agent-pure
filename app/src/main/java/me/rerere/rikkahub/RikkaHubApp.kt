@@ -274,6 +274,15 @@ class RikkaHubApp : Application() {
                     prefs.clearAccelerator(runtime)
                 }
                 prefs.setCrashRecovery(runtime, crashedAccel)
+                // liblitertlm is not only the local chat runtime: the *embedding* service loads the
+                // same library and reads its accelerator from `Settings.embeddingUseGpu`, not from
+                // the local-chat preference flipped above. Without this the GPU crash repeated on
+                // every launch — the recovery was applied to a switch the crashing path never reads.
+                runCatching {
+                    get<me.rerere.rikkahub.data.datastore.SettingsStore>().update { current ->
+                        if (current.embeddingUseGpu == true) current.copy(embeddingUseGpu = false) else current
+                    }
+                }.onFailure { Log.w(TAG, "sweepLocalLlmNativeCrashes: could not disable embedding GPU", it) }
                 Log.w(
                     TAG,
                     "sweepLocalLlmNativeCrashes: detected native crash in liblitertlm at " +
@@ -428,7 +437,8 @@ class RikkaHubApp : Application() {
                         }
                     }.onFailure { Log.w(TAG, "sweepOrphanHeadlessConversations: error for $id", it) }
                 }
-                HeadlessConversations.clearAll()
+                // Exactly the snapshot we swept — see HeadlessConversations.forget.
+                HeadlessConversations.forget(orphanIds)
                 Log.i(TAG, "sweepOrphanHeadlessConversations: sweep complete")
             }.onFailure {
                 Log.e(TAG, "sweepOrphanHeadlessConversations failed", it)

@@ -36,11 +36,11 @@ class MemoryGatewayAdapter(
         kind: MemoryKind,
     ): LoopMemoryWrite = writeGate.create(assistantId, content, kind)
 
-    override suspend fun updateContent(id: Int, content: String): LoopMemory =
-        memoryRepo.updateContent(id, content).toLoopMemory()
+    override suspend fun updateContent(id: Int, content: String, ownerId: String): LoopMemory =
+        memoryRepo.updateContent(id, content, ownerId).toLoopMemory()
 
-    override suspend fun deleteMemory(id: Int) {
-        memoryRepo.deleteMemory(id)
+    override suspend fun deleteMemory(id: Int, ownerId: String) {
+        memoryRepo.deleteMemory(id, ownerId)
     }
 }
 

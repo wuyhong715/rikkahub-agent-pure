@@ -143,7 +143,7 @@ object MemoryToolUI : ToolUIRenderer {
                     IconButton(
                         onClick = {
                             scope.launch {
-                                memoryRepo.deleteMemory(memoryId)
+                                memoryRepo.deleteMemoryAsUser(memoryId)
                                 onDismissRequest()
                             }
                         }

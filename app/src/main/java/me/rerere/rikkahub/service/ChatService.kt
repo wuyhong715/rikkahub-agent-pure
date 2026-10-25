@@ -519,6 +519,12 @@ class ChatService(
     private val runCheckpointRepository: me.rerere.rikkahub.data.agentrun.RunCheckpointRepository,
     /** P6 — multi-run orchestration behind the `mission_dispatch` tool. */
     private val runOrchestrator: me.rerere.rikkahub.service.run.RunOrchestrator,
+    /**
+     * Sub-agent runs dispatched from a conversation. Stopping a conversation has to take its
+     * children down too — their generations run on their own scopes, so cancelling this
+     * conversation's jobs leaves every dispatched run alive and spending.
+     */
+    private val subAgentRegistry: me.rerere.rikkahub.subagent.SubAgentRegistry,
 ) {
     // workspace 系统提示注入 (依赖 workspaceRepository, 故在类内构造)
     private val workspaceReminderTransformer = WorkspaceReminderTransformer(workspaceRepository)
@@ -2609,6 +2615,10 @@ class ChatService(
                     // what the catalogue decided. Empty in the ordinary case of no skills.
                     addAll(skillTools)
                 }.let { me.rerere.rikkahub.subagent.SubAgentSurface.apply(conversationId, it) },
+                // The frozen surface above is authoritative: if it narrowed the list (a read-only
+                // sub-agent), the loop must not add its write-capable memory tool back on top.
+                injectMemoryTools = me.rerere.rikkahub.subagent.SubAgentSurface
+                    .frozenFor(conversationId) == null,
                 // The dynamic half of the catalogue — null on any path that built no catalogue,
                 // in which case the loop gets exactly the snapshot above.
                 extraToolsProvider = { liveCatalogueTools?.invoke() ?: emptyList() },
@@ -4714,6 +4724,12 @@ class ChatService(
 
     // 停止当前会话生成任务（不清理会话缓存）
     suspend fun stopGeneration(conversationId: Uuid) {
+        // The user's stop is for the whole turn, children included: a sub-agent's generation runs
+        // on its own scope, so cancelling this conversation's jobs alone left every dispatched run
+        // alive — still calling tools, still billing. Telegram's /stop already did this; the
+        // in-app button did not.
+        runCatching { subAgentRegistry.cancelAllForParent(conversationId.toString()) }
+            .onFailure { Log.w(TAG, "stopGeneration: cancelling sub-agents failed", it) }
         // Cancel BEFORE the mutex so the cancelled coroutines can drain their own writes
         // (which may try to acquire the same mutex via their save path). Also pause the
         // message queue so nothing auto-dispatches into the conversation we're stopping.

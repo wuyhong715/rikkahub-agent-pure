@@ -274,13 +274,24 @@ class AssistantDetailVM(
     fun updateMemory(memory: AssistantMemory) {
         viewModelScope.launch {
             runCatching {
-                memoryRepository.updateContent(id = memory.id, content = memory.content)
+                memoryRepository.updateContent(
+                    id = memory.id,
+                    content = memory.content,
+                    ownerId = memoryOwnerId(),
+                )
             }.onFailure {
                 // The record may have been deleted (e.g. by the memory tool) between opening
                 // the editor and saving; don't crash the VM scope, the update is moot.
                 Log.e(TAG, "Failed to update memory #${memory.id}", it)
             }
         }
+    }
+
+    /** The bank this assistant's memory tools read and write — global if it opted in. */
+    private fun memoryOwnerId(): String = if (assistant.value.useGlobalMemory) {
+        MemoryRepository.GLOBAL_MEMORY_ID
+    } else {
+        assistantId.toString()
     }
 
     fun deleteFact(factId: Int) {
@@ -292,7 +303,7 @@ class AssistantDetailVM(
 
     fun deleteMemory(memory: AssistantMemory) {
         viewModelScope.launch {
-            memoryRepository.deleteMemory(id = memory.id)
+            memoryRepository.deleteMemory(id = memory.id, ownerId = memoryOwnerId())
         }
     }
 

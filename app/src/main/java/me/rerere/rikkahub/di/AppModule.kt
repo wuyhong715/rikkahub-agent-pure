@@ -344,7 +344,8 @@ val appModule = module {
             // 批 I — 工具级 hook；和 MissionEngine 一样是单例，不参与构造环。
             missionToolHooks = get(),
             runCheckpointRepository = get(),
-            runOrchestrator = get()
+            runOrchestrator = get(),
+            subAgentRegistry = get(),
         )
     }
 

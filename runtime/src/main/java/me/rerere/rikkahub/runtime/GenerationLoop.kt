@@ -48,6 +48,7 @@ import me.rerere.rikkahub.runtime.limits.ConversationReasoningOverrides
 import me.rerere.rikkahub.runtime.limits.ToolRuntimeLimits
 import me.rerere.rikkahub.runtime.tools.ContentRouter
 import me.rerere.rikkahub.runtime.tools.ConversationInjections
+import me.rerere.rikkahub.runtime.tools.MEMORY_TOOL_NAME
 import me.rerere.rikkahub.runtime.tools.ToolExecutionRetryPolicy
 import me.rerere.rikkahub.runtime.tools.ToolOutputRules
 import me.rerere.rikkahub.runtime.tools.ToolResultBudget
@@ -441,6 +442,17 @@ class GenerationLoop(
         facts: List<LoopFact> = emptyList(),
         factsOmitted: Int = 0,
         tools: List<Tool> = emptyList(),
+        /**
+         * Whether the loop may add its built-in memory tools on top of [tools].
+         *
+         * A frozen sub-agent surface is authoritative: [tools] is what
+         * `SubAgentSurface.apply` left after narrowing (a read-only child gets e.g.
+         * `["search_web"]`). Re-adding `memory_tool` afterwards put a write-capable tool — create,
+         * edit and delete on the parent's or the global bank — on a surface that deliberately
+         * excluded it, so a read-only child could rewrite the parent's long-term memory.
+         * Callers that narrow nothing keep the default.
+         */
+        injectMemoryTools: Boolean = true,
         // Tools re-evaluated on EVERY step of the turn and appended to [tools] above. [tools] is
         // a per-turn snapshot on purpose — the progressive catalogue's semantic guess must not
         // drift halfway through a turn — but explicit activation must not wait for the next user
@@ -550,7 +562,9 @@ class GenerationLoop(
 
             val toolsInternal = buildList {
                 Log.i(TAG, "generateInternal: build tools($assistant)")
-                if (assistant.enableMemory) {
+                if (assistant.enableMemory && injectMemoryTools &&
+                    tools.none { it.name == MEMORY_TOOL_NAME }
+                ) {
                     val memoryAssistantId = if (assistant.useGlobalMemory) {
                         GLOBAL_MEMORY_ID
                     } else {
@@ -562,10 +576,10 @@ class GenerationLoop(
                             memoryRepo.addMemory(memoryAssistantId, content, kind)
                         },
                         onUpdate = { id, content ->
-                            memoryRepo.updateContent(id, content)
+                            memoryRepo.updateContent(id, content, memoryAssistantId)
                         },
                         onDelete = { id ->
-                            memoryRepo.deleteMemory(id)
+                            memoryRepo.deleteMemory(id, memoryAssistantId)
                         }
                     ).let(this::addAll)
                 }

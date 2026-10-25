@@ -16,6 +16,14 @@ package me.rerere.rikkahub.data.vector
 class WorkspaceLibrarySource(
     private val store: VectorIndexStore,
     private val embeddings: EmbeddingService,
+    /**
+     * The library directories every assistant in [workspaceId] currently points at.
+     *
+     * Only used to decide which *other* sources in that workspace are orphans. Null (the default,
+     * and what a test wires) means "do not clean up": guessing here is what deleted a colleague
+     * assistant's index.
+     */
+    private val liveDirsOf: (suspend (workspaceId: String) -> Set<String>)? = null,
 ) {
 
     /**
@@ -165,10 +173,21 @@ class WorkspaceLibrarySource(
 
         // A source key carries the directory, so moving the library would otherwise strand the
         // previous directory's rows: invisible to search (which filters on the current key) but
-        // still occupying the database. Dropped here, once a sync has proved it runs at all.
-        store.sourcesWithPrefix(workspacePrefix(workspaceId))
-            .filter { it != source }
-            .forEach { store.forgetSource(it) }
+        // still occupying the database. Dropped here, once a sync has proved it runs at all — but
+        // ONLY sources no assistant claims any more. The old rule was "everything in this workspace
+        // that is not mine", so two assistants with docs/frontend and docs/backend deleted each
+        // other's index every time either conversation was opened, and each deletion forced a full
+        // re-embed of the other library.
+        val resolver = liveDirsOf
+        if (resolver != null) {
+            val live = runCatching { resolver.invoke(workspaceId) }.getOrNull()
+            if (live != null) {
+                val liveSources = live.map { dir -> sourceOf(workspaceId, dir) }.toSet()
+                store.sourcesWithPrefix(workspacePrefix(workspaceId))
+                    .filter { it != source && it !in liveSources }
+                    .forEach { store.forgetSource(it) }
+            }
+        }
 
         return SyncReport(
             documents = docs.size,
@@ -215,8 +234,9 @@ class WorkspaceLibrarySource(
     }
 
     /** The paths already in the index, for ordering a round. */
-    suspend fun indexedPaths(workspaceId: String, dir: String): Set<String> =
-        store.docKeys(sourceOf(workspaceId, dir)).toSet()
+    /** The file paths indexed **under [modelId]** — see [ConversationVectorSource.indexedPaths]. */
+    suspend fun indexedPaths(workspaceId: String, dir: String, modelId: String): Set<String> =
+        store.docKeys(sourceOf(workspaceId, dir), modelId).toSet()
 
     /** How many files of this library are in the index - what the settings screen shows. */
     suspend fun indexedFiles(workspaceId: String, dir: String): Int =

@@ -56,11 +56,12 @@ object MediaAudio {
             val format = extractor.getTrackFormat(track)
             extractor.selectTrack(track)
             val mime = format.getString(MediaFormat.KEY_MIME) ?: return@withContext emptyList()
-            // 16-bit is requested explicitly: some decoders default to float on newer platforms and
-            // the resampler below is written for integers.
-            if (format.containsKey(MediaFormat.KEY_PCM_ENCODING)) {
-                format.setInteger(MediaFormat.KEY_PCM_ENCODING, android.media.AudioFormat.ENCODING_PCM_16BIT)
-            }
+            // 16-bit is requested explicitly, and UNCONDITIONALLY: compressed tracks (MP3 / FLAC /
+            // AAC / Opus) do not carry KEY_PCM_ENCODING in the extractor's format, so the old
+            // `containsKey` guard was always false for them and the decoder was free to hand back
+            // 32-bit float. `asShortBuffer()` then read float bits as integers — white noise, at
+            // double the duration — for exactly the files people actually index.
+            format.setInteger(MediaFormat.KEY_PCM_ENCODING, android.media.AudioFormat.ENCODING_PCM_16BIT)
             var sourceRate = format.getInteger(MediaFormat.KEY_SAMPLE_RATE)
             var sourceChannels = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
             if (sourceRate <= 0 || sourceChannels <= 0) return@withContext emptyList()

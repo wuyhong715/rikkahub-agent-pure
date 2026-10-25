@@ -80,8 +80,15 @@ class SubAgentSurfaceTest {
     // ---- resolveChildAssistant --------------------------------------------------------
 
     @Test
-    fun `no definition means inherit`() {
-        assertNull(SubAgentSurface.resolveChildAssistant(parent(), null))
+    fun `no definition still strips the parent's skills`() {
+        // Ad-hoc dispatch: the child inherits the parent's surface but must not inherit its skills.
+        val child = SubAgentSurface.resolveChildAssistant(parent(), null)
+        assertNotNull(child)
+        assertTrue(child!!.enabledSkills.isEmpty())
+        // Nothing to strip → nothing to derive (the pre-P2-04 "inherit verbatim" shape).
+        assertNull(
+            SubAgentSurface.resolveChildAssistant(parent().copy(enabledSkills = emptySet()), null),
+        )
     }
 
     @Test

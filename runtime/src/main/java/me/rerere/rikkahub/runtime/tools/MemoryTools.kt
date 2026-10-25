@@ -25,6 +25,10 @@ private fun memoryPayload(memory: LoopMemory) = buildJsonObject {
     put("content", memory.content)
 }
 
+/** The one model-facing memory tool. Named here so the wrappers that must not double-add it
+ *  (the loop's own injection, the sub-agent surface) agree with the builder. */
+const val MEMORY_TOOL_NAME = "memory_tool"
+
 fun buildMemoryTools(
     json: Json,
     onCreation: suspend (String, MemoryKind) -> LoopMemoryWrite,
@@ -32,7 +36,7 @@ fun buildMemoryTools(
     onDelete: suspend (Int) -> Unit
 ): List<Tool> = listOf(
     Tool(
-        name = "memory_tool",
+        name = MEMORY_TOOL_NAME,
         description = """
             The memory tool stores long-term information across conversations.
             Use `action` to control the operation: `create` (add), `edit` (update), `delete` (remove).

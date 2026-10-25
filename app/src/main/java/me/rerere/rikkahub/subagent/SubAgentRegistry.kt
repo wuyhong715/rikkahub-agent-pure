@@ -91,8 +91,14 @@ class SubAgentRegistry {
      */
     fun cancelAllForParent(parentChatId: String): Int {
         var count = 0
+        // rootChatId, not just the direct parent: a grandchild's parentChatId is the child's
+        // conversation, so matching only the direct parent left depth ≥ 2 runs alive after the
+        // user pressed stop — still spending tokens, still calling tools.
         val toCancel = _runs.value.values
-            .filter { it.parentChatId == parentChatId && (it.status == SubAgentStatus.RUNNING || it.status == SubAgentStatus.PENDING) }
+            .filter {
+                (it.parentChatId == parentChatId || it.rootChatId == parentChatId) &&
+                    (it.status == SubAgentStatus.RUNNING || it.status == SubAgentStatus.PENDING)
+            }
             .map { it.id }
         for (runId in toCancel) {
             if (requestCancel(runId)) count++

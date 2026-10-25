@@ -26,8 +26,18 @@ interface LoopMemoryGateway {
      * failure. Kind rides along because the injection rules order and expire records by it.
      */
     suspend fun addMemory(assistantId: String, content: String, kind: MemoryKind): LoopMemoryWrite
-    suspend fun updateContent(id: Int, content: String): LoopMemory
-    suspend fun deleteMemory(id: Int)
+
+    /**
+     * Rewrites record [id], which must be owned by [ownerId].
+     *
+     * The owner travels with the call because the id comes from the model: a memory id is a small
+     * auto-increment integer, so an unscoped update lets any assistant rewrite another assistant's
+     * memory (or the global bank's) by guessing. Unknown and foreign ids are reported identically.
+     */
+    suspend fun updateContent(id: Int, content: String, ownerId: String): LoopMemory
+
+    /** Deletes record [id], which must be owned by [ownerId]. See [updateContent]. */
+    suspend fun deleteMemory(id: Int, ownerId: String)
 }
 
 /**

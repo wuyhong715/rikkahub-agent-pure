@@ -79,7 +79,15 @@ object SubAgentSurface {
      * scoping, the recursion guard). Only the tool surface is the child's own.
      */
     fun resolveChildAssistant(parent: Assistant?, definition: AgentDefinition?): Assistant? {
-        if (parent == null || definition == null) return null
+        if (parent == null) return null
+        if (definition == null) {
+            // Ad-hoc dispatch (`subagent_dispatch` with no expert): there is no definition to
+            // overlay, but the parent's skills must still not travel. A sub-agent that silently
+            // carries the parent's whole skill library is not the narrow child the dispatcher asked
+            // for — and the named-expert path already draws this line (an expert whose definition
+            // has no `skills` gets none, see `toAssistant`). Nothing to strip → nothing to derive.
+            return if (parent.enabledSkills.isEmpty()) null else parent.copy(enabledSkills = emptySet())
+        }
         // G 批第四片 — 即使专家什么都没声明，只要父助手带着技能，也要派生出一个子助手：
         // 派生的唯一作用是把继承来的技能清空（见 toAssistant）。父助手本来就没有技能时返回
         // null，保持"没有差异就不派生"的旧行为。

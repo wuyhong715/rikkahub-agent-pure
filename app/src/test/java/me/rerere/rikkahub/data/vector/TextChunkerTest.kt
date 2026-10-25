@@ -121,6 +121,24 @@ class TextChunkerTest {
     }
 
     @Test
+    fun `a chunk that ends where the next section starts keeps its own title`() {
+        // Alpha's body fills most of the budget, then Beta opens a new section. The chunk closed at
+        // that boundary belongs to Alpha, and narrowing the breadcrumb to the prefix shared with
+        // Beta (nothing) *before* emitting used to strip the title of the chunk being closed.
+        val spec = ChunkSpec(mode = ChunkingMode.MARKDOWN, maxChars = 120, overlapChars = 0)
+        val text = "# Alpha\n\n" + "a".repeat(100) + "\n\n# Beta\n\n" + "b".repeat(100)
+        val chunks = TextChunker.chunk(text, spec)
+        assertTrue(
+            "expected Alpha's closing chunk to stay labelled, got " + chunks.map { it.text.take(20) },
+            chunks.any { it.text.startsWith("Alpha\n") },
+        )
+        assertTrue(
+            "expected Beta to get its own chunk, got " + chunks.map { it.text.take(20) },
+            chunks.any { it.text.startsWith("Beta\n") },
+        )
+    }
+
+    @Test
     fun `nested headings build a breadcrumb chain`() {
         val spec = ChunkSpec(mode = ChunkingMode.MARKDOWN, maxChars = 200, overlapChars = 0)
         val text = "# Deploy\n\n" + "p".repeat(150) + "\n\n## Release\n\n" + "c".repeat(150)

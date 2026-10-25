@@ -31,19 +31,23 @@ class S3Sync(
 
     suspend fun backupToS3(config: S3Config) = withContext(Dispatchers.IO) {
         val file = prepareBackupFile(config)
-        val client = getS3Client(config)
-        val key = "rikkahub_backups/${file.name}"
+        try {
+            val client = getS3Client(config)
+            val key = "rikkahub_backups/${file.name}"
 
-        client.putObject(
-            key = key,
-            file = file,
-            contentType = "application/zip"
-        ).getOrThrow()
+            client.putObject(
+                key = key,
+                file = file,
+                contentType = "application/zip"
+            ).getOrThrow()
 
-        Log.i(TAG, "backupToS3: Uploaded ${file.name} (${file.length().fileSizeToString()})")
-
-        // Clean up temp file
-        file.delete()
+            Log.i(TAG, "backupToS3: Uploaded ${file.name} (${file.length().fileSizeToString()})")
+        } finally {
+            // A failed upload used to leave the archive behind: on a phone that is a zip of the
+            // whole database and file tree, hundreds of megabytes, per retry, until the cache
+            // manager got round to it.
+            file.delete()
+        }
     }
 
     suspend fun listBackupFiles(config: S3Config): List<S3BackupItem> = withContext(Dispatchers.IO) {

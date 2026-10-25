@@ -93,14 +93,22 @@ class MemoryRepository(private val memoryDAO: MemoryDAO) {
     }
 
     /**
-     * Rewrites one record's text.
+     * Rewrites one record's text — but only if [ownerId] owns the record.
      *
-     * The stored vector is dropped with it: it described the *old* text, and keeping it would
-     * make the gate both miss real duplicates and reject unrelated records. The gate re-embeds
-     * edited rows opportunistically (see `MemoryWriteGate`), so coverage heals without a sweep.
+     * The ownership check is not decoration. Ids are small auto-increment integers, and the
+     * model-facing `memory_tool` takes the id straight from the turn: without this, any assistant
+     * could send `edit(id=1)` and rewrite (or `delete(id=1)` and erase) another assistant's memory,
+     * or the global bank's. "Not yours" is reported the same way as "not found", so the check
+     * cannot be used to probe what else exists.
+     *
+     * The stored vector is dropped with the text: it described the *old* content, and keeping it
+     * would make the gate both miss real duplicates and reject unrelated records. The gate
+     * re-embeds edited rows opportunistically (see `MemoryWriteGate`), so coverage heals without a
+     * sweep.
      */
-    suspend fun updateContent(id: Int, content: String): AssistantMemory {
+    suspend fun updateContent(id: Int, content: String, ownerId: String): AssistantMemory {
         val old = memoryDAO.getMemoryById(id) ?: error("Memory record #$id not found")
+        if (old.assistantId != ownerId) error("Memory record #$id not found")
         val newMemory = old.copy(
             content = content,
             embedding = null,
@@ -140,7 +148,26 @@ class MemoryRepository(private val memoryDAO: MemoryDAO) {
         return AssistantMemory(id = newId, content = content)
     }
 
-    suspend fun deleteMemory(id: Int) {
+    /**
+     * Deletes one record — only if [ownerId] owns it. Same reasoning as [updateContent]: the id
+     * arrives from the model, so an unscoped delete lets any assistant erase another's memory by
+     * counting integers.
+     */
+    suspend fun deleteMemory(id: Int, ownerId: String) {
+        val old = memoryDAO.getMemoryById(id) ?: return
+        if (old.assistantId != ownerId) return
+        memoryDAO.deleteMemory(id)
+    }
+
+    /**
+     * Deletes without an ownership check.
+     *
+     * Only for the human's own surface — the delete button rendered on a memory tool result, where
+     * the id belongs to a row the user is looking at. Model-originated paths must use
+     * [deleteMemory] with their assistant id; this door exists so the UI does not have to carry an
+     * owner it never needed.
+     */
+    suspend fun deleteMemoryAsUser(id: Int) {
         memoryDAO.deleteMemory(id)
     }
 }

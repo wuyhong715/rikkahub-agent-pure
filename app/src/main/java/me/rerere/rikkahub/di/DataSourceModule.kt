@@ -163,9 +163,28 @@ val dataSourceModule = module {
     // same reason the memory index is: a round over a large directory must outlive the screen that
     // triggered it.
     single {
+        val settingsStore: SettingsStore = get()
         me.rerere.rikkahub.data.vector.WorkspaceLibrarySource(
             store = get(),
             embeddings = get(),
+            // Which library directories this workspace still has assistants pointing at. The source
+            // deletes only sources that are not in this set, so two assistants with different
+            // directories stop wiping each other's index.
+            liveDirsOf = { workspaceId ->
+                settingsStore.settingsFlow.value.assistants
+                    .filter { assistant ->
+                        assistant.libraryEnabled && assistant.workspaceId?.toString() == workspaceId
+                    }
+                    .mapNotNull { assistant ->
+                        val raw = assistant.libraryDir.trim()
+                        if (raw.isEmpty()) {
+                            me.rerere.rikkahub.data.vector.WorkspaceLibraryRules.DEFAULT_DIR
+                        } else {
+                            me.rerere.rikkahub.data.ai.tools.ColdMemoryRules.normalizeDir(raw)
+                        }
+                    }
+                    .toSet()
+            },
         )
     }
     single {

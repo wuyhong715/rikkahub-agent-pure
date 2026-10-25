@@ -226,7 +226,17 @@ class EmbeddingService(
      * A model that fails to load is *not* remembered as failed: the next call tries again, so
      * freeing memory or re-downloading a truncated file fixes the situation without a restart.
      */
-    suspend fun ensureLoaded(): ActiveModel? = onWorker { loadLocked() }
+    suspend fun ensureLoaded(): ActiveModel? = forwardLock.withLock { ensureLoadedLocked() }
+
+    /**
+     * The body of [ensureLoaded], for callers that already hold [forwardLock].
+     *
+     * Loading may have to RELEASE the resident engine first (a settings flip, a model swap). A batch
+     * index holds that lock for its whole run, so an [ensureLoaded] arriving between two of its
+     * chunks used to unload the engine underneath the batch: an exception mid-index, or — for two
+     * same-dimension models — vectors from two different spaces written under one model id.
+     */
+    private suspend fun ensureLoadedLocked(): ActiveModel? = onWorker { loadLocked() }
 
     /**
      * What the settings and the disk say should be running, resolved without opening anything.
@@ -415,7 +425,7 @@ class EmbeddingService(
      */
     suspend fun embedDocuments(texts: List<String>): List<FloatArray> = forwardLock.withLock {
         onWorker {
-            val model = ensureLoaded() ?: error("no embedding model is installed")
+            val model = ensureLoadedLocked() ?: error("no embedding model is installed")
             if (model.isCloud) embedCloud(model, texts)
             else texts.map { text -> embedWith(model, model.documentPrefix + text) }
         }
@@ -443,7 +453,7 @@ class EmbeddingService(
      */
     suspend fun embedImage(bytes: ByteArray): FloatArray = forwardLock.withLock {
         onWorker {
-            val model = ensureLoaded() ?: error("no embedding model is installed")
+            val model = ensureLoadedLocked() ?: error("no embedding model is installed")
             require(model.vision) { "the embedding model in effect cannot embed images" }
             if (model.isCloud) error("a cloud embedding model cannot embed images")
             val vector = litert.embedImage(bytes)
@@ -472,7 +482,7 @@ class EmbeddingService(
      */
     suspend fun embedAudio(bytes: ByteArray): FloatArray = forwardLock.withLock {
             onWorker {
-                val model = ensureLoaded() ?: error("no embedding model is installed")
+                val model = ensureLoadedLocked() ?: error("no embedding model is installed")
                 require(model.audio) { "the embedding model in effect has no audio encoder" }
                 if (model.isCloud) error("a cloud embedding model cannot embed audio")
                 val vector = litert.embedAudio(bytes)
@@ -493,9 +503,18 @@ class EmbeddingService(
      */
     suspend fun embedQuery(text: String): FloatArray = forwardLock.withLock {
         onWorker {
-            val model = ensureLoaded() ?: error("no embedding model is installed")
-            if (model.isCloud) embedCloud(model, listOf(text)).single()
-            else embedWith(model, model.queryPrefix + text)
+            val model = ensureLoadedLocked() ?: error("no embedding model is installed")
+            // The query side had no length guard: documents are chunked to the model's window, but a
+            // pasted stack trace or a long search string went in whole. Engines that reject an
+            // over-long input throw instead of truncating, so one long message killed semantic tool
+            // ranking for the turn (the failure is caught to null) and made memory_search /
+            // library_search fail outright.
+            val budget = ChunkSpec.maxCharsFor(model.contextTokens)
+                .minus(model.queryPrefix.length)
+                .coerceAtLeast(1)
+            val clipped = if (text.length > budget) text.take(budget) else text
+            if (model.isCloud) embedCloud(model, listOf(clipped)).single()
+            else embedWith(model, model.queryPrefix + clipped)
         }
     }
 
