@@ -15,6 +15,9 @@ import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.db.entity.SshHostEntity
 import me.rerere.rikkahub.data.repository.SshHostRepository
+import me.rerere.rikkahub.data.runtime.InstanceEnvelopes
+import me.rerere.rikkahub.data.runtime.InstanceId
+import me.rerere.rikkahub.data.runtime.InstanceKind
 
 /**
  * Save an SSH host so it can be referenced by name in subsequent calls instead of passing
@@ -196,6 +199,10 @@ fun sshExecSavedTool(context: Context, repo: SshHostRepository): Tool = Tool(
         val payload = runCancellableSshOp(timeoutSec * 1000L) { sessionRef ->
             execOneShot(context, h.host, h.port, h.user, auth, effectiveCommand, timeoutSec * 1000, sessionRef, stdin)
         }
-        listOf(UIMessagePart.Text(payload.toString()))
+        listOf(
+            UIMessagePart.Text(
+                InstanceEnvelopes.decorate(payload, InstanceId(InstanceKind.SSH, h.name)).toString()
+            )
+        )
     }
 )

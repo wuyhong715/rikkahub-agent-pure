@@ -22,6 +22,9 @@ import me.rerere.workspace.WorkspaceManager
 import me.rerere.workspace.WorkspaceTreeResult
 import org.koin.java.KoinJavaComponent.getKoin
 import java.io.ByteArrayOutputStream
+import me.rerere.rikkahub.data.runtime.InstanceEnvelopes
+import me.rerere.rikkahub.data.runtime.InstanceId
+import me.rerere.rikkahub.data.runtime.InstanceKind
 
 private const val SHELL_TIMEOUT_MAX_SECONDS = 600L
 private const val MAX_READ_FILE_BYTES = 8L * 1024 * 1024
@@ -336,18 +339,31 @@ private fun createShellTool(
             ?.coerceIn(1L, SHELL_TIMEOUT_MAX_SECONDS)
             ?.times(1_000L)
             ?: WorkspaceManager.DEFAULT_COMMAND_TIMEOUT_MS
-        val result = workspaceRepository.executeCommand(workspaceId, command, cwd, timeoutMillis)
-        listOf(
-            UIMessagePart.Text(
+        // 工作区以前把异常直接抛给工具层，模型看到的是没有上下文的报错文本。失败与成功
+        // 现在都在同一处成形：失败走统一包络（带 instance 与可执行的 recovery），成功保持
+        // 原来的字段名不变。
+        val payload = runCatching {
+            workspaceRepository.executeCommand(workspaceId, command, cwd, timeoutMillis)
+        }.fold(
+            onSuccess = { result ->
                 buildJsonObject {
                     put("exitCode", result.exitCode)
                     put("stdout", result.stdout)
                     put("stderr", result.stderr)
                     put("timedOut", result.timedOut)
                     if (result.truncated) put("truncated", true)
-                }.toString()
-            )
+                }
+            },
+            onFailure = { t ->
+                InstanceEnvelopes.failure(
+                    id = InstanceId(InstanceKind.WORKSPACE, workspaceId),
+                    error = "workspace_shell_failed",
+                    recovery = t.message
+                        ?: "在工作区详情里点重新检测；仍失败就重装 rootfs（文件区不受影响）。",
+                )
+            },
         )
+        listOf(UIMessagePart.Text(payload.toString()))
     },
 )
 

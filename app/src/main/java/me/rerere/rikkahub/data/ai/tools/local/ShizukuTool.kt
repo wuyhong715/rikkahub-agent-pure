@@ -11,6 +11,9 @@ import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.shizuku.ShizukuManager
+import me.rerere.rikkahub.data.runtime.InstanceEnvelopes
+import me.rerere.rikkahub.data.runtime.InstanceId
+import me.rerere.rikkahub.data.runtime.InstanceKind
 
 private const val DEFAULT_TIMEOUT_MS = 30_000
 private const val MIN_TIMEOUT_MS = 1_000
@@ -65,6 +68,11 @@ fun shizukuExecTool(context: Context): Tool = Tool(
         val timeoutMs = (input.jsonObject["timeout_ms"]?.jsonPrimitive?.intOrNull ?: DEFAULT_TIMEOUT_MS)
             .coerceIn(MIN_TIMEOUT_MS, MAX_TIMEOUT_MS)
         val result = ShizukuManager.exec(context, command, timeoutMs)
-        listOf(UIMessagePart.Text(result.toString()))
+        listOf(
+            UIMessagePart.Text(
+                // 统一失败包络：不改 ShizukuStatusMapper 的既有键，只在这里补 instance/state。
+                InstanceEnvelopes.decorate(result, InstanceId.local(InstanceKind.SHIZUKU)).toString()
+            )
+        )
     }
 )

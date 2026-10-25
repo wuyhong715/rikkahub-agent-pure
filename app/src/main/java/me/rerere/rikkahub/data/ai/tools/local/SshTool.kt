@@ -29,6 +29,9 @@ import java.net.Inet4Address
 import java.net.InetAddress
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicReference
+import me.rerere.rikkahub.data.runtime.InstanceEnvelopes
+import me.rerere.rikkahub.data.runtime.InstanceId
+import me.rerere.rikkahub.data.runtime.InstanceKind
 
 private const val TAG_SSH = "SshTool"
 
@@ -589,7 +592,12 @@ fun sshExecTool(context: Context): Tool = Tool(
         val payload = runCancellableSshOp(timeoutSec * 1000L) { sessionRef ->
             execOneShot(context, host, port, user, auth, effectiveCommand, timeoutSec * 1000, sessionRef, stdin)
         }
-        listOf(UIMessagePart.Text(payload.toString()))
+        listOf(
+            UIMessagePart.Text(
+                // 统一失败包络：instance 用调用方给的主机地址，state 由注册表在设置页负责展示。
+                InstanceEnvelopes.decorate(payload, InstanceId(InstanceKind.SSH, host)).toString()
+            )
+        )
     }
 )
 

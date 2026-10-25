@@ -25,6 +25,9 @@ import me.rerere.rikkahub.runtime.AgentTurnTracker
 import me.rerere.rikkahub.data.preferences.TermuxDefaults
 import me.rerere.rikkahub.data.preferences.TermuxRuntime
 import java.util.UUID
+import me.rerere.rikkahub.data.runtime.InstanceEnvelopes
+import me.rerere.rikkahub.data.runtime.InstanceId
+import me.rerere.rikkahub.data.runtime.InstanceKind
 
 private const val TERMUX_PACKAGE = "com.termux"
 private const val TERMUX_RUN_COMMAND_SERVICE = "com.termux.app.RunCommandService"
@@ -451,20 +454,26 @@ fun termuxRunCommandTool(context: Context): Tool = Tool(
             TermuxIntegration.State.NOT_INSTALLED -> {
                 return@Tool listOf(
                     UIMessagePart.Text(
-                        buildJsonObject {
-                            put("error", "termux_not_installed")
-                            put("recovery", "Install Termux from the official GitHub releases page: https://github.com/termux/termux-app/releases . Do not use the Play Store or F-Droid build - those are unmaintained.")
-                        }.toString()
+                        InstanceEnvelopes.decorate(
+                            buildJsonObject {
+                                put("error", "termux_not_installed")
+                                put("recovery", "Install Termux from the official GitHub releases page: https://github.com/termux/termux-app/releases . Do not use the Play Store or F-Droid build - those are unmaintained.")
+                            },
+                            InstanceId.local(InstanceKind.TERMUX),
+                        ).toString()
                     )
                 )
             }
             TermuxIntegration.State.NO_PERMISSION -> {
                 return@Tool listOf(
                     UIMessagePart.Text(
-                        buildJsonObject {
-                            put("error", "termux_permission_not_granted")
-                            put("recovery", "Toggle Termux on in Assistant -> Local tools so the runtime permission dialog appears, OR run: adb shell pm grant ${context.packageName} com.termux.permission.RUN_COMMAND")
-                        }.toString()
+                        InstanceEnvelopes.decorate(
+                            buildJsonObject {
+                                put("error", "termux_permission_not_granted")
+                                put("recovery", "Toggle Termux on in Assistant -> Local tools so the runtime permission dialog appears, OR run: adb shell pm grant ${context.packageName} com.termux.permission.RUN_COMMAND")
+                            },
+                            InstanceId.local(InstanceKind.TERMUX),
+                        ).toString()
                     )
                 )
             }
@@ -528,19 +537,25 @@ fun termuxRunCommandTool(context: Context): Tool = Tool(
             } catch (t: SecurityException) {
                 listOf(
                     UIMessagePart.Text(
-                        buildJsonObject {
-                            put("error", "termux_permission_denied")
-                            put("recovery", "In Termux, run: mkdir -p ~/.termux && echo 'allow-external-apps=true' >> ~/.termux/termux.properties. Force-stop Termux and reopen, then retry.")
-                        }.toString()
+                        InstanceEnvelopes.decorate(
+                            buildJsonObject {
+                                put("error", "termux_permission_denied")
+                                put("recovery", "In Termux, run: mkdir -p ~/.termux && echo 'allow-external-apps=true' >> ~/.termux/termux.properties. Force-stop Termux and reopen, then retry.")
+                            },
+                            InstanceId.local(InstanceKind.TERMUX),
+                        ).toString()
                     )
                 )
             } catch (t: Throwable) {
                 listOf(
                     UIMessagePart.Text(
-                        buildJsonObject {
-                            put("error", "dispatch_failed")
-                            put("reason", t.message ?: t::class.java.simpleName)
-                        }.toString()
+                        InstanceEnvelopes.decorate(
+                            buildJsonObject {
+                                put("error", "dispatch_failed")
+                                put("reason", t.message ?: t::class.java.simpleName)
+                            },
+                            InstanceId.local(InstanceKind.TERMUX),
+                        ).toString()
                     )
                 )
             }
@@ -595,6 +610,10 @@ fun termuxRunCommandTool(context: Context): Tool = Tool(
                 put("reason", res.message)
             }
         }
-        listOf(UIMessagePart.Text(payload.toString()))
+        listOf(
+            UIMessagePart.Text(
+                InstanceEnvelopes.decorate(payload, InstanceId.local(InstanceKind.TERMUX)).toString()
+            )
+        )
     }
 )

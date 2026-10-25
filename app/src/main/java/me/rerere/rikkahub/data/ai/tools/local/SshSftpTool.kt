@@ -19,6 +19,9 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.repository.SshHostRepository
 import java.io.File
 import java.util.concurrent.atomic.AtomicReference
+import me.rerere.rikkahub.data.runtime.InstanceEnvelopes
+import me.rerere.rikkahub.data.runtime.InstanceId
+import me.rerere.rikkahub.data.runtime.InstanceKind
 
 private const val TAG_SFTP = "SshSftpTool"
 
@@ -125,7 +128,11 @@ fun sshUploadTool(context: Context, repo: SshHostRepository): Tool = Tool(
                 }
             }
         }
-        listOf(UIMessagePart.Text(payload.toString()))
+        listOf(
+            UIMessagePart.Text(
+                InstanceEnvelopes.decorate(payload, InstanceId(InstanceKind.SSH, name)).toString()
+            )
+        )
     }
 )
 
@@ -180,6 +187,10 @@ fun sshDownloadTool(context: Context, repo: SshHostRepository): Tool = Tool(
                 }
             }
         }
-        listOf(UIMessagePart.Text(payload.toString()))
+        listOf(
+            UIMessagePart.Text(
+                InstanceEnvelopes.decorate(payload, InstanceId(InstanceKind.SSH, name)).toString()
+            )
+        )
     }
 )

@@ -11,6 +11,9 @@ import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.shizuku.ShizukuManager
+import me.rerere.rikkahub.data.runtime.InstanceEnvelopes
+import me.rerere.rikkahub.data.runtime.InstanceId
+import me.rerere.rikkahub.data.runtime.InstanceKind
 
 private const val DEFAULT_TIMEOUT_MS = 30_000
 private const val MIN_TIMEOUT_MS = 1_000
@@ -78,6 +81,11 @@ fun rootExecTool(context: Context): Tool = Tool(
             return@Tool listOf(UIMessagePart.Text(RootExecRules.unavailableEnvelope(level).toString()))
         }
         val result = ShizukuManager.exec(context, command, timeoutMs)
-        listOf(UIMessagePart.Text(result.toString()))
+        listOf(
+            UIMessagePart.Text(
+                // 同一个 Shizuku 实例：root_exec 失败时模型应看到 instance 与 state，而不是另一套形状。
+                InstanceEnvelopes.decorate(result, InstanceId.local(InstanceKind.SHIZUKU)).toString()
+            )
+        )
     }
 )
