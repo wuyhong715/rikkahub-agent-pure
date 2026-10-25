@@ -342,7 +342,8 @@ val appModule = module {
             // -> ChatService would close a Koin construction cycle otherwise.
             missionCreationProvider = { get<me.rerere.rikkahub.service.mission.MissionCreationService>() },
             runCheckpointRepository = get(),
-            runOrchestrator = get()
+            runOrchestrator = get(),
+            subAgentRegistry = get(),
         )
     }
 

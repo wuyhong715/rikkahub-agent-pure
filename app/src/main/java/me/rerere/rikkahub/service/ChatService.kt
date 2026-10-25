@@ -517,6 +517,12 @@ class ChatService(
     private val runCheckpointRepository: me.rerere.rikkahub.data.agentrun.RunCheckpointRepository,
     /** P6 — multi-run orchestration behind the `mission_dispatch` tool. */
     private val runOrchestrator: me.rerere.rikkahub.service.run.RunOrchestrator,
+    /**
+     * Sub-agent runs dispatched from a conversation. Stopping a conversation has to take its
+     * children down too — their generations run on their own scopes, so cancelling this
+     * conversation's jobs leaves every dispatched run alive and spending.
+     */
+    private val subAgentRegistry: me.rerere.rikkahub.subagent.SubAgentRegistry,
 ) {
     // workspace 系统提示注入 (依赖 workspaceRepository, 故在类内构造)
     private val workspaceReminderTransformer = WorkspaceReminderTransformer(workspaceRepository)
@@ -4688,6 +4694,12 @@ class ChatService(
 
     // 停止当前会话生成任务（不清理会话缓存）
     suspend fun stopGeneration(conversationId: Uuid) {
+        // The user's stop is for the whole turn, children included: a sub-agent's generation runs
+        // on its own scope, so cancelling this conversation's jobs alone left every dispatched run
+        // alive — still calling tools, still billing. Telegram's /stop already did this; the
+        // in-app button did not.
+        runCatching { subAgentRegistry.cancelAllForParent(conversationId.toString()) }
+            .onFailure { Log.w(TAG, "stopGeneration: cancelling sub-agents failed", it) }
         // Cancel BEFORE the mutex so the cancelled coroutines can drain their own writes
         // (which may try to acquire the same mutex via their save path). Also pause the
         // message queue so nothing auto-dispatches into the conversation we're stopping.

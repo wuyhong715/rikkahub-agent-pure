@@ -2,6 +2,7 @@ package me.rerere.rikkahub.subagent
 
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -930,11 +931,26 @@ class SubAgentEngine(
             notifyParentIfBackground(parentChatId, registry.get(runId))
         } catch (t: Throwable) {
             Log.w(TAG, "sub-agent run failed", t)
-            attachRunUsage(runId, conv.id.toString())
             // CancellationException → CANCELLED, anything else → FAILED.
             val terminal = if (t is kotlinx.coroutines.CancellationException) SubAgentStatus.CANCELLED else SubAgentStatus.FAILED
-            markTerminal(runId, terminal, "${t::class.simpleName}: ${t.message.orEmpty()}")
-            notifyParentIfBackground(parentChatId, registry.get(runId))
+            // Everything below runs on a NON-CANCELLABLE context. When the throw is a
+            // CancellationException this coroutine is already cancelled, so every suspend call
+            // (persistence, ledger, usage attach) would throw immediately and the run would be
+            // left RUNNING in the registry and on disk. This is the one place that has to finish.
+            withContext(NonCancellable) {
+                // Stop the generation FIRST: cancelling the sub-agent job only unwinds this
+                // coroutine, while the child's ChatService generation runs on its own scope. The
+                // finally block below releases the surface and the headless mark — if that
+                // happened with the generation still alive, the child would carry on executing
+                // tools with NO whitelist and no headless floor: an unbounded, unattended run.
+                if (terminal == SubAgentStatus.CANCELLED) {
+                    runCatching { chatService.stopGeneration(conv.id) }
+                        .onFailure { Log.w(TAG, "cancelled sub-agent: stopGeneration failed for $runId", it) }
+                }
+                attachRunUsage(runId, conv.id.toString())
+                markTerminal(runId, terminal, "${t::class.simpleName}: ${t.message.orEmpty()}")
+                notifyParentIfBackground(parentChatId, registry.get(runId))
+            }
         } finally {
             HeadlessConversations.unmark(conv.id)
             // Release the per-conversation runtime overrides registered at the top, so a
