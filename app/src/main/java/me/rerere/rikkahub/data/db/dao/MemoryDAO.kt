@@ -35,12 +35,24 @@ interface MemoryDAO {
     )
     suspend fun getLiveMemories(assistantId: String, nowMs: Long): List<MemoryEntity>
 
-    /** Rows with no vector yet, so the gate can fill them in a bounded pass. */
+    /**
+     * Rows the gate should (re-)embed in a bounded pass.
+     *
+     * "Missing" includes rows carrying a vector from a *different* model: those vectors describe the
+     * same text in another space, so they can neither be compared with the current model's queries
+     * nor left to rot. Without the model condition a swap froze the whole legacy bank — every row
+     * had an embedding, so nothing was ever refilled.
+     */
     @Query(
-        "SELECT * FROM memoryentity WHERE assistant_id = :assistantId AND embedding IS NULL " +
+        "SELECT * FROM memoryentity WHERE assistant_id = :assistantId " +
+            "AND (embedding IS NULL OR embedding_model IS NULL OR embedding_model != :modelId) " +
             "ORDER BY created_at DESC, id DESC LIMIT :limit"
     )
-    suspend fun getRowsMissingEmbedding(assistantId: String, limit: Int): List<MemoryEntity>
+    suspend fun getRowsMissingEmbedding(
+        assistantId: String,
+        modelId: String,
+        limit: Int,
+    ): List<MemoryEntity>
 
     @Query("UPDATE memoryentity SET embedding = :embedding, embedding_model = :modelId WHERE id = :id")
     suspend fun updateEmbedding(id: Int, embedding: ByteArray, modelId: String)

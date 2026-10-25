@@ -143,7 +143,7 @@ class MemoryWriteGate(
      */
     private suspend fun backfillEmbeddings(assistantId: String, modelId: String) {
         runCatching {
-            val rows = memoryDAO.getRowsMissingEmbedding(assistantId, BACKFILL_BATCH)
+            val rows = memoryDAO.getRowsMissingEmbedding(assistantId, modelId, BACKFILL_BATCH)
             if (rows.isEmpty()) return@runCatching
             val vectors = embeddings.embedDocuments(rows.map { it.content })
             rows.forEachIndexed { index, row ->

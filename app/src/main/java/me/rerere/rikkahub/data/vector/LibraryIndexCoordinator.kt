@@ -203,9 +203,12 @@ class LibraryIndexCoordinator(
                 Log.d(TAG, "cannot list '$dir'; leaving the index untouched")
                 return null
             }
+            val modelId = embeddings.ensureLoaded()?.modelId
             val round = WorkspaceLibraryRules.planRound(
                 candidates = walk.candidates,
-                indexed = source.indexedPaths(workspaceId, dir),
+                // Model-scoped, for the same reason the conversation index is: a previous model's
+                // rows must not count as "already indexed" or a rebuild never gets past round one.
+                indexed = modelId?.let { source.indexedPaths(workspaceId, dir, it) }.orEmpty(),
             )
 
             val docs = mutableListOf<WorkspaceLibrarySource.Doc>()

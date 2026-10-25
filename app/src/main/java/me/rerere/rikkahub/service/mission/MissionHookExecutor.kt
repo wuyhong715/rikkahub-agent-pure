@@ -93,8 +93,15 @@ data class MissionHookOutcome(
     val durationMs: Long = 0,
     val skippedReason: String? = null,
 ) {
-    /** 拿到了明确的失败结论（执行基础设施故障不算）。 */
-    val failed: Boolean get() = result != null && !result.ok
+    /**
+     * 拿到了明确的失败结论 —— **执行基础设施故障不算**。
+     *
+     * `error != null` 表示命令根本没跑起来（没有工作区、shell 未就绪、进程创建失败、瞬时超时）。
+     * 那是环境的结论，不是对工作的结论：把它当成校验失败，任何一次 shell 抖动都会阻断
+     * ROUND_END / BEFORE_DONE，任务就此卡住 —— 正好违背督导那侧写明的软失败约定
+     * （基础设施异常记日志放行，只有真的跑完且非 0 退出才算不通过）。
+     */
+    val failed: Boolean get() = result != null && !result.ok && result.error == null
 
     /** 是否应该阻断任务：只有 `block` 的 hook 拿到明确失败结论时才阻断。 */
     val blocking: Boolean get() = failed && hook.action.name.equals("BLOCK", ignoreCase = true)

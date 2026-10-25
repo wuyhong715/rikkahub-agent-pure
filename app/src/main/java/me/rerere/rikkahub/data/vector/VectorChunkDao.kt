@@ -34,6 +34,20 @@ interface VectorChunkDao {
     @Query("SELECT DISTINCT doc_key FROM vector_chunks WHERE source = :source ORDER BY doc_key")
     suspend fun docKeys(source: String): List<String>
 
+    /**
+     * The doc keys this source holds **under [modelId]**.
+     *
+     * Round planning needs the model-scoped answer, not the raw one: after a model swap every row is
+     * still present but its vectors belong to the previous space, so "already indexed" was true for
+     * every document — the planner then re-picked the same first N by key on every round, indexed
+     * nothing new, and stopped.
+     */
+    @Query(
+        "SELECT DISTINCT doc_key FROM vector_chunks WHERE source = :source AND model_id = :modelId " +
+            "ORDER BY doc_key"
+    )
+    suspend fun docKeysOfModel(source: String, modelId: String): List<String>
+
     @Query("SELECT DISTINCT model_id FROM vector_chunks WHERE source = :source")
     suspend fun modelIdsOfSource(source: String): List<String>
 

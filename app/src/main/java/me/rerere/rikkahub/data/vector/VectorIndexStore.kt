@@ -144,6 +144,10 @@ class VectorIndexStore(
 
     suspend fun docKeys(source: String): List<String> = withContext(Dispatchers.IO) { dao.docKeys(source) }
 
+    /** Same list, restricted to rows the current model produced — see [VectorChunkDao.docKeysOfModel]. */
+    suspend fun docKeys(source: String, modelId: String): List<String> =
+        withContext(Dispatchers.IO) { dao.docKeysOfModel(source, modelId) }
+
     suspend fun modelIdsOf(source: String): List<String> = withContext(Dispatchers.IO) {
         dao.modelIdsOfSource(source)
     }

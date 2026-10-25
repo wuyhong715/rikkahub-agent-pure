@@ -216,9 +216,11 @@ class ConversationIndexCoordinator(
      * flickering between "indexing" and "idle" between rounds.
      */
     private suspend fun syncRound(walk: Walk, scopedToConversation: String?): Report {
+        val modelId = embeddings.ensureLoaded()?.modelId
         val round = ConversationSearchRules.planRound(
             candidates = walk.candidates,
-            indexed = source.indexedPaths(),
+            // Model-scoped: "indexed" has to mean "has a vector from the model running now".
+            indexed = modelId?.let { source.indexedPaths(it) }.orEmpty(),
         )
 
         // Read only what the round chose, and only once per conversation: the walk that picked

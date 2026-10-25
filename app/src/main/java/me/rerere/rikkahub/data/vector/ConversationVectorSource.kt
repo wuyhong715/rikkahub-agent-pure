@@ -162,8 +162,13 @@ class ConversationVectorSource(
         )
     }
 
-    /** The message keys already in the index, for ordering a round. */
-    suspend fun indexedPaths(): Set<String> = store.docKeys(SOURCE).toSet()
+    /**
+     * The message keys already in the index **under [modelId]**, for ordering a round.
+     *
+     * Model-scoped: a row left over from a previous model is not indexed as far as the running model
+     * is concerned, and treating it as indexed is what made a rebuild stuck on the first N messages.
+     */
+    suspend fun indexedPaths(modelId: String): Set<String> = store.docKeys(SOURCE, modelId).toSet()
 
     /** How many messages are indexed - what the settings row shows. */
     suspend fun indexedMessages(): Int = store.docKeys(SOURCE).size
