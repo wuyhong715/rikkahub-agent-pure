@@ -126,6 +126,22 @@ object HeadlessConversations {
     fun activeIds(): Set<Uuid> = ids.toSet()
 
     /**
+     * Removes exactly [conversations] from both sets and persists.
+     *
+     * The startup sweep works from a snapshot taken on IO, and between that snapshot and the write
+     * a mission round or a Telegram run can `mark()` a NEW conversation. `clearAll()` wiped that
+     * mark too, so a live unattended run started asking for tool approvals nobody could answer —
+     * it simply stopped. The sweep now forgets only what it actually looked at.
+     */
+    fun forget(conversations: Collection<Uuid>) {
+        if (conversations.isEmpty()) return
+        val targets = conversations.toSet()
+        ids.removeAll(targets)
+        autoApproveIds.removeAll(targets)
+        persistIds()
+    }
+
+    /**
      * Clears both in-memory sets and the persisted prefs.
      * Called after the startup sweep finishes cleaning up orphans.
      */

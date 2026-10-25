@@ -255,6 +255,19 @@ object TextChunker {
                 hardSplit(pending + piece.text, spec).forEach { out += decorate(it, path, spec) }
                 continue
             }
+            // Close the pending chunk BEFORE narrowing the breadcrumb. The chunk being emitted
+            // belongs to the section that was current when it started, and narrowing first (to the
+            // prefix shared with the incoming piece) blanked that chunk's heading the moment the
+            // next section began — every chunk that ended at a section boundary lost its title.
+            if (current.isNotEmpty() && current.length + piece.text.length + 1 > spec.maxChars) {
+                val previous = current.toString()
+                emit()
+                headingPath = piece.headingPath
+                val tail = overlapTail(previous, spec.overlapChars)
+                current.append(tail)
+                if (tail.isNotEmpty()) current.append('\n')
+                if (current.length + piece.text.length + 1 > spec.maxChars) current.setLength(0)
+            }
             if (current.isEmpty()) {
                 headingPath = piece.headingPath
             } else {
@@ -264,16 +277,6 @@ object TextChunker {
                 // breadcrumb naming only the first of several sections would be a small lie told
                 // to the embedding model, and a wrong breadcrumb is worse than none.
                 headingPath = commonPrefix(headingPath, piece.headingPath)
-            }
-
-            if (current.isNotEmpty() && current.length + piece.text.length + 1 > spec.maxChars) {
-                val previous = current.toString()
-                emit()
-                headingPath = piece.headingPath
-                val tail = overlapTail(previous, spec.overlapChars)
-                current.append(tail)
-                if (tail.isNotEmpty()) current.append('\n')
-                if (current.length + piece.text.length + 1 > spec.maxChars) current.setLength(0)
             }
             current.append(piece.text)
             current.append('\n')

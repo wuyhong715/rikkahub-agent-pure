@@ -107,7 +107,10 @@ class LibraryIndexCoordinator(
     private val _status = MutableStateFlow(Status())
     val status: StateFlow<Status> = _status.asStateFlow()
 
-    private val lastAttemptAtMs = mutableMapOf<String, Long>()
+    // Concurrent: requestSync reads and writes it on the caller's thread (Main), while a failed
+    // round removes the key on Dispatchers.IO. A plain HashMap mutated from both is a
+    // ConcurrentModificationException waiting for a failed sync.
+    private val lastAttemptAtMs = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
     /**
      * The workspace and directory of one assistant's library, or null when it has none configured.

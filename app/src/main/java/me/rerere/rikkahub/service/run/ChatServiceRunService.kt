@@ -314,6 +314,9 @@ class ChatServiceRunService(
                 type = RunEventType.RUN_FINISHED,
                 title = handle.id,
                 detail = RunStatus.CANCELLED.name,
+                // Without the mission id this event landed outside the mission's timeline, so a
+                // user-initiated cancel was invisible there while every other ending showed up.
+                missionId = handle.missionId,
                 conversationId = handle.conversationId.toString(),
                 runId = handle.id,
             )
