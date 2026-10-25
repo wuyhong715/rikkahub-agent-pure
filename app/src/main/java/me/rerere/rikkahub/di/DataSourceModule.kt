@@ -180,7 +180,7 @@ val dataSourceModule = module {
                         if (raw.isEmpty()) {
                             me.rerere.rikkahub.data.vector.WorkspaceLibraryRules.DEFAULT_DIR
                         } else {
-                            me.rerere.rikkahub.data.vector.ColdMemoryRules.normalizeDir(raw)
+                            me.rerere.rikkahub.data.ai.tools.ColdMemoryRules.normalizeDir(raw)
                         }
                     }
                     .toSet()
