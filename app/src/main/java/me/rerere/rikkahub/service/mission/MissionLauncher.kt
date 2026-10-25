@@ -335,10 +335,17 @@ class MissionLauncher(
 
             // 批 E — 无头轮次只有在有人 awaitTerminal 时才会结算台账、释放 headless 标记并写
             // RUN_FINISHED（督导的唯一主事件源）。交互式（SEMI/MANUAL）轮次可能停在工具审批上：
-            // 生成任务会在审批处结束，但工作尚未结束，因此不在后台 watch，交给用户操作。
-            if (headless) {
-                appScope?.launch {
-                    runCatching { runService.awaitTerminal(handle) }
+            // 生成任务会在审批处结束，但工作尚未结束 —— 因此它等的是"审批答完之后的第二次收尾"，
+            // 而不是第一个 idle（见 ChatServiceRunService.awaitInteractiveTerminal）。
+            // 早先这一支根本没有 watcher：台账不结算、RUN_FINISHED 不写，督导永远收不到轮次结束，
+            // 任务卡在 RUNNING。
+            appScope?.launch {
+                runCatching {
+                    if (headless) {
+                        runService.awaitTerminal(handle)
+                    } else {
+                        runService.awaitInteractiveTerminal(handle)
+                    }
                 }
             }
 

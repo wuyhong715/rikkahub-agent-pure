@@ -105,8 +105,13 @@ internal class TimeCronTriggerFamily(
         // from the worker (worker re-enqueues itself).
         val periodMs = derivePeriodMs(spec)
         if (periodMs != null && periodMs >= 15 * 60 * 1000L) {
-            val nextFireMs = computeNextFireMs(spec, zone, System.currentTimeMillis())
-            val delay = (nextFireMs - System.currentTimeMillis()).coerceAtLeast(0L)
+            // A next run that is already persisted wins over "now + period". This family keeps
+            // its snapshot in memory only, so on a cold start every binding looks new: recomputing
+            // from `now` re-armed an @daily task with a fresh 24h delay on every app launch, and a
+            // user who opens the app daily therefore never saw it fire.
+            val now = System.currentTimeMillis()
+            val nextFireMs = wf.nextRunAtMs?.takeIf { it > 0 } ?: computeNextFireMs(spec, zone, now)
+            val delay = (nextFireMs - now).coerceAtLeast(0L)
             val req = PeriodicWorkRequestBuilder<WorkflowTimeCronWorker>(periodMs, TimeUnit.MILLISECONDS)
                 .setInitialDelay(delay, TimeUnit.MILLISECONDS)
                 .setInputData(workDataOf(KEY_WORKFLOW_ID to wf.id))
@@ -121,8 +126,9 @@ internal class TimeCronTriggerFamily(
         }
 
         // One-shot path: schedule the next fire; the worker re-enqueues itself on completion.
-        val nextFireMs = computeNextFireMs(spec, zone, System.currentTimeMillis())
-        val delay = (nextFireMs - System.currentTimeMillis()).coerceAtLeast(60_000L)
+        val now = System.currentTimeMillis()
+        val nextFireMs = wf.nextRunAtMs?.takeIf { it > 0 } ?: computeNextFireMs(spec, zone, now)
+        val delay = (nextFireMs - now).coerceAtLeast(60_000L)
         val req = OneTimeWorkRequestBuilder<WorkflowTimeCronWorker>()
             .setInitialDelay(delay, TimeUnit.MILLISECONDS)
             .setInputData(workDataOf(KEY_WORKFLOW_ID to wf.id))
@@ -179,67 +185,14 @@ internal class TimeCronTriggerFamily(
          * @daily = 24h. days_of_week with time_of_day still uses 24h period (worker's
          * fire skips when day doesn't match).
          */
-        fun derivePeriodMs(spec: TriggerSpec.TimeCron): Long? {
-            if (!spec.timeOfDay.isNullOrBlank()) return 24L * 60 * 60 * 1000
-            val cron = spec.cron?.trim() ?: return null
-            // @every Ns
-            val every = Regex("^@every\\s+(\\d+)([smhd])$").find(cron)
-            if (every != null) {
-                val n = every.groupValues[1].toLong()
-                val unit = every.groupValues[2]
-                return when (unit) {
-                    // Sub-minute not supported (matches CronExpressionParser's @every Ns
-                    // floor) — without this, WorkflowJson.validate() treats any positive
-                    // n as valid since this function never returns null for "s", and the
-                    // schedule silently degrades to the one-shot path's 60s delay floor
-                    // instead of surfacing a validation error at creation time.
-                    "s" -> if (n < 60) null else n * 1000
-                    "m" -> n * 60 * 1000
-                    "h" -> n * 60 * 60 * 1000
-                    "d" -> n * 24 * 60 * 60 * 1000
-                    else -> null
-                }
-            }
-            return when (cron) {
-                "@hourly" -> 60L * 60 * 1000
-                "@daily", "@midnight" -> 24L * 60 * 60 * 1000
-                "@weekly" -> 7L * 24 * 60 * 60 * 1000
-                else -> null  // 5-field cron — fall back to one-shot
-            }
-        }
+        fun derivePeriodMs(spec: TriggerSpec.TimeCron): Long? = TimeCronSchedule.periodMs(spec)
 
-        /** Compute the next fire time. For unsupported cron forms, returns now+15 min. */
-        fun computeNextFireMs(spec: TriggerSpec.TimeCron, zone: ZoneId, nowMs: Long): Long {
-            val now = ZonedDateTime.ofInstant(java.time.Instant.ofEpochMilli(nowMs), zone)
-            // time_of_day + optional days_of_week
-            if (!spec.timeOfDay.isNullOrBlank()) {
-                val (h, m) = spec.timeOfDay.split(":").let { it[0].toInt() to it[1].toInt() }
-                var candidate = now.toLocalDate().atTime(LocalTime.of(h, m)).atZone(zone)
-                if (!candidate.isAfter(now)) candidate = candidate.plusDays(1)
-                if (spec.daysOfWeek.isNotEmpty()) {
-                    val allowed = spec.daysOfWeek.map { isoDow(it) }.toSet()
-                    var hops = 0
-                    while (candidate.dayOfWeek !in allowed && hops < 8) {
-                        candidate = candidate.plusDays(1); hops++
-                    }
-                }
-                return candidate.toInstant().toEpochMilli()
-            }
-            // @every Ns
-            derivePeriodMs(spec)?.let { return nowMs + it }
-            // 5-field cron: compute the exact next execution via the shared parser
-            // (same dialect as scheduled jobs). Without this, "0 9 * * 1" style
-            // expressions silently degraded to hourly fires.
-            spec.cron?.trim()?.takeIf { it.isNotBlank() }?.let { cron ->
-                me.rerere.rikkahub.service.CronExpressionParser.parse(cron).getOrNull()?.let { parsed ->
-                    me.rerere.rikkahub.service.CronExpressionParser.nextExecution(parsed, now)
-                        ?.let { return it.toInstant().toEpochMilli() }
-                }
-            }
-            // Fallback for unsupported cron — fire roughly hourly so the user gets
-            // something useful even with an exotic schedule. Worker will re-evaluate.
-            return nowMs + 60L * 60 * 1000
-        }
+        /**
+         * Compute the next fire time, deferring to [TimeCronSchedule] so the value is stable
+         * between calls. See that object for why stability is load-bearing.
+         */
+        fun computeNextFireMs(spec: TriggerSpec.TimeCron, zone: ZoneId, nowMs: Long): Long =
+            TimeCronSchedule.nextFireMs(spec, zone, nowMs)
 
         private fun isoDow(iso: Int): DayOfWeek = when (iso) {
             1 -> DayOfWeek.MONDAY; 2 -> DayOfWeek.TUESDAY; 3 -> DayOfWeek.WEDNESDAY

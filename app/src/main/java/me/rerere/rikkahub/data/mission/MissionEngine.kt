@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.data.mission
 
 import android.util.Log
+import kotlin.uuid.Uuid
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
@@ -17,6 +18,7 @@ import me.rerere.rikkahub.subagent.SubAgentRegistry
 import me.rerere.rikkahub.subagent.SubAgentRun
 import me.rerere.rikkahub.subagent.SubAgentStatus
 import me.rerere.rikkahub.runtime.util.JsonInstant
+import me.rerere.rikkahub.service.run.ConversationRunRegistry
 import java.util.concurrent.ConcurrentHashMap
 
 private const val TAG = "MissionEngine"
@@ -166,6 +168,30 @@ class MissionEngine(
      * [bindings] map first; on miss, falls back to
      * [MissionRepository.findActiveByConversation] and backfills the cache.
      */
+    /**
+     * The ledger run currently driving [conversationId], when it can be established.
+     *
+     * Two sources, best first:
+     *  1. [ConversationRunRegistry] - the run generating right now. [RunService] binds it for
+     *     every kind of run, headless or not, so this is the precise answer.
+     *  2. `mission.lastRunId` - after a process death or an approval pause the live binding is
+     *     gone, but the mission still points at the run it belongs to.
+     *
+     * Null is a legitimate answer (a plain chat inside a mission-bound conversation has no run);
+     * callers must treat it as "cannot attribute", never as an error.
+     */
+    private suspend fun runIdFor(conversationId: String, missionId: String?): String? {
+        val conversation = runCatching { Uuid.parse(conversationId) }.getOrNull()
+        if (conversation != null) {
+            val bound = ConversationRunRegistry.runIdFor(conversation)
+            if (bound != null) return bound
+        }
+        if (missionId == null) return null
+        val lastRunId: String? =
+            runCatching { repository.getById(missionId)?.lastRunId }.getOrNull()
+        return lastRunId
+    }
+
     suspend fun missionIdFor(conversationId: String): String? = runCatching {
         bindings[conversationId] ?: repository.findActiveByConversation(conversationId)?.let { entity ->
             bindings[conversationId] = entity.id
@@ -193,6 +219,14 @@ class MissionEngine(
         outputJson: String,
     ) {
         runCatching {
+            // Both journal kinds below are read back *per run* by MissionSupervisor, whose query
+            // is `WHERE run_id = :runId`. An event written without a run id is therefore
+            // invisible there: hasProgress stays false, a round that ran ten tools and rewrote
+            // task-state.md still scores as "no progress", the stall counter climbs and the
+            // mission is eventually parked as BLOCKED. Resolve it once, use it for both.
+            val missionId = missionIdFor(conversationId)
+            val runId = runIdFor(conversationId, missionId)
+
             // (a) TOOL_RESULT — unconditional, one row per tool execution.
             runEventRepository.emit(
                 type = RunEventType.TOOL_RESULT,
@@ -204,8 +238,9 @@ class MissionEngine(
                         put("args", argsJson.take(500))
                     }
                 ),
-                missionId = missionIdFor(conversationId),
+                missionId = missionId,
                 conversationId = conversationId,
+                runId = runId,
             )
 
             // (b) ARTIFACT_TOOLS whitelist — attach file artifacts to the bound mission,
@@ -213,9 +248,9 @@ class MissionEngine(
             // view without re-reading files (batch 1: delivery closure).
             if (toolName !in ARTIFACT_TOOLS) return@runCatching
             val path = parsePath(argsJson) ?: return@runCatching
-            val missionId = missionIdFor(conversationId) ?: return@runCatching
+            val boundMissionId = missionId ?: return@runCatching
             val change = computeArtifactChange(toolName, argsJson)
-            repository.attachArtifact(missionId, path, toolName, change = change)
+            repository.attachArtifact(boundMissionId, path, toolName, change = change, runId = runId)
         }.onFailure { Log.w(TAG, "onToolExecuted failed for $toolName", it) }
     }
 

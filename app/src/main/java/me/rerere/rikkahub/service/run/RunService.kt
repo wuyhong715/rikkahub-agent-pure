@@ -35,6 +35,16 @@ interface RunService {
 
     suspend fun awaitTerminal(handle: RunHandle): RunResult
 
+    /**
+     * [awaitTerminal] for rounds a human is steering (SEMI / MANUAL missions).
+     *
+     * Such a round goes idle *twice*: once when generation stops on a tool call that needs the
+     * user's answer, and once when it really ends. Only the second idle is the end — the answer
+     * restarts generation on the same conversation. Implementations that cannot park keep the
+     * plain [awaitTerminal] behaviour by default.
+     */
+    suspend fun awaitInteractiveTerminal(handle: RunHandle): RunResult = awaitTerminal(handle)
+
     suspend fun cancel(handle: RunHandle)
 
     /**
@@ -113,7 +123,7 @@ data class RunHandle(
     val missionId: String? = null,
 )
 
-enum class RunStatus { COMPLETED, TIMED_OUT, FAILED, CANCELLED }
+enum class RunStatus { COMPLETED, TIMED_OUT, FAILED, CANCELLED, PARKED }
 
 /** Terminal outcome of a run. */
 data class RunResult(

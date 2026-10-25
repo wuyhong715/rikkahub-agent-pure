@@ -432,6 +432,12 @@ class MissionRepository(
         sourceTool: String,
         summary: String? = null,
         change: ArtifactChange? = null,
+        /**
+         * The run this artifact belongs to. MissionSupervisor reads a round's progress with
+         * `observeByRun(runId)`, so an artifact journaled without it counts as nothing; null is
+         * only correct when the artifact did not come from a run at all.
+         */
+        runId: String? = null,
     ) {
         runCatching {
             writeMutex.withLock {
@@ -448,6 +454,7 @@ class MissionRepository(
                     type = RunEventType.ARTIFACT,
                     title = path,
                     detail = summary,
+                    runId = runId,
                     payloadJson = JsonInstant.encodeToString(
                         buildJsonObject {
                             put("path", path)

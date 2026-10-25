@@ -889,6 +889,21 @@ class ChatService(
         return session.generationJob
     }
 
+    /**
+     * True while the conversation's current turn is parked on a tool call the human has not
+     * answered.
+     *
+     * Read by the run watcher: an interactive (SEMI/MANUAL) round goes idle *because* of this,
+     * and treating that idle as "the round is over" settled the ledger and journaled
+     * RUN_FINISHED under a generation that was about to continue.
+     */
+    fun hasPendingToolApprovals(conversationId: Uuid): Boolean {
+        val conversation = sessions[conversationId]?.state?.value ?: return false
+        return conversation.messageNodes.any { node ->
+            node.currentMessage.parts.any { part -> part is UIMessagePart.Tool && part.isPending }
+        }
+    }
+
     fun getProcessingStatusFlow(conversationId: Uuid): StateFlow<String?> {
         return getOrCreateSession(conversationId).processingStatus
     }

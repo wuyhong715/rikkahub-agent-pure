@@ -61,6 +61,9 @@ class MissionLauncherTest {
         /** 批 E — how many times the launcher's background watcher awaited this run. */
         var awaitCalls = 0
 
+        /** How many interactive (approval-aware) watchers the launcher started. */
+        var interactiveAwaitCalls = 0
+
         /**
          * What the mission↔conversation registry held for the requested conversation at the
          * instant generation was dispatched. Proves the launcher registers BEFORE submit: a
@@ -89,6 +92,12 @@ class MissionLauncherTest {
 
         override suspend fun awaitTerminal(handle: RunHandle): RunResult {
             awaitCalls++
+            return RunResult(RunStatus.COMPLETED, handle.conversationId)
+        }
+
+        /** SEMI/MANUAL rounds: the watcher that waits through tool approvals. */
+        override suspend fun awaitInteractiveTerminal(handle: RunHandle): RunResult {
+            interactiveAwaitCalls++
             return RunResult(RunStatus.COMPLETED, handle.conversationId)
         }
 
@@ -608,7 +617,7 @@ class MissionLauncherTest {
     }
 
     @Test
-    fun `an interactive launch is not watched in the background`() = runBlocking {
+    fun `an interactive launch is watched through its approvals`() = runBlocking {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         try {
             val fx = Fixture(scope = scope)
@@ -617,9 +626,18 @@ class MissionLauncherTest {
             val outcome = fx.launcher.launch("m-manual", LaunchSource.Create)
 
             assertTrue(outcome.ok)
-            delay(200)
+            withTimeoutOrNull(2_000) {
+                while (fx.runService.interactiveAwaitCalls == 0) delay(10)
+            }
             assertEquals(
-                "an interactive round may pause on an approval; the user drives it",
+                "a SEMI/MANUAL round needs a watcher too: without one nothing settled the ledger, " +
+                    "no RUN_FINISHED reached the supervisor, and the mission stayed RUNNING",
+                1,
+                fx.runService.interactiveAwaitCalls,
+            )
+            assertEquals(
+                "the interactive watcher is a different one — the plain one would settle at the " +
+                    "first idle, which is the approval pause",
                 0,
                 fx.runService.awaitCalls,
             )

@@ -23,6 +23,7 @@ import me.rerere.rikkahub.data.mission.triggerSpec
 import me.rerere.rikkahub.data.runevent.RunEventRepository
 import me.rerere.rikkahub.data.runevent.RunEventType
 import me.rerere.rikkahub.workflow.model.TriggerSpec
+import me.rerere.rikkahub.workflow.trigger.TimeCronSchedule
 import me.rerere.rikkahub.workflow.trigger.TimeCronTriggerFamily
 import me.rerere.rikkahub.workflow.trigger.TriggerBinding
 import me.rerere.rikkahub.workflow.trigger.TriggerFireCallback
@@ -157,7 +158,9 @@ class MissionScheduler(
      */
     private fun missionBindings(missions: List<MissionEntity>): List<TriggerBinding> =
         missions.filter { it.isTriggerArmed }.mapNotNull { mission ->
-            mission.triggerSpec?.let { spec -> TriggerBinding(mission.id, spec, 0L) }
+            mission.triggerSpec?.let { spec ->
+                TriggerBinding(mission.id, spec, 0L, mission.nextRunAt)
+            }
         }
 
     /**
@@ -191,8 +194,17 @@ class MissionScheduler(
         if (!mission.isTriggerArmed) return null
         val spec = mission.triggerSpec ?: return null
         return when (spec) {
-            is TriggerSpec.TimeCron ->
-                TimeCronTriggerFamily.computeNextFireMs(spec, zoneId(), nowMs)
+            is TriggerSpec.TimeCron -> TimeCronSchedule.nextFireMs(
+                spec = spec,
+                zone = zoneId(),
+                nowMs = nowMs,
+                // Anchoring on what already happened is what keeps this value identical across
+                // the reconciles of one idle minute: refreshNextRunAt writes it into the row it
+                // is reading, and a value that moved on every read turned that write into a
+                // self-sustaining 3 Hz loop.
+                lastFiredAtMs = mission.lastFiredAt,
+                scheduledNextMs = mission.nextRunAt,
+            )
             else -> null
         }
     }
