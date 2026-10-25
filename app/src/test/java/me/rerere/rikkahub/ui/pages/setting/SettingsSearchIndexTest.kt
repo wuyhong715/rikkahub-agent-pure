@@ -46,12 +46,13 @@ class SettingsSearchIndexTest {
     }
 
     @Test
-    fun `every row belongs to one of the seven hub groups`() {
+    fun `every row belongs to one of the hub groups`() {
         val groups = setOf(
             R.string.setting_page_group_appearance,
             R.string.setting_page_group_models,
             R.string.setting_page_group_assistant,
             R.string.setting_page_group_device,
+            R.string.setting_page_group_instances,
             R.string.setting_page_group_connections,
             R.string.setting_page_group_data,
             R.string.setting_page_group_about,

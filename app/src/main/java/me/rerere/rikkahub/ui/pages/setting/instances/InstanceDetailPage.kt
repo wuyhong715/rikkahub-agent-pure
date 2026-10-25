@@ -135,7 +135,7 @@ fun InstanceDetailPage(kindName: String, key: String) {
 
             item(key = "settings") {
                 FilledTonalButton(
-                    onClick = { destinationFor(kind, key)?.let(navController::navigate) },
+                    onClick = { destinationFor(kind, key)?.let { target -> navController.navigate(target) } },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(stringResource(R.string.instances_open_settings))

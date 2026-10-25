@@ -40,7 +40,7 @@ class InstancesVM(
     }
 
     /**
-     * 全部重探。App 宿主是本地检查（TLT 为 0，永远"新鲜"），跳过一次没有意义；其余四个都值得。
+     * 全部重探。App 宿主是本地检查（TTL 为 0，永远"新鲜"），跳过一次没有意义；其余四个都值得。
      */
     fun refreshAll() {
         viewModelScope.launch {
