@@ -107,6 +107,15 @@ class RikkaHubApp : Application() {
         }
         this.createNotificationChannel()
 
+        // P3 — 让实例注册表在进程启动时就活着：工具目录的裁剪与每轮环境提示读的是它发布的
+        // 快照，晚建一分钟，那一分钟里模型看到的就是"什么后端都还不知道"。包在 runCatching 里
+        // 是因为它拉的是 Room 流与 Shizuku binder 监听，任何一个后端出问题都不该让应用起不来。
+        runCatching {
+            org.koin.core.context.GlobalContext.get().get<me.rerere.rikkahub.data.runtime.InstanceRegistry>()
+        }.onFailure { t ->
+            Log.w(TAG, "runtime instance registry warm-up failed; tool surface stays unfiltered", t)
+        }
+
         // Restore any headless conversation IDs that survived a process kill; must run
         // before any cron worker fires so mark/unmark are consistent.
         HeadlessConversations.init(this)

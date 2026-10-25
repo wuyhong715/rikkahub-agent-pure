@@ -139,4 +139,26 @@ class AppEnvironmentPromptTest {
         assertTrue(out.contains("shell (uid 2000"))
         assertTrue(out.contains("root_exec requires a root broker"))
     }
+
+    @Test
+    fun `instances section lists each backend with its status and the missing step`() {
+        val out = AppEnvironmentPrompt.render(
+            baseInfo().copy(
+                instances = listOf(
+                    AppEnvironmentPrompt.InstanceLine("termux:local", "needs setup", "enable_feature"),
+                    AppEnvironmentPrompt.InstanceLine("ssh:vps", "ready"),
+                ),
+            ),
+        )
+        assertTrue(out.contains("Execution backends right now"))
+        // label 用 kind:key，与工具错误里的 instance 字段同形，模型能对上号。
+        assertTrue(out.contains("- termux:local: needs setup (enable_feature)"))
+        assertTrue(out.contains("- ssh:vps: ready"))
+    }
+
+    @Test
+    fun `instances section is absent when the registry has not published yet`() {
+        // 没数据 ≠ 不能用：宁可不说，也不要写一句会让模型以为后端全挂了的"unknown"。
+        assertFalse(AppEnvironmentPrompt.render(baseInfo()).contains("Execution backends"))
+    }
 }

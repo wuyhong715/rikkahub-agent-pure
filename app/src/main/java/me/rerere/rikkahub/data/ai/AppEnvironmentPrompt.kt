@@ -49,6 +49,18 @@ object AppEnvironmentPrompt {
         /** Model file name (LOCAL) or display name (CLOUD); null renders "auto". */
         val semanticModelLabel: String? = null,
         val shellPrivilege: ShellPrivilege = ShellPrivilege.UNKNOWN,
+        /**
+         * 运行后端此刻的可用性，一行一个实例。空表示注册表还没热——那时整节不输出，
+         * 而不是写一句"未知"，免得模型把"没数据"读成"不能用"。
+         */
+        val instances: List<InstanceLine> = emptyList(),
+    )
+
+    /** 一个运行实例的提示行：[label] 是 `kind:key`，与工具错误里的 `instance` 字段同形。 */
+    data class InstanceLine(
+        val label: String,
+        val status: String,
+        val reason: String? = null,
     )
 
     fun render(info: Info): String = buildString {
@@ -108,6 +120,16 @@ object AppEnvironmentPrompt {
                 "- Shell privilege: Shizuku is not running — shizuku_exec / root_exec will fail until " +
                     "the user starts Shizuku."
             )
+        }
+        if (info.instances.isNotEmpty()) {
+            appendLine(
+                "- Execution backends right now — a backend that is not \"ready\" will fail if you call " +
+                    "it. Say what is missing instead of retrying, or use another backend:"
+            )
+            info.instances.forEach { line ->
+                val reason = line.reason?.takeIf { it.isNotBlank() }?.let { " (${sanitize(it)})" }.orEmpty()
+                appendLine("  - ${sanitize(line.label)}: ${sanitize(line.status)}$reason")
+            }
         }
         append("</app_environment>")
     }.trim()

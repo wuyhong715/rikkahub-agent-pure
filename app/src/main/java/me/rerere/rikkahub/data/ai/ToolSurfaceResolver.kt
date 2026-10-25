@@ -3,11 +3,13 @@ package me.rerere.rikkahub.data.ai
 import me.rerere.ai.core.Tool
 import me.rerere.ai.provider.Modality
 import me.rerere.ai.provider.Model
+import me.rerere.rikkahub.data.ai.tools.InstanceToolFilter
 import me.rerere.rikkahub.data.ai.tools.LocalToolGates
 import me.rerere.rikkahub.data.ai.tools.LocalTools
 import me.rerere.rikkahub.data.ai.tools.ToolInvocationContext
 import me.rerere.rikkahub.data.ai.tools.ToolInvocationContexts
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.runtime.InstanceRuntimeSnapshot
 import kotlin.uuid.Uuid
 
 /**
@@ -57,7 +59,14 @@ object ToolSurfaceResolver {
         // never hid it from the model — it only made the catalogue smaller, and the ranking, not
         // the size, is what picks. LocalToolGates holds the rule and explains the criterion for
         // the groups that kept their switch.
-        options = LocalToolGates.effective(assistant.localTools),
+        //
+        // P3 — 再按运行实例的状态裁一刀：只裁"确定永远不可能成功"的组（后端应用没装）。
+        // 快照取自注册表；注册表还没热起来时它是空的，等价于不裁——宁可多给工具，
+        // 也不要在没有数据时把能力藏起来。见 InstanceToolFilter 的说明。
+        options = InstanceToolFilter.effective(
+            options = LocalToolGates.effective(assistant.localTools),
+            instances = InstanceRuntimeSnapshot.current,
+        ),
         invocationContext = context,
         // P2-02 - the per-tool deny-list rides along with the option list it refines.
         disabledToolNames = assistant.disabledLocalTools,

@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -81,6 +82,14 @@ class InstanceRegistry(
         observed
             .combine(probed) { base, overrides -> overlay(base, overrides) }
             .stateIn(scope, SharingStarted.Eagerly, emptyList<RuntimeInstance>())
+
+    init {
+        // 把合并后的视图发布给两个"没有作用域"的读点：工具目录装配（要滤掉装不上的后端）
+        // 与每轮环境提示（要说清哪个后端此刻能用）。注册表是唯一写入方。
+        scope.launch {
+            instances.collect { merged -> InstanceRuntimeSnapshot.publish(merged) }
+        }
+    }
 
     fun snapshot(): List<RuntimeInstance> = instances.value
 

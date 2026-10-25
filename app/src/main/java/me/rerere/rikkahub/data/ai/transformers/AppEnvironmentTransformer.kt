@@ -14,6 +14,9 @@ import me.rerere.rikkahub.data.vector.EmbeddingReadiness
 import me.rerere.rikkahub.data.vector.LibraryIndexCoordinator
 import me.rerere.rikkahub.shizuku.PrivilegeLevel
 import me.rerere.rikkahub.shizuku.ShizukuManager
+import me.rerere.rikkahub.data.runtime.RuntimeInstance
+import me.rerere.rikkahub.data.runtime.InstanceRuntimeSnapshot
+import me.rerere.rikkahub.data.runtime.InstanceState
 
 /**
  * App-environment system-prompt injection (Moxw).
@@ -115,6 +118,15 @@ class AppEnvironmentTransformer(
             PrivilegeLevel.UNKNOWN -> AppEnvironmentPrompt.ShellPrivilege.UNKNOWN
         }
 
+        // 运行后端：直接用注册表发布的快照，不再二次问后端。空快照 = 这一节不输出。
+        val instances = InstanceRuntimeSnapshot.current.map { instance ->
+            AppEnvironmentPrompt.InstanceLine(
+                label = instance.id.serial,
+                status = instanceStatusWord(instance.state),
+                reason = instanceReason(instance),
+            )
+        }
+
         return AppEnvironmentPrompt.Info(
             appName = Brand.NAME,
             privateFilesDir = context.filesDir.absolutePath,
@@ -123,7 +135,25 @@ class AppEnvironmentTransformer(
             semanticBackend = semanticBackend,
             semanticModelLabel = semanticModelLabel,
             shellPrivilege = shellPrivilege,
+            instances = instances,
         )
+    }
+
+    /**
+     * 状态词只取四态本身，不搬 `why` 的中文句子：这一块是英文提示词，混进整句中文会让模型
+     * 在两套语域间跳。具体原因交给工具错误的 `recovery`（P2 已统一），提示里只要"能不能用 + 缺哪一步"。
+     */
+    private fun instanceStatusWord(state: InstanceState): String = when (state) {
+        InstanceState.Ready -> "ready"
+        is InstanceState.NeedsSetup -> "needs setup"
+        is InstanceState.Busy -> "busy"
+        is InstanceState.Unavailable -> "not ready"
+    }
+
+    private fun instanceReason(instance: RuntimeInstance): String? = when (val state = instance.state) {
+        is InstanceState.NeedsSetup -> state.step.name.lowercase()
+        is InstanceState.Unavailable -> instance.lastError?.take(60) ?: "untested"
+        else -> null
     }
 
     private companion object {
