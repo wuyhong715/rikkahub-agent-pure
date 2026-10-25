@@ -2579,6 +2579,10 @@ class ChatService(
                     // what the catalogue decided. Empty in the ordinary case of no skills.
                     addAll(skillTools)
                 }.let { me.rerere.rikkahub.subagent.SubAgentSurface.apply(conversationId, it) },
+                // The frozen surface above is authoritative: if it narrowed the list (a read-only
+                // sub-agent), the loop must not add its write-capable memory tool back on top.
+                injectMemoryTools = me.rerere.rikkahub.subagent.SubAgentSurface
+                    .frozenFor(conversationId) == null,
                 // The dynamic half of the catalogue — null on any path that built no catalogue,
                 // in which case the loop gets exactly the snapshot above.
                 extraToolsProvider = { liveCatalogueTools?.invoke() ?: emptyList() },

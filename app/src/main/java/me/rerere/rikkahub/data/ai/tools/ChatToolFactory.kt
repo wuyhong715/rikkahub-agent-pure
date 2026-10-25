@@ -57,8 +57,8 @@ class ChatToolFactory(
                 buildMemoryTools(
                     json = json,
                     onCreation = { content, kind -> memoryWriteGate.create(memoryAssistantId, content, kind) },
-                    onUpdate = { id, content -> memoryRepository.updateContent(id, content).toLoopMemory() },
-                    onDelete = { id -> memoryRepository.deleteMemory(id) },
+                    onUpdate = { id, content -> memoryRepository.updateContent(id, content, memoryAssistantId).toLoopMemory() },
+                    onDelete = { id -> memoryRepository.deleteMemory(id, memoryAssistantId) },
                 )
             )
         }
