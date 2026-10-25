@@ -7,6 +7,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import me.rerere.rikkahub.runtime.util.JsonInstant
 import java.io.File
+import java.nio.file.Files
 
 /**
  * 批 F — 一轮开始前对任务工作区做的文件快照。
@@ -94,7 +95,7 @@ class MissionSnapshotStore(
                 else -> null
             }
             runCatching {
-                filesDir.listFiles()?.forEach { child -> child.deleteRecursively() }
+                filesDir.listFiles()?.forEach { child -> deleteTreeSafely(child) }
                 filesDir.mkdirs()
                 copyTree(source, filesDir)
             }.fold(
@@ -106,7 +107,7 @@ class MissionSnapshotStore(
 
     /** 任务删除时清掉它的全部快照目录。 */
     suspend fun purge(missionId: String): Boolean = withContext(Dispatchers.IO) {
-        lock.withLock { File(baseDir, missionId).deleteRecursively() }
+        lock.withLock { deleteTreeSafely(File(baseDir, missionId)); true }
     }
 
     // ---------------------------------------------------------------------------------------
@@ -116,7 +117,13 @@ class MissionSnapshotStore(
     private fun captureLocked(filesDir: File, missionId: String, note: String): CaptureResult {
         if (!filesDir.isDirectory) return CaptureResult.Empty
 
-        val files = filesDir.walkTopDown().filter { it.isFile }.toList()
+        // Symlinks are neither counted nor followed: a link to a directory would be walked (a
+        // self-referential one loops forever) and a link to a file would be counted as workspace
+        // data it is not. The workspace is a shell sandbox — venv / npm leave links everywhere.
+        val files = filesDir.walkTopDown()
+            .onEnter { !isSymlink(it) }
+            .filter { !isSymlink(it) && it.isFile }
+            .toList()
         if (files.isEmpty()) return CaptureResult.Empty
 
         if (files.size > maxFiles) {
@@ -135,10 +142,10 @@ class MissionSnapshotStore(
         val id = "r$round-$createdAt"
         val dir = File(File(baseDir, missionId), id)
         runCatching {
-            dir.deleteRecursively()
+            deleteTreeSafely(dir)
             copyTree(filesDir, dir)
         }.onFailure {
-            dir.deleteRecursively()
+            deleteTreeSafely(dir)
             return CaptureResult.Skipped("快照写入失败：${it.message ?: it::class.simpleName}")
         }
 
@@ -163,7 +170,7 @@ class MissionSnapshotStore(
         if (index.size <= keep) return index
         val sorted = index.sortedByDescending { it.createdAt }
         val survivors = sorted.take(keep)
-        sorted.drop(keep).forEach { old -> runCatching { File(old.dir).deleteRecursively() } }
+        sorted.drop(keep).forEach { old -> runCatching { deleteTreeSafely(File(old.dir)) } }
         return survivors.sortedBy { it.createdAt }
     }
 
@@ -191,6 +198,10 @@ class MissionSnapshotStore(
 
     /** 递归拷贝；符号链接直接跳过（不跟随、不复制，避免把工作区外的东西拖进快照）。 */
     private fun copyTree(source: File, target: File) {
+        // The check has to be explicit: `File.isFile` / `isDirectory` FOLLOW the link, so without
+        // this a symlink to an outside file was copied (content and all) and a symlink to a
+        // directory was descended into.
+        if (isSymlink(source)) return
         if (source.isDirectory) {
             target.mkdirs()
             source.listFiles()?.forEach { child -> copyTree(child, File(target, child.name)) }
@@ -198,6 +209,29 @@ class MissionSnapshotStore(
             target.parentFile?.mkdirs()
             source.copyTo(target, overwrite = true)
         }
+    }
+
+    /** True when [file] is a symlink. Never follows it. */
+    private fun isSymlink(file: File): Boolean =
+        runCatching { Files.isSymbolicLink(file.toPath()) }.getOrDefault(false)
+
+    /**
+     * Deletes [file] without ever following a symlink.
+     *
+     * `File.deleteRecursively()` treats a symlink-to-directory as a directory and deletes the
+     * *target's* contents, so one `ln -s ~/Documents loop` in a workspace turned "restore this
+     * mission's files" into "wipe an unrelated directory". A link is removed as a link.
+     */
+    private fun deleteTreeSafely(file: File) {
+        val path = file.toPath()
+        if (isSymlink(file)) {
+            runCatching { Files.deleteIfExists(path) }
+            return
+        }
+        if (file.isDirectory) {
+            file.listFiles()?.forEach { child -> deleteTreeSafely(child) }
+        }
+        runCatching { Files.deleteIfExists(path) }
     }
 
     companion object {

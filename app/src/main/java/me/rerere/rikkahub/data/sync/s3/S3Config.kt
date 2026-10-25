@@ -17,9 +17,13 @@ data class S3Config(
     val items: List<BackupItem> = BackupItem.selectable,
 ) {
     val host: String
-        get() = endpoint
+        get() = endpoint.trim()
             .removePrefix("https://")
             .removePrefix("http://")
+            // A reverse-proxied endpoint often carries a path ("https://host.com:8080/s3"). A Host
+            // header (and the signed canonical host) must be host:port only — a path in there is
+            // either rejected or silently re-signed against a different value.
+            .substringBefore('/')
             .trimEnd('/')
 
     val isHttps: Boolean

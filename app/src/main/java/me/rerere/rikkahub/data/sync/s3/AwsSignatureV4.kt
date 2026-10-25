@@ -115,7 +115,10 @@ internal object AwsSignatureV4 {
                     else -> "${config.bucket}.$host"
                 }
             )
-            append(canonicalUri)
+            // The signature above covers the ENCODED uri; the request must be the same string, or
+            // the server re-canonicalises what we sent, gets a different hash and answers
+            // 403 SignatureDoesNotMatch for any key with a space, "+", non-ASCII or "&".
+            append(canonicalUri.urlEncodePath())
             if (canonicalQueryString.isNotEmpty()) {
                 append("?$canonicalQueryString")
             }

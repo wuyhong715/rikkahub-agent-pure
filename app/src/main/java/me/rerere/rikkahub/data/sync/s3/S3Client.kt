@@ -10,8 +10,11 @@ import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsChannel
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
 import io.ktor.http.HttpMethod
+import io.ktor.http.content.OutgoingContent
 import io.ktor.http.isSuccess
+import io.ktor.utils.io.ByteReadChannel
 import io.ktor.utils.io.jvm.javaio.toInputStream
 import io.ktor.utils.io.readAvailable
 import io.ktor.util.cio.readChannel
@@ -87,7 +90,19 @@ class S3Client(
                     signed.headers.forEach { (k, v) -> append(k, v) }
                 }
                 // Stream large files to avoid loading backup archives into heap.
-                setBody(file.readChannel())
+                //
+                // The body MUST carry its own content type and length. A bare ByteReadChannel has
+                // neither, and Ktor treats Content-Type / Content-Length as unsafe headers: the
+                // ones appended above get filtered or replaced, so the request that actually goes
+                // out disagrees with the signature (403 SignatureDoesNotMatch) or degrades to
+                // chunked transfer-encoding (411 Length Required on S3 / R2 / OSS).
+                setBody(
+                    object : OutgoingContent.ReadChannelContent() {
+                        override val contentType: ContentType = ContentType.parse(contentType)
+                        override val contentLength: Long = file.length()
+                        override fun readFrom(): ByteReadChannel = file.readChannel()
+                    }
+                )
             }
 
             if (!response.status.isSuccess()) {
@@ -360,7 +375,11 @@ class S3Client(
                         when {
                             inContents -> {
                                 when (currentTag) {
-                                    "Key" -> currentKey = text
+                                    // TEXT can arrive as several events for one element — chunked
+                                    // values and entity references (`&amp;`) both do it. Assigning
+                                    // kept only the last chunk, so such a key was truncated and a
+                                    // restore would fetch the wrong object.
+                                    "Key" -> currentKey = (currentKey ?: "") + text
                                     "Size" -> currentSize = text.toLongOrNull() ?: 0
                                     "ETag" -> currentEtag = text.trim('"')
                                     "LastModified" -> currentLastModified =
@@ -371,7 +390,7 @@ class S3Client(
                             }
 
                             inCommonPrefixes -> {
-                                if (currentTag == "Prefix") currentPrefix = text
+                                if (currentTag == "Prefix") currentPrefix = (currentPrefix ?: "") + text
                             }
 
                             else -> {

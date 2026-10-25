@@ -50,6 +50,47 @@ class MissionSnapshotStoreTest {
         assertEquals(listOf(snapshot.id), listed.map { it.id })
     }
 
+    // ------------------------------------------------------------- 符号链接（P1-16）
+
+    @Test
+    fun `capture ignores symlinks instead of following them`() = runBlocking {
+        val store = MissionSnapshotStore(tempDir("snap"), clock = { 1_000L })
+        val files = workspace("a.md" to "A")
+        val outside = tempDir("outside")
+        File(outside, "secret.txt").writeText("SECRET")
+        // Exactly what `npm install` / `python -m venv` / `ln -s` leave in a workspace.
+        Files.createSymbolicLink(File(files, "leak.txt").toPath(), File(outside, "secret.txt").toPath())
+        Files.createSymbolicLink(File(files, "leakdir").toPath(), outside.toPath())
+
+        val result = store.capture(files, "m1")
+
+        assertTrue(result is MissionSnapshotStore.CaptureResult.Saved)
+        val snapshot = (result as MissionSnapshotStore.CaptureResult.Saved).snapshot
+        assertEquals("a symlink is not workspace data", 1, snapshot.fileCount)
+        assertFalse(File(snapshot.dir, "leak.txt").exists())
+        assertFalse(File(snapshot.dir, "leakdir").exists())
+    }
+
+    @Test
+    fun `restore deletes a link as a link and never touches its target`() = runBlocking {
+        val store = MissionSnapshotStore(tempDir("snap"), clock = { 1_000L })
+        val files = workspace("a.md" to "A")
+        val saved = store.capture(files, "m1")
+        assertTrue(saved is MissionSnapshotStore.CaptureResult.Saved)
+        val outside = tempDir("outside")
+        val keep = File(outside, "keep.txt")
+        keep.writeText("KEEP")
+        // The workspace gained a link to an unrelated directory after the snapshot was taken.
+        Files.createSymbolicLink(File(files, "link").toPath(), outside.toPath())
+
+        val restored = store.restore(files, (saved as MissionSnapshotStore.CaptureResult.Saved).snapshot)
+
+        assertTrue(restored is MissionSnapshotStore.RestoreResult.Restored)
+        assertTrue("the link's target must survive a restore", keep.exists())
+        assertEquals("KEEP", keep.readText())
+        assertEquals("A", File(files, "a.md").readText())
+    }
+
     @Test
     fun `capture of an empty workspace is not an error`() = runBlocking {
         val store = MissionSnapshotStore(tempDir("snap"))

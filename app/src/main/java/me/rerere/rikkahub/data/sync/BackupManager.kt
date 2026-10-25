@@ -78,14 +78,26 @@ class BackupManager(
 
     /** Archives every file under [directory] as `<prefix>/<relative path>`. */
     private suspend fun addTree(zip: ZipOutputStream, directory: File, prefix: String) {
-        for (file in directory.walkTopDown()) {
-            if (!file.isFile) continue
+        for (file in directory.walkTopDown().onEnter { !isSymlink(it) }) {
             currentCoroutineContext().ensureActive()
+            // A symlink is skipped, never followed. A workspace is a shell sandbox: `npm install`,
+            // `python -m venv` and plain `ln -s` leave links pointing anywhere (the proot rootfs,
+            // /usr/bin, a sibling app directory). Following them did two bad things at once — it
+            // archived content from outside the tree, and `resolveInside` below then rejected the
+            // escape by THROWING, which aborted the whole backup (local, WebDAV and S3 alike) with
+            // "Backup file is outside its target directory". The link itself is not data: whatever
+            // recreates it on restore (the same venv/npm install) recreates it.
+            if (isSymlink(file)) continue
+            if (!file.isFile) continue
             val relative = file.relativeTo(directory).invariantSeparatorsPath
             PendingRestore.resolveInside(directory, relative)
             addFile(zip, file, "$prefix/$relative")
         }
     }
+
+    /** True when [file] is a symlink. Does not follow it (unlike [File.isFile]). */
+    private fun isSymlink(file: File): Boolean =
+        runCatching { Files.isSymbolicLink(file.toPath()) }.getOrDefault(false)
 
     /**
      * Workspace data, deliberately excluding the proot rootfs (`workspaces/<root>/linux`, often
