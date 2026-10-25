@@ -75,6 +75,7 @@ import me.rerere.rikkahub.data.ai.toLoopAssistant
 import me.rerere.rikkahub.data.ai.toLoopMemory
 import me.rerere.rikkahub.data.ai.toLoopSettings
 import me.rerere.rikkahub.data.ai.tools.AppPlaybookFile
+import me.rerere.rikkahub.data.ai.tools.HeadlessConversations
 import me.rerere.rikkahub.data.ai.tools.AppPlaybookRules
 import me.rerere.rikkahub.runtime.GenerationChunk
 import me.rerere.rikkahub.runtime.GenerationLoop

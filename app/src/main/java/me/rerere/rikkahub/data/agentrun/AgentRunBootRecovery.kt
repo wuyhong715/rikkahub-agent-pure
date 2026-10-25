@@ -54,10 +54,12 @@ class AgentRunBootRecovery(
         context: Context,
         repository: AgentRunRepository,
         resume: suspend (AgentRun) -> Boolean = { false },
+        liveRunIds: () -> Set<String> = { emptySet() },
     ) : this(
         repository = repository,
         notifyStranded = { stranded -> postAggregateNotification(context, stranded) },
         resume = resume,
+        liveRunIds = liveRunIds,
     )
 
     /**
