@@ -11,6 +11,9 @@ import okhttp3.Request
 import java.io.File
 import java.io.InputStream
 
+/** Bytes read from the head of a file to identify its format (offset 4..7 matters). */
+private const val MAGIC_SNIFF_BYTES = 16
+
 private const val TAG = "ModelInstall"
 
 /**
@@ -345,7 +348,9 @@ object ModelInstall {
             val ext = target.name.substringAfterLast('.', "").lowercase()
             val firstBytes = ByteArray(16)
             val bytesRead = partial.inputStream().use { it.read(firstBytes) }
-            if (bytesRead > 0 && !isValidMagicForExtension(ext, firstBytes.copyOf(bytesRead))) {
+            // `> 0` let a 0-byte 200 response skip validation entirely and be renamed into
+            // place as a "model".
+            if (bytesRead <= 0 || !isValidMagicForExtension(ext, firstBytes.copyOf(bytesRead))) {
                 val hexDump = firstBytes.take(8).joinToString(" ") { "%02x".format(it.toInt() and 0xff) }
                 Log.w(TAG, "Magic-byte check failed for .$ext — first bytes: $hexDump ($normalized)")
                 runCatching { partial.delete() }
@@ -408,7 +413,11 @@ object ModelInstall {
                     // in hand or the stream hits EOF, then validate once. Every byte read
                     // during accumulation is still written to sink below, so the copy stays
                     // byte-exact regardless of how the reads happen to chunk.
-                    val sniffBuf = ByteArray(4)
+                    // 16 bytes, not 4: the litertlm / tflite check reads offset 4..7 (the
+                    // FlatBuffer "TFL3" tag) and needs at least 8 bytes to say anything at all.
+                    // With a 4-byte buffer the size guard was always false, so importing ANY
+                    // .litertlm / .tflite / .task through the file picker failed 100% of the time.
+                    val sniffBuf = ByteArray(MAGIC_SNIFF_BYTES)
                     var sniffLen = 0
                     var sniffed = false
                     var totalRead = 0L
@@ -430,10 +439,10 @@ object ModelInstall {
                         totalRead += n
                         emit(Progress.Tick(totalRead, totalBytes))
                         if (!sniffed) {
-                            val need = (4 - sniffLen).coerceAtMost(n)
+                            val need = (sniffBuf.size - sniffLen).coerceAtMost(n)
                             System.arraycopy(buf, 0, sniffBuf, sniffLen, need)
                             sniffLen += need
-                            if (sniffLen >= 4) {
+                            if (sniffLen >= sniffBuf.size) {
                                 sniffed = true
                                 if (!isValidMagicForExtension(expectedExtension, sniffBuf)) {
                                     invalidMagic = true
@@ -445,6 +454,11 @@ object ModelInstall {
                 }
             }
             null
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // Leaving the screen mid-import used to strand a multi-GB `.partial` in internal
+            // storage: only the IOException branch cleaned up.
+            runCatching { partial.delete() }
+            throw e
         } catch (e: java.io.IOException) {
             e
         }

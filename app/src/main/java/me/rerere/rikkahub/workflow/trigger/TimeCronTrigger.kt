@@ -110,7 +110,9 @@ internal class TimeCronTriggerFamily(
             // from `now` re-armed an @daily task with a fresh 24h delay on every app launch, and a
             // user who opens the app daily therefore never saw it fire.
             val now = System.currentTimeMillis()
-            val nextFireMs = wf.nextRunAtMs?.takeIf { it > 0 } ?: computeNextFireMs(spec, zone, now)
+            // `> now`, not `> 0`: right after a fire the persisted value is the occurrence that
+            // just happened, and accepting it re-armed the work with a zero delay.
+            val nextFireMs = wf.nextRunAtMs?.takeIf { it > now } ?: computeNextFireMs(spec, zone, now)
             val delay = (nextFireMs - now).coerceAtLeast(0L)
             val req = PeriodicWorkRequestBuilder<WorkflowTimeCronWorker>(periodMs, TimeUnit.MILLISECONDS)
                 .setInitialDelay(delay, TimeUnit.MILLISECONDS)
@@ -127,7 +129,10 @@ internal class TimeCronTriggerFamily(
 
         // One-shot path: schedule the next fire; the worker re-enqueues itself on completion.
         val now = System.currentTimeMillis()
-        val nextFireMs = wf.nextRunAtMs?.takeIf { it > 0 } ?: computeNextFireMs(spec, zone, now)
+        // A timestamp that is already in the past is the fire we just handled. The old `> 0`
+        // check accepted it, `nextFireMs - now` went negative, and the 60s floor then re-fired
+        // the job a minute later — every 5-field cron and every sub-15m `@every` did it.
+        val nextFireMs = wf.nextRunAtMs?.takeIf { it > now } ?: computeNextFireMs(spec, zone, now)
         val delay = (nextFireMs - now).coerceAtLeast(60_000L)
         val req = OneTimeWorkRequestBuilder<WorkflowTimeCronWorker>()
             .setInitialDelay(delay, TimeUnit.MILLISECONDS)
@@ -168,9 +173,12 @@ internal class TimeCronTriggerFamily(
                 .onFailure { Log.w(TAG, "time_cron: fire callback failed for $workflowId", it) }
         }
         // For one-shot path (period < 15min or null), re-enqueue with the next fire.
+        // The snapshot's `nextRunAtMs` is the occurrence that just fired, so it is cleared here:
+        // `sync()` also compares only trigger + updatedAtMs, so a later next_run_at change in the
+        // database never replaced whatever this call enqueued.
         val periodMs = (wf.trigger as? TriggerSpec.TimeCron)?.let { derivePeriodMs(it) }
         if (periodMs == null || periodMs < 15 * 60 * 1000L) {
-            scheduleWork(wf)
+            scheduleWork(wf.copy(nextRunAtMs = null))
         }
     }
 

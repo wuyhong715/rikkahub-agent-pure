@@ -456,4 +456,64 @@ class ModelInstallTest {
 
         assertTrue("expected Done, got ${events.last()}", events.last() is ModelInstall.Progress.Done)
     }
+
+    @Test
+    fun `the litertlm and tflite magic need eight bytes, so the importer must sniff more`() {
+        // copyFromStream used to hand this rule a 4-byte window, which can never satisfy the
+        // 8-byte requirement below — every local .litertlm / .tflite / .task import failed.
+        val litertlm = "LITERTLM".toByteArray()
+        assertTrue(ModelInstall.isValidMagicForExtension("litertlm", litertlm))
+        assertFalse(
+            "a 4-byte window can never validate a litertlm header",
+            ModelInstall.isValidMagicForExtension("litertlm", litertlm.copyOf(4)),
+        )
+
+        val tflite = byteArrayOf(0, 0, 0, 0) + "TFL3".toByteArray()
+        assertTrue(ModelInstall.isValidMagicForExtension("tflite", tflite))
+        assertFalse(
+            "the TFL3 tag sits at offset 4, so 6 bytes cannot see it",
+            ModelInstall.isValidMagicForExtension("tflite", tflite.copyOf(6)),
+        )
+    }
+
+    @Test
+    fun `importing a local litertlm file succeeds`() = runBlocking {
+        // The regression guard: this exact call failed 100% of the time before the sniff buffer
+        // grew past 4 bytes.
+        val folder = TemporaryFolder().apply { create() }
+        try {
+            val target = File(folder.root, "model.litertlm")
+            val bytes = "LITERTLM".toByteArray() + ByteArray(64)
+            val events = ModelInstall.copyFromStream(
+                input = ByteArrayInputStream(bytes),
+                target = target,
+                totalBytes = bytes.size.toLong(),
+                expectedExtension = "litertlm",
+            ).toList()
+
+            assertTrue("expected Done, got $events", events.last() is ModelInstall.Progress.Done)
+            assertTrue("the model file must exist", target.exists())
+        } finally {
+            folder.delete()
+        }
+    }
+
+    @Test
+    fun `an empty stream is rejected instead of renamed into place`() = runBlocking {
+        val folder = TemporaryFolder().apply { create() }
+        try {
+            val target = File(folder.root, "model.gguf")
+            val events = ModelInstall.copyFromStream(
+                input = ByteArrayInputStream(ByteArray(0)),
+                target = target,
+                totalBytes = 0L,
+                expectedExtension = "gguf",
+            ).toList()
+
+            assertFalse("nothing may be written", target.exists())
+            assertTrue("expected Failed, got $events", events.any { it is ModelInstall.Progress.Failed })
+        } finally {
+            folder.delete()
+        }
+    }
 }
