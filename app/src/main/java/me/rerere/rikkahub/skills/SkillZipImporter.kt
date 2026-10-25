@@ -38,6 +38,9 @@ object SkillZipImporter {
     private const val TAG = "SkillZipImporter"
     private const val MAX_ENTRIES = 200
     private const val MAX_UNCOMPRESSED_BYTES = 20L * 1024 * 1024
+
+    /** Ceiling for the spooled archive itself, checked while copying (see the spool below). */
+    private const val MAX_ARCHIVE_FILE_BYTES = 64L * 1024 * 1024
     private const val COPY_BUF = 8 * 1024
 
     /** What zip tools on Chinese Windows write raw entry-name bytes as, without setting the
@@ -68,7 +71,22 @@ object SkillZipImporter {
         // below, and is always removed in the finally regardless of outcome.
         val spooledZip = try {
             File.createTempFile("skill-import-", ".zip", destDir.parentFile ?: destDir).also { f ->
-                f.outputStream().use { out -> input.copyTo(out) }
+                f.outputStream().use { out ->
+                    // Bounded spool: the 20 MB uncompressed cap only applies AFTER this copy, so
+                    // an unbounded `copyTo` could fill internal storage with a decompression bomb
+                    // or a huge upload before the limit was ever consulted.
+                    val buffer = ByteArray(64 * 1024)
+                    var total = 0L
+                    while (true) {
+                        val n = input.read(buffer)
+                        if (n <= 0) break
+                        total += n
+                        if (total > MAX_ARCHIVE_FILE_BYTES) {
+                            throw IOException("archive exceeds ${MAX_ARCHIVE_FILE_BYTES / 1024 / 1024} MB")
+                        }
+                        out.write(buffer, 0, n)
+                    }
+                }
             }
         } catch (e: IOException) {
             return Result.failure(SkillZipError.IoError(e.message ?: "failed to read zip"))

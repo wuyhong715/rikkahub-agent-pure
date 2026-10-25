@@ -6,6 +6,8 @@ import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.data.files.SkillMetadata
 import me.rerere.rikkahub.data.files.SkillNameRules
 import kotlinx.serialization.json.contentOrNull
+import me.rerere.rikkahub.data.ai.net.isBlockedTarget
+import me.rerere.rikkahub.data.ai.net.withEgressGuard
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.net.InetAddress
@@ -177,7 +179,22 @@ class SkillUrlImporter(
             if (!resp.isSuccessful) {
                 throw RuntimeException("HTTP ${resp.code}")
             }
-            return resp.body.string()
+            // Bounded read: `body.string()` pulled the whole response into the heap and only THEN
+            // compared it with the 256 KB cap, so a hostile endpoint could OOM the app.
+            val body = resp.body.byteStream().use { stream ->
+                val buffer = ByteArray(MAX_BODY_BYTES + 1)
+                var read = 0
+                while (read < buffer.size) {
+                    val n = stream.read(buffer, read, buffer.size - read)
+                    if (n <= 0) break
+                    read += n
+                }
+                if (read > MAX_BODY_BYTES) {
+                    throw RuntimeException("skill body exceeds ${MAX_BODY_BYTES / 1024}KB cap")
+                }
+                String(buffer, 0, read, Charsets.UTF_8)
+            }
+            return body
         }
     }
 
@@ -336,11 +353,10 @@ class SkillUrlImporter(
         if (h.startsWith("[") && h.endsWith("]")) {
             return isLoopback(h.removePrefix("[").removeSuffix("]"))
         }
-        // IPv4 / IPv6 literal — use InetAddress for the authoritative check.
-        return runCatching {
-            val a = InetAddress.getByName(h)
-            a.isLoopbackAddress || a.isAnyLocalAddress
-        }.getOrDefault(false)
+        // Literals: use the same rule the egress guard applies to every hop. Loopback alone was
+        // too narrow — 169.254.169.254 (cloud metadata), 10/8, 172.16/12, 192.168/16, CGNAT and
+        // IPv6 unique-local all passed, so `skill_install` could reach the LAN.
+        return runCatching { InetAddress.getByName(h).isBlockedTarget() }.getOrDefault(false)
     }
 
     /** Lowercase, alphanumerics + hyphens only, hyphenated where source had spaces. */
@@ -354,7 +370,7 @@ class SkillUrlImporter(
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(15, TimeUnit.SECONDS)
             .followRedirects(true)
-            .build()
+            .build().withEgressGuard()
             .also { me.rerere.rikkahub.utils.NetworkChangeMonitor.register(it) }
     }
 }

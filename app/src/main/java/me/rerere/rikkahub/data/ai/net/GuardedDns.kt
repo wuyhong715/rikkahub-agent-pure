@@ -1,5 +1,7 @@
 package me.rerere.rikkahub.data.ai.net
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import okhttp3.Dns
 import okhttp3.OkHttpClient
 import java.net.Inet4Address
@@ -102,6 +104,21 @@ internal fun hostIsBlockedLiteral(host: String): Boolean {
  * trickling reads: a coroutine `withTimeoutOrNull` around a blocking `execute()` has no
  * suspension point to interrupt, so it cannot enforce a caller-side timeout on its own.
  */
+/**
+ * Pre-flight check for a URL about to be handed to something OTHER than OkHttp — Android's
+ * DownloadManager resolves and connects on its own, so [withEgressGuard] never sees it.
+ *
+ * Resolves the host on IO and refuses if any address is private / link-local / loopback. Fails
+ * closed: a URL that cannot be inspected is not downloaded.
+ */
+internal suspend fun isBlockedDownloadUrl(url: String): Boolean = withContext(Dispatchers.IO) {
+    val host = runCatching { java.net.URI(url).host }.getOrNull() ?: return@withContext true
+    if (hostIsBlockedLiteral(host)) return@withContext true
+    val addresses = runCatching { InetAddress.getAllByName(host) }
+        .getOrElse { return@withContext true }
+    addresses.any { it.isBlockedTarget() }
+}
+
 internal fun OkHttpClient.withEgressGuard(allowPrivate: Boolean = false): OkHttpClient =
     newBuilder()
         .dns(GuardedDns(Dns.SYSTEM, allowPrivate))

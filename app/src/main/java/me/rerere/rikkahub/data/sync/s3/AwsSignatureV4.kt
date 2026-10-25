@@ -39,10 +39,14 @@ internal object AwsSignatureV4 {
         val resolvedPayloadHash = payloadHash ?: payload?.sha256Hex() ?: UNSIGNED_PAYLOAD
 
         val host = config.host
+        // A reverse-proxied endpoint carries a sub-path (`https://host/s3`). `config.host` strips it
+        // for the Host header, so it has to be re-attached here — otherwise the signature covers
+        // /bucket/key while the request goes to /bucket/key on the wrong path prefix (404).
+        val basePath = config.basePath
         val canonicalUri = if (config.pathStyle) {
-            "/${config.bucket}$path"
+            "$basePath/${config.bucket}$path"
         } else {
-            path
+            "$basePath$path"
         }.let { if (it.isEmpty()) "/" else it }
 
         val hostAlreadyContainsBucket = host.startsWith("${config.bucket}.")

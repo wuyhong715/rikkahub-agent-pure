@@ -13,6 +13,9 @@ import io.ktor.client.statement.HttpStatement
 import io.ktor.client.statement.bodyAsChannel
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpMethod
+import io.ktor.http.content.OutgoingContent
+import io.ktor.utils.io.ByteReadChannel
+import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.isSuccess
 import io.ktor.utils.io.jvm.javaio.toInputStream
@@ -28,6 +31,17 @@ import java.io.StringReader
 import java.time.Instant
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+
+/**
+ * [runCatching] that does not swallow coroutine cancellation.
+ *
+ * Every call in this client is a suspend network operation: a cancelled scope must unwind instead
+ * of being turned into a `Result.failure` the caller then treats as "the server said no".
+ */
+private inline fun <T> ioCatching(block: () -> T): Result<T> =
+    runCatching(block).onFailure {
+        if (it is kotlinx.coroutines.CancellationException) throw it
+    }
 
 private const val TAG = "WebDavClient"
 
@@ -53,7 +67,7 @@ class WebDavClient(
         data: ByteArray,
         contentType: String = "application/octet-stream",
     ): Result<Unit> = withContext(Dispatchers.IO) {
-        runCatching {
+        ioCatching {
             val url = config.buildUrl(path)
             Log.d(TAG, "PUT: $url")
 
@@ -83,19 +97,26 @@ class WebDavClient(
         file: File,
         contentType: String = "application/octet-stream",
     ): Result<Unit> = withContext(Dispatchers.IO) {
-        runCatching {
+        ioCatching {
             val url = config.buildUrl(path)
             Log.d(TAG, "PUT (stream file): $url")
 
             val response: HttpResponse = httpClient.request(url) {
                 method = HttpMethod.Put
                 basicAuth(config.username, config.password)
-                headers {
-                    append("Content-Type", contentType)
-                    append("Content-Length", file.length().toString())
-                }
-                // Stream file content to avoid loading the whole backup zip into heap.
-                setBody(file.readChannel())
+                // Ktor drops Content-Type / Content-Length set through headers {} (they are unsafe
+                // headers) when the body is a bare ByteReadChannel: the request then goes out
+                // chunked and Nextcloud / Nginx / 坚果云 answer 411 Length Required. The body has to
+                // carry both. A fresh channel per readFrom() also matters — a 301/307 or a
+                // Digest/Basic replay used to re-send an already-drained channel, overwriting the
+                // remote backup with a 0-byte file.
+                setBody(
+                    object : OutgoingContent.ReadChannelContent() {
+                        override val contentType: ContentType = ContentType.parse(contentType)
+                        override val contentLength: Long = file.length()
+                        override fun readFrom(): ByteReadChannel = file.readChannel()
+                    }
+                )
             }
 
             if (!response.status.isSuccess()) {
@@ -110,7 +131,7 @@ class WebDavClient(
     }
 
     suspend fun get(path: String): Result<ByteArray> = withContext(Dispatchers.IO) {
-        runCatching {
+        ioCatching {
             val url = config.buildUrl(path)
             Log.d(TAG, "GET: $url")
 
@@ -131,7 +152,7 @@ class WebDavClient(
     }
 
     suspend fun getStream(path: String): Result<InputStream> = withContext(Dispatchers.IO) {
-        runCatching {
+        ioCatching {
             val url = config.buildUrl(path)
             Log.d(TAG, "GET (stream): $url")
 
@@ -151,7 +172,7 @@ class WebDavClient(
     }
 
     suspend fun downloadToFile(path: String, targetFile: File): Result<Unit> = withContext(Dispatchers.IO) {
-        runCatching {
+        ioCatching {
             val url = config.buildUrl(path)
             Log.d(TAG, "GET (download to file): $url")
 
@@ -182,7 +203,7 @@ class WebDavClient(
     }
 
     suspend fun delete(path: String): Result<Unit> = withContext(Dispatchers.IO) {
-        runCatching {
+        ioCatching {
             val url = config.buildUrl(path)
             Log.d(TAG, "DELETE: $url")
 
@@ -203,7 +224,7 @@ class WebDavClient(
     }
 
     suspend fun head(path: String): Result<WebDavResourceInfo> = withContext(Dispatchers.IO) {
-        runCatching {
+        ioCatching {
             val url = config.buildUrl(path)
             Log.d(TAG, "HEAD: $url")
 
@@ -228,7 +249,7 @@ class WebDavClient(
     }
 
     suspend fun mkcol(path: String): Result<Unit> = withContext(Dispatchers.IO) {
-        runCatching {
+        ioCatching {
             val url = config.buildUrl(path)
             Log.d(TAG, "MKCOL: $url")
 
@@ -253,7 +274,7 @@ class WebDavClient(
         path: String = "",
         depth: Int = 1,
     ): Result<List<WebDavResourceInfo>> = withContext(Dispatchers.IO) {
-        runCatching {
+        ioCatching {
             val url = config.buildUrl(path)
             Log.d(TAG, "PROPFIND: $url, depth: $depth")
 
@@ -295,7 +316,7 @@ class WebDavClient(
     }
 
     suspend fun ensureCollectionExists(path: String = ""): Result<Unit> = withContext(Dispatchers.IO) {
-        runCatching {
+        ioCatching {
             val targetUrl = config.buildUrl(path)
             Log.d(TAG, "Ensuring collection exists: $targetUrl")
 
@@ -312,7 +333,7 @@ class WebDavClient(
     }
 
     suspend fun list(path: String = ""): Result<List<WebDavResourceInfo>> = withContext(Dispatchers.IO) {
-        runCatching {
+        ioCatching {
             val result = propfind(path, depth = 1).getOrThrow()
             // Filter out the parent directory itself (first entry)
             if (result.isNotEmpty()) {

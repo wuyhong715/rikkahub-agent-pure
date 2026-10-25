@@ -29,12 +29,30 @@ data class S3Config(
     val isHttps: Boolean
         get() = endpoint.startsWith("https://")
 
+    /**
+     * The path part of [endpoint] ("" when there is none) — e.g. "/s3" for a reverse-proxied
+     * endpoint like `https://host:8080/s3`.
+     *
+     * [host] strips it (a Host header must be host:port), so the signer has to put it back into
+     * the canonical URI and the request URL. Without this every request went to the root path and
+     * a sub-path deployment answered 404.
+     */
+    val basePath: String
+        get() {
+            val withoutScheme = endpoint.trim()
+                .removePrefix("https://")
+                .removePrefix("http://")
+            val slash = withoutScheme.indexOf('/')
+            if (slash < 0) return ""
+            return withoutScheme.substring(slash).trimEnd('/').takeIf { it.isNotEmpty() } ?: ""
+        }
+
     fun bucketUrl(): String {
         return if (pathStyle) {
             "${endpoint.trimEnd('/')}/$bucket"
         } else {
             val scheme = if (isHttps) "https://" else "http://"
-            "$scheme$bucket.$host"
+            "$scheme$bucket.$host$basePath"
         }
     }
 }

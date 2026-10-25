@@ -27,6 +27,17 @@ import java.io.StringReader
 import java.security.MessageDigest
 import java.time.Instant
 
+/**
+ * [runCatching] that does not swallow coroutine cancellation.
+ *
+ * Every call in this client is a suspend network operation: a cancelled scope must unwind instead
+ * of being turned into a `Result.failure` the caller then treats as "the server said no".
+ */
+private inline fun <T> ioCatching(block: () -> T): Result<T> =
+    runCatching(block).onFailure {
+        if (it is kotlinx.coroutines.CancellationException) throw it
+    }
+
 private const val TAG = "S3Client"
 
 class S3Client(
@@ -38,7 +49,7 @@ class S3Client(
         data: ByteArray,
         contentType: String = "application/octet-stream",
     ): Result<Unit> = withContext(Dispatchers.IO) {
-        runCatching {
+        ioCatching {
             val path = "/${key.trimStart('/')}"
             val signed = AwsSignatureV4.sign(
                 config = config,
@@ -72,7 +83,7 @@ class S3Client(
         file: File,
         contentType: String = "application/octet-stream",
     ): Result<Unit> = withContext(Dispatchers.IO) {
-        runCatching {
+        ioCatching {
             val path = "/${key.trimStart('/')}"
             val fileSha256 = file.sha256Hex()
             val signed = AwsSignatureV4.sign(
@@ -117,7 +128,7 @@ class S3Client(
     }
 
     suspend fun getObject(key: String): Result<ByteArray> = withContext(Dispatchers.IO) {
-        runCatching {
+        ioCatching {
             val path = "/${key.trimStart('/')}"
             val signed = AwsSignatureV4.sign(
                 config = config,
@@ -144,7 +155,7 @@ class S3Client(
     }
 
     suspend fun getObjectStream(key: String): Result<InputStream> = withContext(Dispatchers.IO) {
-        runCatching {
+        ioCatching {
             val path = "/${key.trimStart('/')}"
             val signed = AwsSignatureV4.sign(
                 config = config,
@@ -170,7 +181,7 @@ class S3Client(
     }
 
     suspend fun downloadObjectToFile(key: String, targetFile: File): Result<Unit> = withContext(Dispatchers.IO) {
-        runCatching {
+        ioCatching {
             val path = "/${key.trimStart('/')}"
             val signed = AwsSignatureV4.sign(
                 config = config,
@@ -204,7 +215,7 @@ class S3Client(
     }
 
     suspend fun deleteObject(key: String): Result<Unit> = withContext(Dispatchers.IO) {
-        runCatching {
+        ioCatching {
             val path = "/${key.trimStart('/')}"
             val signed = AwsSignatureV4.sign(
                 config = config,
@@ -231,7 +242,7 @@ class S3Client(
     }
 
     suspend fun headObject(key: String): Result<S3ObjectMetadata> = withContext(Dispatchers.IO) {
-        runCatching {
+        ioCatching {
             val path = "/${key.trimStart('/')}"
             val signed = AwsSignatureV4.sign(
                 config = config,
@@ -266,7 +277,7 @@ class S3Client(
         maxKeys: Int = 1000,
         continuationToken: String? = null,
     ): Result<S3ListResult> = withContext(Dispatchers.IO) {
-        runCatching {
+        ioCatching {
             val queryParams = mutableMapOf(
                 "list-type" to "2",
                 "max-keys" to maxKeys.toString(),
@@ -383,7 +394,7 @@ class S3Client(
                                     "Size" -> currentSize = text.toLongOrNull() ?: 0
                                     "ETag" -> currentEtag = text.trim('"')
                                     "LastModified" -> currentLastModified =
-                                        runCatching { Instant.parse(text) }.getOrNull()
+                                        ioCatching { Instant.parse(text) }.getOrNull()
 
                                     "StorageClass" -> currentStorageClass = text
                                 }

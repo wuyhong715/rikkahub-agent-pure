@@ -14,6 +14,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
@@ -59,6 +60,16 @@ class WebServerService : Service() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var stateObserverJob: Job? = null
 
+    /**
+     * Watches `webServerJwtEnabled` and restarts the server when it flips.
+     *
+     * `configureWebApi` decides at STARTUP whether to install the JWT provider and wrap the routes,
+     * while `/api/auth/token` reads the flag per request. Turning the password on therefore used to
+     * hand out a token while every business route stayed unauthenticated — the setting looked like
+     * it protected the server and did nothing until a manual restart.
+     */
+    private var authSettingsJob: Job? = null
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -71,6 +82,7 @@ class WebServerService : Service() {
                     return START_NOT_STICKY
                 }
                 startObservingState()
+                observeAuthSettings()
                 webServerManager.start(port = port, localhostOnly = localhostOnly)
             }
 
@@ -92,6 +104,7 @@ class WebServerService : Service() {
                     val settings = settingsStore.settingsFlowRaw.first()
                     if (settings.webServerEnabled) {
                         startObservingState()
+                        observeAuthSettings()
                         webServerManager.start(
                             port = settings.webServerPort,
                             localhostOnly = settings.webServerLocalhostOnly
@@ -108,6 +121,25 @@ class WebServerService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         serviceScope.cancel()
+    }
+
+    private fun observeAuthSettings() {
+        if (authSettingsJob != null) return
+        authSettingsJob = serviceScope.launch {
+            var lastEnabled: Boolean? = null
+            settingsStore.settingsFlow.collect { settings ->
+                val enabled = settings.webServerJwtEnabled
+                val previous = lastEnabled
+                lastEnabled = enabled
+                if (previous != null && previous != enabled) {
+                    Log.i(TAG, "webServerJwtEnabled changed ($previous -> $enabled); restarting the web server")
+                    webServerManager.restart(
+                        port = settings.webServerPort,
+                        localhostOnly = settings.webServerLocalhostOnly,
+                    )
+                }
+            }
+        }
     }
 
     private fun startForegroundCompat(): Boolean {

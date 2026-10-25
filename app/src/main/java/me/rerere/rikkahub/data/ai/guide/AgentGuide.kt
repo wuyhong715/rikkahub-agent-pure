@@ -147,7 +147,7 @@ object AgentGuide {
                   the user opens in their Files app. Every deliverable belongs here.
                 - **App-private storage** — invisible to the user; never a deliverable.
                 - **Workspace rootfs** — `/workspace`, a Linux environment: `workspace_shell`,
-                  `workspace_run_background`, `workspace_read_file` / `write_file` / `edit_file`,
+                  `workspace_run_background`, `workspace_read_file` / `workspace_write_file` / `workspace_edit_file`,
                   `workspace_read_folder`, `workspace_background_status`. Scratch work, builds,
                   and heavy tooling go here.
 
