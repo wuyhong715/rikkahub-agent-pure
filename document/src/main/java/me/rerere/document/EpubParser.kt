@@ -42,7 +42,14 @@ object EpubParser {
                     val item = manifest[itemId] ?: continue
                     if (!item.mediaType.contains("html")) continue
 
-                    val itemPath = if (opfDir.isEmpty()) item.href else "$opfDir/${item.href}"
+                    // EPUB hrefs are URIs: they may carry a `#fragment` and are percent-encoded
+                    // ("Chapter%201.xhtml" for a file with a space). Both forms missed the
+                    // ZipEntry, so those chapters were dropped silently — an EPUB could index as
+                    // half a book with no error anywhere.
+                    val href = item.href.substringBefore('#')
+                    val decodedHref = runCatching { java.net.URLDecoder.decode(href, "UTF-8") }
+                        .getOrDefault(href)
+                    val itemPath = if (opfDir.isEmpty()) decodedHref else "$opfDir/$decodedHref"
                     val entry = zip.getEntry(itemPath) ?: continue
                     val content = zip.getInputStream(entry).use { parseXhtml(it) }
                     if (content.isNotBlank()) {

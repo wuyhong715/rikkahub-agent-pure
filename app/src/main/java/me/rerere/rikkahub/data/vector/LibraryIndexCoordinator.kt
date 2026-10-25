@@ -484,6 +484,14 @@ class LibraryIndexCoordinator(
 
                 else -> workspaceRepository.readText(workspaceId, relative)
             }
+            // The document parsers signal failure as a STRING, not an exception ("Error parsing
+            // DOCX file: …", "Unable to find OPF file in EPUB", "No slides found in PPTX file").
+            // Those strings were chunked, embedded and counted as a successfully indexed document,
+            // so the knowledge base filled up with failure messages that then matched searches.
+            if (text.isNotBlank() && looksLikeParseFailure(text)) {
+                Log.d(TAG, "parser returned a failure message for '${candidate.path}'; skipping")
+                return null
+            }
             val capped = text.take(WorkspaceLibraryRules.charCapOf(candidate.kind))
             if (capped.isBlank()) return null
             WorkspaceLibrarySource.Doc(
@@ -498,6 +506,16 @@ class LibraryIndexCoordinator(
             Log.d(TAG, "cannot read '${candidate.path}', skipping it this round: ${e.message}")
             null
         }
+    }
+
+    /** True when [text] is one of the parsers' error messages rather than file content. */
+    private fun looksLikeParseFailure(text: String): Boolean {
+        val head = text.trimStart().take(48)
+        return head.startsWith("Error parsing ") ||
+            head.startsWith("Unable to read OPF") ||
+            head.startsWith("Unable to find OPF") ||
+            head.startsWith("No slides found") ||
+            head.startsWith("No readable content found")
     }
 
     /**

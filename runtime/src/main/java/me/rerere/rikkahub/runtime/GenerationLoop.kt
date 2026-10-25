@@ -1252,15 +1252,24 @@ class GenerationLoop(
 
     }
         .onStart {
-            // Reset per-turn navigation tracking and surface the overlay so the user
-            // sees that automation is happening even when the agent runs from Telegram.
-            AgentTurnTracker.reset()
-            // Screen-automation observations are per-turn too: they are flushed to the app's
-            // cold-memory playbook when the turn ends (ChatService.flushAutomationPlaybook).
-            AutomationRecorder.reset()
-            host.showOverlay()
+            // Only the FIRST concurrently-running turn resets. A sub-agent dispatch runs inside the
+            // parent's turn, and a mission/cron round can overlap the user's chat: resetting on
+            // every turn wiped the parent's navigation history mid-automation.
+            if (ActiveTurns.begin()) {
+                // Reset per-turn navigation tracking and surface the overlay so the user
+                // sees that automation is happening even when the agent runs from Telegram.
+                AgentTurnTracker.reset()
+                // Screen-automation observations are per-turn too: they are flushed to the app's
+                // cold-memory playbook when the turn ends (ChatService.flushAutomationPlaybook).
+                AutomationRecorder.reset()
+                host.showOverlay()
+            }
         }
         .onCompletion {
+            // ...and only the LAST one tears down: a finishing child used to hide the parent's
+            // overlay, force-return to the app mid-automation and purge the screenshots the parent
+            // still needed.
+            if (!ActiveTurns.end()) return@onCompletion
             host.hideOverlay()
             handleAutoReturnAfterTurn()
             // Screen-automation screenshots are working artifacts: unless the model asked to

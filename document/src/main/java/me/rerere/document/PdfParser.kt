@@ -11,7 +11,15 @@ private const val MAX_PAGES = 300
 
 object PdfParser {
     fun parserPdf(file: File): String {
-        val document = PDFDocument.openDocument(file.absolutePath).asPDF()
+        // Keep the raw document handle: `openDocument(..).asPDF()` returned null for a corrupt or
+        // encrypted PDF, the very next line threw an NPE on it, and the native MuPDF document was
+        // never destroyed — once per indexing round for that file.
+        val raw = PDFDocument.openDocument(file.absolutePath)
+        val document = runCatching { raw.asPDF() }.getOrNull()
+        if (document == null) {
+            runCatching { raw.destroy() }
+            return "Error parsing PDF file: not a PDF document"
+        }
         try {
             val pageCount = document.countPages()
             val pagesToRead = minOf(pageCount, MAX_PAGES)

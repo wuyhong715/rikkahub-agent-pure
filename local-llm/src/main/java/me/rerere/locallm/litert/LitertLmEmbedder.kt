@@ -225,15 +225,27 @@ class LitertLmEmbedder(
         backend: LitertEmbedBackend = LitertEmbedBackend.CPU,
         probeText: String = " ",
     ): LitertEmbedInfo = lock.withLock {
-        info?.let { if (loadedPath == path && it.accelerator == backend.name.lowercase()) return@withLock it }
-
-        unloadLocked()
-
+        // `preferred` has to be resolved BEFORE the fast path. After a GPU probe failure the engine
+        // is remembered as CPU, so a caller still asking for "gpu" compared "cpu" != "gpu" and never
+        // matched — every single call then unloaded and re-opened a multi-hundred-MB model (and
+        // re-ran the probe inference) even though the requested backend resolves to what is loaded.
         val preferred = if (backend.name.lowercase() in failedBackends) {
             LitertEmbedBackend.CPU
         } else {
             backend
         }
+        // The signature is part of the identity too: the same file opened with a different context
+        // window must be reopened, or the previous window's engine keeps truncating text.
+        info?.let {
+            if (loadedPath == path &&
+                it.signature == signature &&
+                it.accelerator == preferred.name.lowercase()
+            ) {
+                return@withLock it
+            }
+        }
+
+        unloadLocked()
         val opened = try {
             openAndMeasure(path, signature, preferred, probeText)
         } catch (t: Throwable) {

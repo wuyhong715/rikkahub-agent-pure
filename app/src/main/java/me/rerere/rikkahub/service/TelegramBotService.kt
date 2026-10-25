@@ -731,8 +731,6 @@ class TelegramBotService : Service() {
         val baselineMessageCount = conversationRepo.getConversationById(convId)
             ?.currentMessages?.size ?: 0
 
-        chatService.sendMessage(convId, parts)
-
         // Phase 24 — open a cross-pillar ledger row for THIS Telegram turn. kind=telegram,
         // domain_id=conversation id; one row per turn (a fresh row each inbound message).
         // Marked terminal in the finally block below. Best-effort — never breaks the turn.
@@ -764,6 +762,11 @@ class TelegramBotService : Service() {
             null
         }
 
+        // Start generation only now. Sending the message first meant a fast-path reply (or a very
+        // quick model) could finish during the placeholder's HTTPS round-trip, after which the
+        // `first { it != null }` wait below sat out its full 10-second cold-start window.
+        chatService.sendMessage(convId, parts)
+
         // Hold a session reference for the entire handleLlmTurn so the per-conversation
         // session isn't reaped by ChatService's onIdle callback while we're waiting on
         // the user to tap an approval button. Without this, the user-tap callback would
@@ -787,6 +790,11 @@ class TelegramBotService : Service() {
         // branch so the user sees the actual cause instead of the generic
         // "(model called tools but didn't reply)" hint.
         var generationError: Throwable? = null
+        // ChatService records provider failures here instead of throwing, so `generationError` stays
+        // null for a 401 / 429 / offline turn: the ledger row said `succeeded` and the user got the
+        // generic "didn't reply" hint. Only errors NEW in this turn count — ids are captured now.
+        val errorBaseline = chatService.errors.value.map { it.id }.toSet()
+        var turnError: ChatError? = null
         // Phase 24 — set when the turn is cancelled (/stop, /new) so the ledger row is
         // closed as `cancelled` rather than `succeeded` in the finally block.
         var turnCancelled = false
@@ -804,8 +812,16 @@ class TelegramBotService : Service() {
                 // since the session is process-local). /stop still cancels via the
                 // built-in fast-path that bypasses the per-chat mutex.
                 val firstActive = if (iteration == 0) {
+                    // Poll instead of a single `first { it != null }`: the job can come and go
+                    // between two emissions, so the old wait sat out the whole 10-second window even
+                    // though the turn had already produced its answer.
                     kotlinx.coroutines.withTimeoutOrNull(10_000) {
-                        chatService.getGenerationJobStateFlow(convId).first { it != null }
+                        while (true) {
+                            if (chatService.getGenerationJobStateFlow(convId).first() != null) break
+                            if (renderAssistantStream(convId, finalizing = false, baselineMessageCount).isNotBlank()) break
+                            kotlinx.coroutines.delay(50)
+                        }
+                        true
                     }
                 } else {
                     chatService.getGenerationJobStateFlow(convId).first { it != null }
@@ -953,15 +969,18 @@ class TelegramBotService : Service() {
             // Phase 24 — mark the ledger row terminal. cancelled (/stop or /new) →
             // cancelled; a generation error → failed; otherwise succeeded. Runs in the
             // finally so the row is closed even on the CancellationException re-throw path.
+            turnError = chatService.errors.value
+                .firstOrNull { it.conversationId == convId && it.id !in errorBaseline }
             val ledgerStatus = when {
                 turnCancelled -> me.rerere.rikkahub.data.agentrun.AgentRunStatus.cancelled
-                generationError != null -> me.rerere.rikkahub.data.agentrun.AgentRunStatus.failed
+                generationError != null || turnError != null -> me.rerere.rikkahub.data.agentrun.AgentRunStatus.failed
                 else -> me.rerere.rikkahub.data.agentrun.AgentRunStatus.succeeded
             }
             agentRunRepo.markTerminal(
                 id = ledgerId,
                 status = ledgerStatus,
-                lastError = generationError?.let { "${it::class.simpleName}: ${it.message.orEmpty()}" },
+                lastError = generationError?.let { "${it::class.simpleName}: ${it.message.orEmpty()}" }
+                    ?: turnError?.let { "${it.title ?: "generation error"}: ${it.error.message.orEmpty()}" },
             )
         }
 
@@ -993,6 +1012,10 @@ class TelegramBotService : Service() {
                         val msg = e.message?.takeIf { it.isNotBlank() } ?: e::class.simpleName ?: "unknown error"
                         // Cap to leave room for the prefix and not blow Telegram's 4096
                         // limit on an unbounded provider-error blob.
+                        val capped = if (msg.length <= 600) msg else msg.take(600) + "…"
+                        "⚠️ Generation failed: $capped"
+                    } ?: turnError?.let { err ->
+                        val msg = err.error.message?.takeIf { it.isNotBlank() } ?: err.title ?: "unknown error"
                         val capped = if (msg.length <= 600) msg else msg.take(600) + "…"
                         "⚠️ Generation failed: $capped"
                     } ?: "(model called tools but didn't reply — try saying \"continue\", switch model with /model, or reset with /new)"
