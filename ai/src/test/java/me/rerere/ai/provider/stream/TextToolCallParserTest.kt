@@ -106,6 +106,19 @@ class TextToolCallParserTest {
     }
 
     @Test
+    fun `emoji joiners and orthographic zero width characters survive`() {
+        // U+200D is what makes 👨‍👩‍👧‍👦 one glyph and U+200C is required orthography in Persian,
+        // Arabic and the Brahmic scripts. The parser used to strip both from EVERY delta, so every
+        // answer from a text-tool-call provider quietly lost them (and generated code containing
+        // them was altered). Only characters abutting a tag delimiter may be dropped.
+        val parser = TextToolCallParser(listOf(echo))
+        val family = "👨\u200d👩\u200d👧\u200d👦"
+        val persian = "می\u200cخواهم"
+        val out = parts(parser, "$family — $persian")
+        assertEquals("$family — $persian", text(out))
+    }
+
+    @Test
     fun `streams plain prose untouched when there is no tool call`() {
         val parser = TextToolCallParser(listOf(echo))
         val out = parts(parser, "Hello there, general Kenobi")

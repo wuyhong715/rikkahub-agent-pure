@@ -40,14 +40,42 @@ internal class TextToolCallParser(private val tools: List<Tool> = emptyList()) {
     private val closeTag = "</tool_call>"
 
     /**
-     * Strip the invisible characters these models sprinkle into markup. `<U+200B>tool_call>` with a
-     * zero-width space after the `<` is the one seen in the wild; normalising up front means a block
-     * is recognised whether or not the model injected them.
+     * Strip invisible characters **only where they break a tag**, never from ordinary prose.
+     *
+     * `<U+200B>tool_call>` (a zero-width space after the `<`) is the shape seen in the wild, and
+     * normalising it away is what lets the block be recognised. Stripping them everywhere was a
+     * different matter: U+200D is what joins an emoji sequence (`👨‍👩‍👧‍👦` fell apart into four
+     * people, `👩‍💻` into a woman and a laptop) and U+200C is orthographically required in Persian,
+     * Arabic and the Brahmic scripts — every answer from a text-tool-call provider silently lost
+     * those characters, and generated code/regex containing them was altered too.
+     *
+     * A character is dropped only when a neighbour is a tag delimiter (`<`, `>`, `/`), which is
+     * exactly the "model put a zero-width space inside the markup" case.
      */
     private fun normalize(input: String): String {
         if (input.none { it in ZERO_WIDTH }) return input
-        return buildString(input.length) {
-            for (c in input) if (c !in ZERO_WIDTH) append(c)
+        val chars = input.toCharArray()
+        fun nearestNonZeroWidth(from: Int, step: Int): Char? {
+            var i = from
+            while (i in chars.indices) {
+                if (chars[i] !in ZERO_WIDTH) return chars[i]
+                i += step
+            }
+            return null
+        }
+        return buildString(chars.size) {
+            for (i in chars.indices) {
+                val c = chars[i]
+                if (c in ZERO_WIDTH) {
+                    val prev = nearestNonZeroWidth(i - 1, -1)
+                    val next = nearestNonZeroWidth(i + 1, 1)
+                    val atTagEdge = prev == '<' || prev == '>' || prev == '/' ||
+                        next == '<' || next == '>'
+                    // Inside markup: drop it (that is the shape being normalised away).
+                    if (atTagEdge) continue
+                }
+                append(c)
+            }
         }
     }
 
