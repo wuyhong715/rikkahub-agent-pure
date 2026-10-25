@@ -41,9 +41,12 @@ import me.rerere.rikkahub.data.runtime.InstanceRegistry
 import me.rerere.rikkahub.data.runtime.InstanceState
 import me.rerere.rikkahub.data.runtime.RuntimeInstance
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.pages.setting.termux.SettingTermuxViewModel
+import me.rerere.rikkahub.ui.pages.setting.termux.TermuxSettingsSections
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.plus
+import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 
 /**
@@ -121,6 +124,18 @@ fun InstanceDetailPage(kindName: String, key: String) {
                 )
             }
 
+            // Termux 的六个旋钮直接嵌在这里，而不是再来一个"打开设置"的跳转：
+            // 两个入口渲染的是 TermuxSettingsSections 这同一个组合。
+            if (kind == InstanceKind.TERMUX) {
+                item(key = "termux-settings") {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SectionTitle(stringResource(R.string.instances_section_settings))
+                        val termuxVm: SettingTermuxViewModel = koinViewModel()
+                        TermuxSettingsSections(vm = termuxVm, scrollable = false)
+                    }
+                }
+            }
+
             if (actions.isNotEmpty()) {
                 item(key = "actions-title") { SectionTitle(stringResource(R.string.instances_section_actions)) }
                 items(actions, key = { it.id }) { action ->
@@ -133,12 +148,15 @@ fun InstanceDetailPage(kindName: String, key: String) {
                 }
             }
 
-            item(key = "settings") {
-                FilledTonalButton(
-                    onClick = { destinationFor(kind, key)?.let { target -> navController.navigate(target) } },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(stringResource(R.string.instances_open_settings))
+            // 有独立页面的后端才给这一行：Termux / Shizuku 已经整页收编进来了。
+            destinationFor(kind, key)?.let { target ->
+                item(key = "settings") {
+                    FilledTonalButton(
+                        onClick = { navController.navigate(target) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(stringResource(R.string.instances_open_settings))
+                    }
                 }
             }
 
@@ -240,8 +258,8 @@ private fun stateRecovery(state: InstanceState): String? = when (state) {
 
 private fun destinationFor(kind: InstanceKind, key: String): Screen? = when (kind) {
     InstanceKind.APP_HOST -> Screen.SettingPermissions
-    InstanceKind.SHIZUKU -> Screen.SettingShizuku
-    InstanceKind.TERMUX -> Screen.SettingTermux
+    // 配置已经在本页，没有第二个地方可去。
+    InstanceKind.SHIZUKU, InstanceKind.TERMUX -> null
     InstanceKind.SSH -> Screen.SettingSsh
     InstanceKind.WORKSPACE -> Screen.WorkspaceDetail(key)
 }

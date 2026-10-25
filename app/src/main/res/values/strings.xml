@@ -3424,6 +3424,7 @@ HARDLINE protections still apply: rm -rf /, mkfs, shutdown / reboot, dd to block
   <string name="instances_action_recheck">Check again</string>
   <string name="instances_section_manage">Manage</string>
   <string name="instances_section_actions">Fix</string>
+  <string name="instances_section_settings">Settings</string>
   <string name="instances_section_tools">Tools this instance backs</string>
   <string name="instances_manage_ssh">SSH hosts</string>
   <string name="instances_manage_ssh_desc">Add, edit or remove saved hosts and their credentials.</string>

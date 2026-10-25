@@ -6,19 +6,17 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -28,7 +26,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
@@ -39,10 +36,8 @@ import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.tools.local.PermissionHelper
 import me.rerere.rikkahub.data.ai.tools.local.TermuxIntegration
-import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.context.LocalToaster
-import me.rerere.rikkahub.ui.theme.CustomColors
 import org.koin.androidx.compose.koinViewModel
 
 /**
@@ -56,14 +51,23 @@ import org.koin.androidx.compose.koinViewModel
  *  4. Help — expandable setup instructions for allow-external-apps=true.
  */
 @Composable
-fun SettingTermuxPage(
-    vm: SettingTermuxViewModel = koinViewModel(),
+/**
+ * 设置项本体。抽出来是为了让「运行实例 → Termux」的详情页直接嵌入同一份 UI，
+ * 而不是把六个旋钮复制一遍：两个入口渲染的是同一个组合，改一处两处都变。
+ *
+ * [scrollable] 由调用方决定——独立成页时它自己滚；嵌在详情页的 LazyColumn 里时
+ * 必须关掉自己的滚动，否则同方向嵌套滚动会抢手势。
+ */
+@Composable
+fun TermuxSettingsSections(
+    vm: SettingTermuxViewModel,
+    modifier: Modifier = Modifier,
+    scrollable: Boolean = true,
 ) {
     val ctx = LocalContext.current
     val toaster = LocalToaster.current
     val scope = rememberCoroutineScope()
     val config by vm.config.collectAsStateWithLifecycle()
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     // State-backed so the UI refreshes after permission grants or verify actions.
     var integrationState by remember { mutableStateOf(TermuxIntegration.State.NOT_INSTALLED) }
@@ -86,28 +90,15 @@ fun SettingTermuxPage(
         } else {
             toaster.show(ctx.getString(R.string.setting_termux_status_permission_missing), type = ToastType.Error)
         }
-    }
 
-    Scaffold(
-        topBar = {
-            LargeFlexibleTopAppBar(
-                title = { Text(stringResource(R.string.setting_termux_title)) },
-                navigationIcon = { BackButton() },
-                scrollBehavior = scrollBehavior,
-                colors = CustomColors.topBarColors,
-            )
+    Column(
+        modifier = if (scrollable) {
+            modifier.fillMaxSize().verticalScroll(rememberScrollState())
+        } else {
+            modifier.fillMaxWidth()
         },
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        containerColor = CustomColors.topBarColors.containerColor,
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(16.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
             // Section 1: Status
             CardGroup(
                 title = { Text(stringResource(R.string.setting_termux_section_status)) },
@@ -316,7 +307,6 @@ fun SettingTermuxPage(
                     supportingContent = { Text(stringResource(R.string.setting_termux_help_allow_external_apps_body)) },
                 )
             }
-        }
     }
 }
 

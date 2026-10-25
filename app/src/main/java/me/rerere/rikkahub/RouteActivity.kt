@@ -592,11 +592,20 @@ class RouteActivity : ComponentActivity() {
                             }
 
                             entry<Screen.SettingTermux> {
-                                me.rerere.rikkahub.ui.pages.setting.termux.SettingTermuxPage()
+                                // 收编：Termux 的设置项已经嵌进实例详情页，这条路由只是旧链接的落点。
+                                me.rerere.rikkahub.ui.pages.setting.instances.InstanceDetailPage(
+                                    kindName = me.rerere.rikkahub.data.runtime.InstanceKind.TERMUX.name,
+                                    key = me.rerere.rikkahub.data.runtime.InstanceId.LOCAL_KEY,
+                                )
                             }
 
                             entry<Screen.SettingShizuku> {
-                                me.rerere.rikkahub.ui.pages.setting.shizuku.SettingShizukuPage()
+                                // 收编：Shizuku 页能做的事（状态、授权、安装入口）实例详情页都有，
+                                // 旧路由只作为历史深链的落点。
+                                me.rerere.rikkahub.ui.pages.setting.instances.InstanceDetailPage(
+                                    kindName = me.rerere.rikkahub.data.runtime.InstanceKind.SHIZUKU.name,
+                                    key = me.rerere.rikkahub.data.runtime.InstanceId.LOCAL_KEY,
+                                )
                             }
 
                             entry<Screen.Instances> {
