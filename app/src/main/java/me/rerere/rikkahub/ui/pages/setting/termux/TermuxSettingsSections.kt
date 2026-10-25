@@ -80,6 +80,7 @@ fun TermuxSettingsSections(
             toaster.show(ctx.getString(R.string.setting_termux_status_permission_missing), type = ToastType.Error)
         }
 
+    }
     Column(
         modifier = if (scrollable) {
             modifier.fillMaxSize().verticalScroll(rememberScrollState())
