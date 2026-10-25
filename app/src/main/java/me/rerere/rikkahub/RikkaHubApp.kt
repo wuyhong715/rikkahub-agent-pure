@@ -111,7 +111,11 @@ class RikkaHubApp : Application() {
         // 快照，晚建一分钟，那一分钟里模型看到的就是"什么后端都还不知道"。包在 runCatching 里
         // 是因为它拉的是 Room 流与 Shizuku binder 监听，任何一个后端出问题都不该让应用起不来。
         runCatching {
-            org.koin.core.context.GlobalContext.get().get<me.rerere.rikkahub.data.runtime.InstanceRegistry>()
+            val koin = org.koin.core.context.GlobalContext.get()
+            koin.get<me.rerere.rikkahub.data.runtime.InstanceRegistry>()
+            // 目录裁剪档位存在 DataStore 里，得在第一次装配工具目录之前读进运行时值，
+            // 否则重启后要等用户打开一次设置页才生效。
+            koin.get<me.rerere.rikkahub.data.preferences.InstancePreferences>()
         }.onFailure { t ->
             Log.w(TAG, "runtime instance registry warm-up failed; tool surface stays unfiltered", t)
         }

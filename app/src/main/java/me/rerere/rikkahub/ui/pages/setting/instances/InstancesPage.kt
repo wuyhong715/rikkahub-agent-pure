@@ -1,12 +1,14 @@
 package me.rerere.rikkahub.ui.pages.setting.instances
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeFlexibleTopAppBar
@@ -19,6 +21,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
@@ -27,11 +32,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ComputerTerminal01
 import me.rerere.hugeicons.stroke.Console
+import me.rerere.hugeicons.stroke.FilterHorizontal
 import me.rerere.hugeicons.stroke.Folder01
+import me.rerere.hugeicons.stroke.Tick02
 import me.rerere.hugeicons.stroke.ServerStack01
 import me.rerere.hugeicons.stroke.SmartPhone01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
+import me.rerere.rikkahub.data.ai.tools.InstanceFilterMode
 import me.rerere.rikkahub.data.runtime.InstanceKind
 import me.rerere.rikkahub.data.runtime.InstanceState
 import me.rerere.rikkahub.data.runtime.RuntimeInstance
@@ -56,6 +64,8 @@ fun InstancesPage(vm: InstancesVM = koinViewModel()) {
     val navController = LocalNavController.current
     val instances by vm.instances.collectAsStateWithLifecycle()
     val busy by vm.busy.collectAsStateWithLifecycle()
+    val filterMode by vm.filterMode.collectAsStateWithLifecycle()
+    var showFilterDialog by remember { mutableStateOf(false) }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     Scaffold(
@@ -114,6 +124,17 @@ fun InstancesPage(vm: InstancesVM = koinViewModel()) {
                     ),
                 )
             }
+            item(key = "filter") {
+                ListItem(
+                    modifier = Modifier.clickable { showFilterDialog = true },
+                    leadingContent = { Icon(HugeIcons.FilterHorizontal, null) },
+                    headlineContent = { Text(stringResource(R.string.instances_filter_title)) },
+                    supportingContent = { Text(filterModeDescription(filterMode)) },
+                    colors = ListItemDefaults.colors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                    ),
+                )
+            }
             item(key = "manage-workspaces") {
                 ListItem(
                     modifier = Modifier.clickable { navController.navigate(Screen.Workspaces) },
@@ -127,6 +148,56 @@ fun InstancesPage(vm: InstancesVM = koinViewModel()) {
             }
         }
     }
+
+    if (showFilterDialog) {
+        FilterModeDialog(
+            current = filterMode,
+            onSelect = { mode ->
+                vm.setFilterMode(mode)
+                showFilterDialog = false
+            },
+            onDismiss = { showFilterDialog = false },
+        )
+    }
+}
+
+/**
+ * 三档裁剪。默认是中间那档，文案要能让人一眼看出"这不会让工具凭空消失"。
+ */
+@Composable
+private fun FilterModeDialog(
+    current: InstanceFilterMode,
+    onSelect: (InstanceFilterMode) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.instances_filter_dialog_title)) },
+        text = {
+            Column {
+                InstanceFilterMode.entries.forEach { mode ->
+                    val label = when (mode) {
+                        InstanceFilterMode.OFF -> stringResource(R.string.instances_filter_off)
+                        InstanceFilterMode.ABSENT_ONLY -> stringResource(R.string.instances_filter_absent)
+                        InstanceFilterMode.NOT_READY -> stringResource(R.string.instances_filter_not_ready)
+                    }
+                    ListItem(
+                        modifier = Modifier.clickable { onSelect(mode) },
+                        headlineContent = { Text(label) },
+                        supportingContent = { Text(filterModeDescription(mode)) },
+                        trailingContent = {
+                            if (mode == current) {
+                                Icon(HugeIcons.Tick02, contentDescription = null)
+                            }
+                        },
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
+        },
+    )
 }
 
 @Composable
@@ -163,6 +234,13 @@ internal fun StatusLabel(state: InstanceState) {
         is InstanceState.Unavailable -> stringResource(R.string.instances_state_unavailable) to MaterialTheme.colorScheme.outline
     }
     Text(text = text, style = MaterialTheme.typography.labelMedium, color = color)
+}
+
+@Composable
+private fun filterModeDescription(mode: InstanceFilterMode): String = when (mode) {
+    InstanceFilterMode.OFF -> stringResource(R.string.instances_filter_off_desc)
+    InstanceFilterMode.ABSENT_ONLY -> stringResource(R.string.instances_filter_absent_desc)
+    InstanceFilterMode.NOT_READY -> stringResource(R.string.instances_filter_not_ready_desc)
 }
 
 @Composable

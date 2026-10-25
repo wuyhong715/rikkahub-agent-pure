@@ -383,6 +383,8 @@ val appModule = module {
             mcpManager = get(),
             // P2-06b: the expert library behind the assistant.subagent_profiles row.
             agentDefinitionRepository = get(),
+            // P4: Termux / Shizuku 这两行改成读运行实例注册表，和设置页、提示词同一份真值。
+            instanceRegistry = get(),
         )
     }
 }

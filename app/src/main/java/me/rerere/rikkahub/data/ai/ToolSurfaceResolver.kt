@@ -3,6 +3,7 @@ package me.rerere.rikkahub.data.ai
 import me.rerere.ai.core.Tool
 import me.rerere.ai.provider.Modality
 import me.rerere.ai.provider.Model
+import me.rerere.rikkahub.data.ai.tools.InstanceFilterRuntime
 import me.rerere.rikkahub.data.ai.tools.InstanceToolFilter
 import me.rerere.rikkahub.data.ai.tools.LocalToolGates
 import me.rerere.rikkahub.data.ai.tools.LocalTools
@@ -66,6 +67,8 @@ object ToolSurfaceResolver {
         options = InstanceToolFilter.effective(
             options = LocalToolGates.effective(assistant.localTools),
             instances = InstanceRuntimeSnapshot.current,
+            // 档位来自设置（进程级运行时值），默认只裁"后端应用没装"的组。
+            mode = InstanceFilterRuntime.mode,
         ),
         invocationContext = context,
         // P2-02 - the per-tool deny-list rides along with the option list it refines.

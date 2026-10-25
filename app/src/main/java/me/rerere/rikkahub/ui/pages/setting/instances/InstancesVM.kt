@@ -7,6 +7,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import me.rerere.rikkahub.data.ai.tools.InstanceFilterMode
+import me.rerere.rikkahub.data.preferences.InstancePreferences
 import me.rerere.rikkahub.data.runtime.InstanceId
 import me.rerere.rikkahub.data.runtime.InstanceKind
 import me.rerere.rikkahub.data.runtime.InstanceRegistry
@@ -20,9 +22,17 @@ import me.rerere.rikkahub.data.runtime.RuntimeInstance
  */
 class InstancesVM(
     private val registry: InstanceRegistry,
+    private val preferences: InstancePreferences,
 ) : ViewModel() {
 
     val instances: StateFlow<List<RuntimeInstance>> = registry.instances
+
+    /** 工具目录按实例状态裁到什么程度（设置项，默认 ABSENT_ONLY）。 */
+    val filterMode: StateFlow<InstanceFilterMode> = preferences.filterMode
+
+    fun setFilterMode(mode: InstanceFilterMode) {
+        viewModelScope.launch { preferences.setFilterMode(mode) }
+    }
 
     private val _busy = MutableStateFlow<Set<String>>(emptySet())
     val busy: StateFlow<Set<String>> = _busy.asStateFlow()

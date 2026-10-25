@@ -22,6 +22,8 @@ val runtimeModule = module {
     single { WorkspaceInstanceAdapter(get(), get()) }
     single { SshInstanceAdapter(get<Context>(), get()) }
     single { TermuxInstanceAdapter(get<Context>()) }
+    // 实例自己的偏好（目前只有目录裁剪档位）。构造即同步播种运行时值。
+    single { me.rerere.rikkahub.data.preferences.InstancePreferences(get<Context>()) }
 
     single {
         InstanceRegistry(

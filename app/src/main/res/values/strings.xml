@@ -3436,4 +3436,12 @@ HARDLINE protections still apply: rm -rf /, mkfs, shutdown / reboot, dd to block
   <string name="instances_probe_never">Never checked</string>
   <string name="instances_last_checked">Checked %1$s</string>
   <string name="instances_missing">This instance no longer exists. It may have been deleted in another screen.</string>
+  <string name="instances_filter_title">Tool catalogue pruning</string>
+  <string name="instances_filter_dialog_title">How aggressively to hide tools</string>
+  <string name="instances_filter_off">Never hide</string>
+  <string name="instances_filter_off_desc">Every tool stays in the catalogue, whatever its backend says.</string>
+  <string name="instances_filter_absent">Only when the app is missing</string>
+  <string name="instances_filter_absent_desc">Default. Hides a group only when its backend app is not installed at all. Missing permission, missing rootfs or an untested host never hides anything.</string>
+  <string name="instances_filter_not_ready">Whenever the backend is not ready</string>
+  <string name="instances_filter_not_ready_desc">Experimental. Also hides groups whose backend needs setup right now. The catalogue can change between turns.</string>
 </resources>

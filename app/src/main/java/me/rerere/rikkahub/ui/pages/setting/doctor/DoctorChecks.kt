@@ -38,6 +38,10 @@ import me.rerere.rikkahub.browser.BrowserToolDefaults
 import java.net.InetAddress
 import java.io.File
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.runtime.SetupStep
+import me.rerere.rikkahub.data.runtime.InstanceState
+import me.rerere.rikkahub.data.runtime.InstanceKind
+import me.rerere.rikkahub.data.runtime.InstanceId
 
 /**
  * Each row that depends on a system capability (a permission, an OS-level service binding,
@@ -168,6 +172,9 @@ class DoctorChecks(
     // Optional + nullable so callers that don't construct this DoctorChecks via the DI
     // graph (a few legacy tests) keep compiling — the row is silently skipped when null.
     private val browserPreferences: BrowserPreferences? = null,
+    // P4 — 运行实例的单一真值。给了就从注册表读 Termux / Shizuku 的状态，而不是各查各的；
+    // 缺省 null 让不走 DI 的老测试继续编译（与 browserPreferences 同一约定）。
+    private val instanceRegistry: me.rerere.rikkahub.data.runtime.InstanceRegistry? = null,
     // Phase 25 — SAF tree-grant store, backs the "granted directories" Doctor row.
     // Nullable + defaulted so legacy test paths that don't build the full DI graph compile.
     private val storageVolumeGrantStore: me.rerere.rikkahub.data.storage.StorageVolumeGrantStore? = null,
@@ -220,6 +227,25 @@ class DoctorChecks(
      */
     private fun requirersOf(cap: Set<LocalToolOption>, enabled: Set<LocalToolOption>): List<LocalToolOption> =
         cap.filter { it in enabled }
+
+
+    /**
+     * 四态 → [ShizukuStatus]，只为复用既有的本地化文案与 FixAction。
+     *
+     * 注意 Busy/Unavailable 在 Shizuku 这条线上不会出现（binder 不分"忙"），真出现就按
+     * NOT_RUNNING 处理——它至少能引导用户去启动服务。
+     */
+    private fun shizukuStatusFromState(state: me.rerere.rikkahub.data.runtime.InstanceState): ShizukuStatus =
+        when (state) {
+            me.rerere.rikkahub.data.runtime.InstanceState.Ready -> ShizukuStatus.READY
+            is me.rerere.rikkahub.data.runtime.InstanceState.NeedsSetup -> when (state.step) {
+                me.rerere.rikkahub.data.runtime.SetupStep.INSTALL_APP -> ShizukuStatus.NOT_INSTALLED
+                me.rerere.rikkahub.data.runtime.SetupStep.GRANT_PERMISSION -> ShizukuStatus.PERMISSION_DENIED
+                else -> ShizukuStatus.NOT_RUNNING
+            }
+            is me.rerere.rikkahub.data.runtime.InstanceState.Busy -> ShizukuStatus.NOT_RUNNING
+            is me.rerere.rikkahub.data.runtime.InstanceState.Unavailable -> ShizukuStatus.NOT_RUNNING
+        }
 
     // ----- Permissions ----------------------------------------------------------------
 
@@ -851,7 +877,13 @@ class DoctorChecks(
                 ),
             )
         )
-        val termuxInstalled = isTermuxInstalled()
+        // 状态从运行实例注册表读：设置页、提示词和这里看的是同一份东西。注册表不在
+        // （老测试、极端早期调用）时回落到直查包名。
+        val termuxState = instanceRegistry?.find(InstanceId.local(InstanceKind.TERMUX))?.state
+        val termuxInstalled = when (termuxState) {
+            null -> isTermuxInstalled()
+            else -> termuxState !is InstanceState.NeedsSetup || termuxState.step != SetupStep.INSTALL_APP
+        }
         add(
             groupRow(
                 id = "tools.termux",
@@ -864,7 +896,11 @@ class DoctorChecks(
                 fix = null,
             )
         )
-        val shizukuStatus = ShizukuManager.status(context)
+        val shizukuStatus = instanceRegistry
+            ?.find(InstanceId.local(InstanceKind.SHIZUKU))
+            ?.state
+            ?.let { shizukuStatusFromState(it) }
+            ?: ShizukuManager.status(context)
         add(
             groupRow(
                 id = "tools.shizuku",
