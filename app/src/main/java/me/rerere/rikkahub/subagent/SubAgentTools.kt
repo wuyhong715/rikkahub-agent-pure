@@ -418,6 +418,8 @@ fun subagentDispatchTool(
 fun subagentListTool(
     registry: SubAgentRegistry,
     definitions: List<AgentDefinition> = emptyList(),
+    callerContext: me.rerere.rikkahub.data.ai.tools.ToolInvocationContext =
+        me.rerere.rikkahub.data.ai.tools.ToolInvocationContext.EMPTY,
 ): Tool {
     // Gate on ALL definitions (not just the enabled ones): an all-disabled library still has
     // something worth showing, and a library that exists must never silently fall back to the
@@ -501,7 +503,11 @@ private fun encodeDefinitions(definitions: List<AgentDefinition>) = buildJsonArr
     definitions.forEach { add(encodeDefinition(it)) }
 }
 
-fun subagentGetTool(registry: SubAgentRegistry): Tool = Tool(
+fun subagentGetTool(
+    registry: SubAgentRegistry,
+    callerContext: me.rerere.rikkahub.data.ai.tools.ToolInvocationContext =
+        me.rerere.rikkahub.data.ai.tools.ToolInvocationContext.EMPTY,
+): Tool = Tool(
     name = "subagent_get",
     description = "Fetch the full run record for a sub-agent by id. Read-only.".trimIndent(),
     parameters = {
@@ -525,7 +531,11 @@ fun subagentGetTool(registry: SubAgentRegistry): Tool = Tool(
     },
 )
 
-fun subagentCancelTool(registry: SubAgentRegistry): Tool = Tool(
+fun subagentCancelTool(
+    registry: SubAgentRegistry,
+    callerContext: me.rerere.rikkahub.data.ai.tools.ToolInvocationContext =
+        me.rerere.rikkahub.data.ai.tools.ToolInvocationContext.EMPTY,
+): Tool = Tool(
     name = "subagent_cancel",
     description = """
         Cancel a running sub-agent by id. Marks the run CANCELLED; safe to call on

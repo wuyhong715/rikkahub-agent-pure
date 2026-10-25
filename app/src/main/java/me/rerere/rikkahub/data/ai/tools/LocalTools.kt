@@ -1054,7 +1054,7 @@ class LocalTools(
                     )
                 )
             }
-            tools.add(me.rerere.rikkahub.subagent.subagentListTool(subAgentRegistry, definitions))
+            tools.add(me.rerere.rikkahub.subagent.subagentListTool(subAgentRegistry, definitions, invocationContext))
             // P2-06b — the roster write tools. Registered alongside the reads; each one prompts
             // per call and refuses outright in a headless conversation.
             tools.add(
@@ -1080,8 +1080,8 @@ class LocalTools(
                     invocationContext,
                 )
             )
-            tools.add(me.rerere.rikkahub.subagent.subagentGetTool(subAgentRegistry))
-            tools.add(me.rerere.rikkahub.subagent.subagentCancelTool(subAgentRegistry))
+            tools.add(me.rerere.rikkahub.subagent.subagentGetTool(subAgentRegistry, invocationContext))
+            tools.add(me.rerere.rikkahub.subagent.subagentCancelTool(subAgentRegistry, invocationContext))
         }
         if (options.contains(LocalToolOption.CostGuards)) {
             tools.add(me.rerere.rikkahub.costguards.checkTokenUsageTool(policyEngine))
