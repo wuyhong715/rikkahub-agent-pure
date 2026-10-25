@@ -324,7 +324,7 @@ class WebDavClient(
             val propfindResult = propfind(path, depth = 0)
             if (propfindResult.isSuccess) {
                 Log.d(TAG, "Collection already exists: $targetUrl")
-                return@runCatching
+                return@ioCatching
             }
 
             // Create collection if not exists
