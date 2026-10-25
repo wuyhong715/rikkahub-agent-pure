@@ -39,6 +39,15 @@ class FakeAgentRunDao : AgentRunDao {
 
     override suspend fun getById(id: String): AgentRun? = rows[id]
 
+    /** Mirrors the SQL: only in-flight rows are stamped, and the row count is the return value. */
+    override suspend fun touch(id: String, nowMs: Long): Int {
+        val row = rows[id] ?: return 0
+        if (AgentRunStatus.fromName(row.status) !in AgentRunStatus.IN_FLIGHT) return 0
+        rows[id] = row.copy(updatedAtMs = nowMs)
+        publish()
+        return 1
+    }
+
     override suspend fun findStranded(beforeMs: Long): List<AgentRun> =
         rows.values.filter {
             AgentRunStatus.fromName(it.status) in AgentRunStatus.IN_FLIGHT && it.updatedAtMs < beforeMs
