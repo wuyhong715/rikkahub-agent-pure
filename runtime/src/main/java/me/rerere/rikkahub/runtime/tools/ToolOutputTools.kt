@@ -68,6 +68,21 @@ object ToolOutputRules {
      * The file name to spill [toolCallId] under. Deterministic for the same id, and always a
      * plain name inside the directory (no separators, no leading dot, bounded length).
      */
+    /**
+     * [fileNameFor] with a content [stamp], kept short enough that the reader accepts it.
+     *
+     * Two rules meet here and used to disagree: the writer appends "-<stamp>" AFTER [fileNameFor]
+     * has already used its 60-character budget, which pushed long tool-call ids past the 64-char
+     * stem the reader validates against — the notice named a file `tool_output_read` then refused.
+     * Truncating the base before the stamp keeps both true.
+     */
+    fun stampedFileNameFor(toolCallId: String, stamp: String): String {
+        val base = fileNameFor(toolCallId).removeSuffix(EXTENSION)
+        val room = (MAX_NAME_CHARS - stamp.length - 1).coerceAtLeast(1)
+        val stem = base.take(room).trimEnd('.', '-').ifBlank { "output" }
+        return "$stem-$stamp$EXTENSION"
+    }
+
     fun fileNameFor(toolCallId: String): String {
         val sanitized = UNSAFE.replace(toolCallId, "_")
             .trimStart('.')

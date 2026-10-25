@@ -154,4 +154,22 @@ class ToolResultBudgetTest {
         assertNull(ToolResultBudget.resolve(0, 32_000))
         assertNull(ToolResultBudget.resolve(-10, 32_000))
     }
+
+    @Test
+    fun `a stamped name stays readable even for a very long call id`() {
+        // Providers can send long tool-call ids, and the writer appends "-<8 hex>". Before this
+        // rule the base had already used the 60-character budget, so the result exceeded the
+        // 64-char stem the reader validates: the notice named a file `tool_output_read` refused.
+        val longId = "call_" + "x".repeat(120)
+        val name = ToolOutputRules.stampedFileNameFor(longId, "deadbeef")
+        assertTrue("stamped name must fit the reader's rule: $name", ToolOutputRules.resolveRequestedFile(name) != null)
+        assertTrue(name.endsWith("-deadbeef.txt"))
+    }
+
+    @Test
+    fun `a stamped name is distinct for distinct content`() {
+        val a = ToolOutputRules.stampedFileNameFor("call_0", "11111111")
+        val b = ToolOutputRules.stampedFileNameFor("call_0", "22222222")
+        assertTrue(a != b)
+    }
 }

@@ -89,15 +89,15 @@ class AndroidLoopHostBridge(
         // The name comes from a model-supplied call id, so it goes through the same rule the
         // read tool uses — otherwise a hostile id (`../shared_prefs/x`) would write outside
         // this directory, and the reader could never address what the writer produced.
-        val baseName = me.rerere.rikkahub.runtime.tools.ToolOutputRules.fileNameFor(toolCallId)
         // Disambiguate by content. Providers hand out fixed ids (`call_0`, `call_1`, or nothing,
         // which maps to one shared name), so two conversations — or two steps in one turn — with
         // the same id overwrote each other's spill, and the notice then pointed at someone else's
         // output. A hash of the text keeps the name stable for identical content and distinct for
         // different content, without putting anything model-controlled into the path.
         val stamp = me.rerere.rikkahub.data.vector.ContentHash.of(fullText).toULong().toString(16).take(8)
-        val fileName = baseName.removeSuffix(me.rerere.rikkahub.runtime.tools.ToolOutputRules.EXTENSION) +
-            "-$stamp" + me.rerere.rikkahub.runtime.tools.ToolOutputRules.EXTENSION
+        // The rules own the length: appending here is what broke `tool_output_read` for long ids.
+        val fileName = me.rerere.rikkahub.runtime.tools.ToolOutputRules
+            .stampedFileNameFor(toolCallId, stamp)
         val outputDir = File(context.filesDir, FileFolders.TOOL_OUTPUTS).apply { mkdirs() }
         File(outputDir, fileName).writeText(fullText)
         fileName
