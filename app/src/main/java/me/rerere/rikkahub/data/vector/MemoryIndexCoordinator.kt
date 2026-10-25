@@ -135,6 +135,7 @@ class MemoryIndexCoordinator(
                 return null
             }
             val report = source.sync(
+                workspaceId = workspaceId,
                 dir = dir,
                 docs = listing.docs,
                 nowMs = System.currentTimeMillis(),
@@ -211,8 +212,8 @@ class MemoryIndexCoordinator(
      * the model-facing contract, and so a hit's `docKey` is translated to a file name in exactly
      * one place - the same name `memory_read` accepts.
      */
-    suspend fun search(dir: String, query: String, limit: Int): ColdMemorySearchOutcome {
-        val outcome = source.search(dir, query, limit)
+    suspend fun search(workspaceId: String, dir: String, query: String, limit: Int): ColdMemorySearchOutcome {
+        val outcome = source.search(workspaceId, dir, query, limit)
         return ColdMemorySearchOutcome(
             available = outcome.available,
             hits = outcome.hits.map {

@@ -2962,7 +2962,7 @@ class ChatService(
             } else {
                 "${ColdMemoryRules.WORKSPACE_PREFIX}/$dir"
             },
-            search = { query, limit -> memoryIndex.search(dir, query, limit) },
+            search = { query, limit -> memoryIndex.search(workspaceId, dir, query, limit) },
         )
         return tools
     }

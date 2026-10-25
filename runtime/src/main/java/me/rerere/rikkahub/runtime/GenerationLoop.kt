@@ -49,6 +49,7 @@ import me.rerere.rikkahub.runtime.limits.ToolRuntimeLimits
 import me.rerere.rikkahub.runtime.tools.ContentRouter
 import me.rerere.rikkahub.runtime.tools.ConversationInjections
 import me.rerere.rikkahub.runtime.tools.ToolExecutionRetryPolicy
+import me.rerere.rikkahub.runtime.tools.ToolOutputRules
 import me.rerere.rikkahub.runtime.tools.ToolResultBudget
 import me.rerere.rikkahub.runtime.tools.buildMemoryTools
 import me.rerere.rikkahub.runtime.tools.buildTruncationNotice
@@ -1740,6 +1741,12 @@ class GenerationLoop(
         val textParts = output.filterIsInstance<UIMessagePart.Text>()
         val nonTextParts = output.filter { it !is UIMessagePart.Text }
         if (textParts.isEmpty()) return output
+        // The reader of a spilled result is exempt from the budget that spilled it. Its answer is
+        // already a bounded page (ToolOutputRules.MAX_SLICE_CHARS) and it exists precisely because
+        // the model could not see the content otherwise: truncating it hands back a notice pointing
+        // at a *new* file, that notice gets truncated the same way, and the model loops forever
+        // without ever reading a byte of what it asked for.
+        if (toolName == ToolOutputRules.READ_TOOL_NAME) return output
         val totalChars = textParts.sumOf { it.text.length }
         val fullText = textParts.joinToString("\n") { it.text }
 

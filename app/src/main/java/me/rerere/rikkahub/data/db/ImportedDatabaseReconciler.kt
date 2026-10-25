@@ -38,10 +38,12 @@ import java.io.File
  *    because the fork tracks upstream's schema, so trusting the hash is sound.
  *
  * If the backup is at an older version that is not yet schema-complete, Room runs its normal
- * migrations up to current and sets the identity itself; pre-creating the tables/indices just
- * lets those migrations find them (all statements are `IF NOT EXISTS`, matching how Room's own
- * generated auto-migration SQL creates indices, so replaying them causes no conflict). Backups
- * newer than the app are left untouched (Room reports the downgrade).
+ * migrations up to current and sets the identity itself. Nothing is pre-created on that path:
+ * a migration chain creates each table at the version that introduced it, whereas the fork-only
+ * DDL always writes the *current* shape — pre-creating `missions` there made the following
+ * 34->35 / 35->36 auto-migrations ADD columns that already existed and crashed every restore of
+ * a backup older than v32. Backups newer than the app are left untouched (Room reports the
+ * downgrade).
  *
  * Best-effort: any failure here is logged and swallowed so a restore never half-breaks. The
  * worst case is the same pre-existing crash on next open, never data loss: there is no
@@ -253,10 +255,17 @@ object ImportedDatabaseReconciler {
 
                 db.beginTransaction()
                 try {
-                    FORK_ONLY_DDL.forEach(db::execSQL)
-                    BACKFILL_INDEX_DDL.forEach(db::execSQL)
-
                     if (version == EXPECTED_VERSION || alreadyCurrent) {
+                        // Fork-only tables and the indices that backfill older files. Deliberately
+                        // NOT run for a file Room is still going to migrate: these statements write
+                        // the *current* shape of `missions` (every v35 / v36 column), and the
+                        // 34->35 / 35->36 / 36->37 auto-migrations that follow would then try to
+                        // ADD columns that already exist and abort the whole open with "duplicate
+                        // column name". Restoring any backup older than v32 hit exactly that.
+                        // Room's own migrations create each of these tables at the version that
+                        // introduced it, i.e. with the shape the next step expects.
+                        FORK_ONLY_DDL.forEach(db::execSQL)
+                        BACKFILL_INDEX_DDL.forEach(db::execSQL)
                         // v29 adds this table and v30 adds the chat_model_id column below,
                         // both through Room auto-migrations. Imported upstream databases and
                         // genuine v27/v28 fork databases are stamped straight to
