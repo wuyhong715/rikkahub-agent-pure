@@ -66,6 +66,7 @@ val viewModelModule = module {
             chatService = get(),
             missionLauncher = get(),
             snapshotStore = get(),
+            forkService = get(),
         )
     }
     viewModelOf(::SettingVM)

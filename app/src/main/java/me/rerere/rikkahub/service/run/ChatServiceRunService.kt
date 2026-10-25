@@ -2,6 +2,8 @@ package me.rerere.rikkahub.service.run
 
 import android.util.Log
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -178,7 +180,23 @@ class ChatServiceRunService(
      * Block until the generation job terminates or [RunHandle.timeoutMs] elapses, then
      * settle the ledger, the journal and the checkpoint for this run.
      */
-    override suspend fun awaitTerminal(handle: RunHandle): RunResult {
+    override suspend fun awaitTerminal(handle: RunHandle): RunResult =
+        awaitSettled(handle, throughApprovals = false)
+
+    /**
+     * [awaitTerminal] for rounds a human is steering (SEMI / MANUAL missions).
+     *
+     * Those rounds go idle twice: once when generation stops on a tool call that needs the
+     * user's answer, and once when it really ends. Only the second one ends the round - the
+     * answer restarts generation on the very same conversation. Settling at the first idle closed
+     * the ledger and journaled RUN_FINISHED under work that was still alive, so the supervisor
+     * scored a half-done round, and the round's real ending was never settled at all: the mission
+     * stayed in RUNNING forever.
+     */
+    override suspend fun awaitInteractiveTerminal(handle: RunHandle): RunResult =
+        awaitSettled(handle, throughApprovals = true)
+
+    private suspend fun awaitSettled(handle: RunHandle, throughApprovals: Boolean): RunResult {
         // Default in case neither the try nor catch assigns (shouldn't happen, but the
         // compiler needs a definite assignment for the finally block's journal emit).
         var result = RunResult(
@@ -186,11 +204,22 @@ class ChatServiceRunService(
             handle.conversationId,
             "awaitTerminal did not reach a terminal state",
         )
+        // Parked = the round stopped on a tool approval nobody has answered yet. It is NOT over,
+        // so the settlement below is skipped entirely: releasing the headless mark, the system
+        // addendum and the registry binding here would strip the run out from under a generation
+        // that is about to continue, and RUN_FINISHED would tell the supervisor the round ended.
+        var parked = false
         try {
-            val completed = awaitGenerationTerminal(
-                flow = chatService.getGenerationJobStateFlow(handle.conversationId),
-                timeoutMs = handle.timeoutMs,
-            )
+            val completed = watchRound(handle, throughApprovals)
+            if (completed == null) {
+                parked = true
+                Log.i(TAG, "awaitTerminal: run ${handle.id} parked on a tool approval; leaving it open")
+                return RunResult(
+                    RunStatus.PARKED,
+                    handle.conversationId,
+                    "waiting for tool approval",
+                )
+            }
             // P6 — snapshot the child's own answer while its conversation is still around.
             // Taken for BOTH terminal paths on purpose: a timed-out run has usually written most
             // of its work already ("timeout != no work"), and that partial output is exactly what
@@ -212,25 +241,60 @@ class ChatServiceRunService(
         } catch (t: Throwable) {
             result = RunResult(RunStatus.FAILED, handle.conversationId, "${t::class.simpleName}: ${t.message}")
         } finally {
-            runCatching { HeadlessConversations.unmark(handle.conversationId) }
-            runCatching { ConversationSystemAddendum.clear(handle.conversationId) }
-            ConversationRunRegistry.unbind(handle.conversationId)
-            runCatching { settleLedger(handle, result) }
-            runCatching {
-                runEventRepository.emit(
-                    type = RunEventType.RUN_FINISHED,
-                    title = handle.id,
-                    detail = result.status.name,
-                    payloadJson = result.failure?.let {
-                        JsonInstant.encodeToString(buildJsonObject { put("failure", it) })
-                    },
-                    missionId = handle.missionId,
-                    conversationId = handle.conversationId.toString(),
-                    runId = handle.id,
-                )
-            }
+            if (!parked) settleTerminal(handle, result)
         }
         return result
+    }
+
+    /**
+     * Wait for the round to end.
+     *
+     * Returns true when generation finished on its own, false when the timeout expired, and null
+     * when the round is parked on an approval the human has not answered yet (only reachable with
+     * [throughApprovals]).
+     */
+    private suspend fun watchRound(handle: RunHandle, throughApprovals: Boolean): Boolean? {
+        val flow = chatService.getGenerationJobStateFlow(handle.conversationId)
+        if (!throughApprovals) {
+            return awaitGenerationTerminal(flow = flow, timeoutMs = handle.timeoutMs)
+        }
+        val deadline = System.currentTimeMillis() + handle.timeoutMs
+        while (true) {
+            val remaining = (deadline - System.currentTimeMillis()).coerceAtLeast(1)
+            val completed = awaitGenerationTerminal(flow = flow, timeoutMs = remaining)
+            if (!completed) return false
+            if (!chatService.hasPendingToolApprovals(handle.conversationId)) return true
+            // Parked on a human decision: wait for the answer to restart generation instead of
+            // polling, and instead of faking an ending. The wait shares the run's deadline so an
+            // abandoned approval cannot pin this coroutine forever - when it expires the run is
+            // left open (never settled under a live round) and the supervisor's own deadline
+            // logic owns the mission from there.
+            val resumed = withTimeoutOrNull(remaining) {
+                flow.first { it != null && it.isActive }
+            } != null
+            if (!resumed) return null
+        }
+    }
+
+    /** Post-run cleanup: release the surface marks, settle the ledger, journal the outcome. */
+    private suspend fun settleTerminal(handle: RunHandle, result: RunResult) {
+        runCatching { HeadlessConversations.unmark(handle.conversationId) }
+        runCatching { ConversationSystemAddendum.clear(handle.conversationId) }
+        ConversationRunRegistry.unbind(handle.conversationId)
+        runCatching { settleLedger(handle, result) }
+        runCatching {
+            runEventRepository.emit(
+                type = RunEventType.RUN_FINISHED,
+                title = handle.id,
+                detail = result.status.name,
+                payloadJson = result.failure?.let {
+                    JsonInstant.encodeToString(buildJsonObject { put("failure", it) })
+                },
+                missionId = handle.missionId,
+                conversationId = handle.conversationId.toString(),
+                runId = handle.id,
+            )
+        }
     }
 
     /**
@@ -342,6 +406,9 @@ class ChatServiceRunService(
             RunStatus.COMPLETED -> AgentRunStatus.succeeded
             RunStatus.CANCELLED -> AgentRunStatus.cancelled
             RunStatus.TIMED_OUT, RunStatus.FAILED -> AgentRunStatus.failed
+            // Unreachable: a parked round is deliberately not settled (see awaitSettled). Mapped
+            // to the ledger's own parked status so the pairing stays meaningful if that changes.
+            RunStatus.PARKED -> AgentRunStatus.awaiting_approval
         }
         agentRunRepository.markTerminal(handle.id, status, result.failure)
         // A successful run has nothing left to resume; a failed one keeps its breakpoint so

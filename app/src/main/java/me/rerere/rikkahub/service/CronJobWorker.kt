@@ -347,6 +347,9 @@ class CronJobWorker(
                 RunStatus.TIMED_OUT -> Triple("timed_out", "llm turn exceeded 15min", handle.conversationId)
                 RunStatus.FAILED -> Triple("failed", "run_failed", handle.conversationId)
                 RunStatus.CANCELLED -> Triple("cancelled", null, handle.conversationId)
+                // Cron runs are headless, so they never park; if one somehow does, treat it as a
+                // failure rather than reporting a success nobody produced.
+                RunStatus.PARKED -> Triple("failed", "run_parked", handle.conversationId)
             }
         } catch (t: Throwable) {
             Triple("failed", "${t::class.simpleName}: ${t.message.orEmpty()}", handle.conversationId)

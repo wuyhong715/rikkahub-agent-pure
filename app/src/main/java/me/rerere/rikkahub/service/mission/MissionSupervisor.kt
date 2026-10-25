@@ -902,9 +902,29 @@ class MissionSupervisor(
             val tools = events.count { it.type == RunEventType.TOOL_RESULT.name }
             val artifacts = events.count { it.type == RunEventType.ARTIFACT.name }
             val status = events.firstOrNull { it.type == RunEventType.RUN_FINISHED.name }?.detail
-            "状态：${status ?: "未知"}；工具调用：$tools 次；本轮新增产物：$artifacts 件"
+            // 批 I — 失败归因：把「哪类失败几次」带进交接，下一轮才有依据换策略。
+            val failures = events
+                .filter { it.type == RunEventType.TOOL_RESULT.name }
+                .mapNotNull { event -> event.payloadJson?.let(::failureKindOf) }
+            val failureText = me.rerere.rikkahub.runtime.tools.ToolFailureClassifier
+                .summarize(failures)
+                .takeIf { it.isNotBlank() }
+                ?.let { "；工具失败：$it" }
+                .orEmpty()
+            "状态：${status ?: "未知"}；工具调用：$tools 次；本轮新增产物：$artifacts 件$failureText"
         }
     }.getOrNull()
+
+    /** 从 TOOL_RESULT 的 payload 里取失败分类；不是失败或字段缺失返回 null。 */
+    private fun failureKindOf(payloadJson: String): me.rerere.rikkahub.runtime.tools.ToolFailureKind? =
+        runCatching {
+            val raw = JsonInstant.parseToJsonElement(payloadJson).jsonObject["failureKind"]
+                ?.jsonPrimitive
+                ?.contentOrNull
+                ?: return null
+            me.rerere.rikkahub.runtime.tools.ToolFailureKind.entries
+                .firstOrNull { it.name.equals(raw, ignoreCase = true) }
+        }.getOrNull()
 
     /** 台账状态名是否表示「这一轮不是正常跑完的」。 */
     private fun isFailureStatus(status: String?): Boolean {

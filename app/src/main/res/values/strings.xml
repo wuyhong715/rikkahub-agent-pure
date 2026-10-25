@@ -3258,6 +3258,12 @@ HARDLINE protections still apply: rm -rf /, mkfs, shutdown / reboot, dd to block
   <string name="mission_limits_deadline">Deadline (hours from now; empty = none)</string>
   <string name="mission_limits_wrapup">Wrap-up window (minutes, 0 = off)</string>
   <string name="mission_limits_acceptance">Acceptance checks (one per line: command: / file: / contains: path | text / not_contains: path | text / size: path | bytes)</string>
+  <string name="mission_limits_tool_hooks">Tool hooks (one per line: before: tool_* | command, after: tool_* | command)</string>
+  <string name="mission_menu_fork">Fork mission</string>
+  <string name="mission_fork_title">Fork this mission</string>
+  <string name="mission_fork_desc">Copies the current workspace into a new one and starts a separate mission. The original mission keeps running untouched. Workflow documents come along; conversation, checkpoints and the deadline do not.</string>
+  <string name="mission_fork_instruction">Another path (optional)</string>
+  <string name="mission_fork_confirm">Fork and start</string>
   <string name="mission_limits_confirm">Confirm before completing</string>
   <string name="mission_limits_confirm_desc">A reported done stays in review until you approve the delivery.</string>
   <string name="mission_rework_title">Send back for rework</string>

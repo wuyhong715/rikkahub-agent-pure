@@ -261,6 +261,41 @@ class MissionSupervisorAcceptanceTest {
     }
 
     @Test
+    fun `tool failure kinds reach the next round handoff`() = runBlocking {
+        val fx = Fixture()
+        try {
+            // digest 读的是「上一轮」——真实流程里 launcher 会把 lastRunId 写回任务。
+            fx.missionDao.upsert(mission().copy(lastRunId = "r1"))
+            fx.statuses["r1"] = "succeeded"
+            fx.runEvents.emit(
+                type = RunEventType.TOOL_RESULT,
+                title = "ssh_exec",
+                payloadJson = """{"tool":"ssh_exec","failed":true,"failureKind":"NETWORK"}""",
+                missionId = "m1",
+                conversationId = CONV,
+                runId = "r1",
+            )
+            fx.runEvents.emit(
+                type = RunEventType.TOOL_RESULT,
+                title = "write_text_file",
+                payloadJson = """{"tool":"write_text_file","failed":true,"failureKind":"PERMISSION"}""",
+                missionId = "m1",
+                conversationId = CONV,
+                runId = "r1",
+            )
+            fx.signal("r1", "m1", "launch", "{}")
+
+            fx.supervisor.handleRunFinished(fx.finished("r1", "m1"))
+
+            val prompt = fx.runService.submitted.single().prompt
+            assertTrue("交接里要带失败归因", prompt.contains("网络×1"))
+            assertTrue(prompt.contains("权限×1"))
+        } finally {
+            fx.cleanup()
+        }
+    }
+
+    @Test
     fun `a live deadline lifts the round cap so time is the real bound`() = runBlocking {
         val fx = Fixture()
         try {

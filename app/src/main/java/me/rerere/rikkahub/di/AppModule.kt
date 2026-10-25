@@ -341,6 +341,8 @@ val appModule = module {
             // Lambda, not an eager get(): MissionCreationService -> MissionLauncher -> RunService
             // -> ChatService would close a Koin construction cycle otherwise.
             missionCreationProvider = { get<me.rerere.rikkahub.service.mission.MissionCreationService>() },
+            // 批 I — 工具级 hook；和 MissionEngine 一样是单例，不参与构造环。
+            missionToolHooks = get(),
             runCheckpointRepository = get(),
             runOrchestrator = get(),
             subAgentRegistry = get(),

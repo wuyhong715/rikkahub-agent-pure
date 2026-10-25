@@ -34,6 +34,13 @@ data class MissionHook(
     val timeoutSec: Int = 120,
     /** 失败时的动作：[ACTION_BLOCK] 阻断，[ACTION_WARN] 只记录并继续。 */
     val failAction: String = ACTION_BLOCK,
+    /**
+     * 批 I — 工具级 hook 的工具匹配（只有 [WHEN_TOOL_BEFORE] / [WHEN_TOOL_AFTER] 用）。
+     *
+     * 空 = 匹配所有工具；支持 `workspace_*` 这样的通配（`*` 匹配任意后缀）和精确名。
+     * 写成 `write_*` 就能只在写文件之后跑 lint，而不是每次读文件都跑一遍。
+     */
+    val tool: String = "",
 ) {
 
     val whenKind: MissionHookWhen get() = MissionHookWhen.parse(at)
@@ -47,6 +54,8 @@ data class MissionHook(
         const val WHEN_ROUND_END: String = "round_end"
         const val WHEN_BEFORE_DONE: String = "before_done"
         const val WHEN_AFTER_FAILURE: String = "after_failure"
+        const val WHEN_TOOL_BEFORE: String = "tool_before"
+        const val WHEN_TOOL_AFTER: String = "tool_after"
 
         const val ACTION_BLOCK: String = "block"
         const val ACTION_WARN: String = "warn"
@@ -57,7 +66,11 @@ data class MissionHook(
 enum class MissionHookWhen {
     ROUND_END,
     BEFORE_DONE,
-    AFTER_FAILURE;
+    AFTER_FAILURE,
+    /** 批 I — 工具执行之前（可拦截）。 */
+    TOOL_BEFORE,
+    /** 批 I — 工具执行之后（只观察，不拦截）。 */
+    TOOL_AFTER;
 
     /** 序列化用的名字（小写），与 [MissionHook.when] 一致。 */
     val wireName: String get() = name.lowercase()
@@ -91,6 +104,8 @@ data class MissionHookContext(
     val runId: String? = null,
     /** 本轮 run 的终态名（COMPLETED / FAILED / TIMED_OUT …），未知时 null。 */
     val status: String? = null,
+    /** 批 I — 触发这条 hook 的工具名（工具级 hook 用）。 */
+    val tool: String? = null,
 )
 
 /**
@@ -145,9 +160,69 @@ object MissionHookSpec {
         )
     )
 
+    /**
+     * 批 I — 工具名是否匹配 hook 的 `tool` 字段。空模式匹配一切；`*` 只能出现在末尾。
+     */
+    fun matchesTool(hook: MissionHook, toolName: String): Boolean {
+        val pattern = hook.tool.trim()
+        if (pattern.isEmpty()) return true
+        if (pattern == "*") return true
+        return if (pattern.endsWith("*")) {
+            toolName.startsWith(pattern.dropLast(1))
+        } else {
+            toolName.equals(pattern, ignoreCase = true)
+        }
+    }
+
+    /** 某时机 + 某工具下要执行的 hook（已清洗，保持用户顺序）。 */
+    fun runnableForTool(limits: MissionLimits, at: MissionHookWhen, toolName: String): List<MissionHook> =
+        limits.hooks.filter { it.whenKind == at && it.isRunnable && matchesTool(it, toolName) }
+
     /** 取某时机的第一条命令（UI 里的单行编辑用）；没有则空串。 */
     fun commandFor(limits: MissionLimits, at: MissionHookWhen): String =
         limits.hooks.firstOrNull { it.whenKind == at }?.command.orEmpty()
+
+    /**
+     * 批 I — 工具级 hook 的编辑器语法（每行一条）：
+     *
+     * ```
+     * 前: workspace_write_* | ./precheck.sh      # 执行前拦截
+     * 后: workspace_* | ./lint.sh                # 执行后观察
+     * ```
+     *
+     * `*` 省略时按「所有工具」处理；命令可以带 `{tool}` 占位符。失败动作沿用任务整体的开关
+     * （[actionOf]），所以编辑器不需要再问一次「失败要挡还是只记」。
+     */
+    fun parseToolHookLines(text: String, failAction: String): List<MissionHook> =
+        text.lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() && !it.startsWith("#") }
+            .mapNotNull { line ->
+                val colon = line.indexOfFirst { it == ':' || it == '：' }
+                if (colon <= 0) return@mapNotNull null
+                val rawWhen = line.substring(0, colon).trim().lowercase()
+                val at = when (rawWhen) {
+                    "前", "before", "tool_before" -> MissionHook.WHEN_TOOL_BEFORE
+                    "后", "after", "tool_after" -> MissionHook.WHEN_TOOL_AFTER
+                    else -> return@mapNotNull null
+                }
+                val rest = line.substring(colon + 1).trim()
+                if (rest.isEmpty()) return@mapNotNull null
+                val parts = rest.split("|", "｜").map { it.trim() }
+                val tool = if (parts.size >= 2) parts[0] else ""
+                val command = if (parts.size >= 2) parts.drop(1).joinToString("|").trim() else rest
+                if (command.isEmpty()) return@mapNotNull null
+                MissionHook(at = at, command = command, tool = tool, failAction = failAction)
+            }
+            .toList()
+
+    /** 反向：把工具级 hook 渲染回编辑器文本（时间/失败后 hook 不在这里显示）。 */
+    fun toToolHookLines(hooks: List<MissionHook>): String =
+        hooks.filter { it.whenKind == MissionHookWhen.TOOL_BEFORE || it.whenKind == MissionHookWhen.TOOL_AFTER }
+            .joinToString("\n") { hook ->
+                val prefix = if (hook.whenKind == MissionHookWhen.TOOL_BEFORE) "前" else "后"
+                if (hook.tool.isBlank()) "$prefix: ${hook.command}" else "$prefix: ${hook.tool} | ${hook.command}"
+            }
 
     /** 全部 hook 共用一个失败动作（UI 只有一个开关）；以第一条为准，没有则 BLOCK。 */
     fun actionOf(limits: MissionLimits): MissionHookAction =
@@ -163,6 +238,7 @@ object MissionHookSpec {
         out = out.replace("{round}", ctx.round.toString())
         out = out.replace("{run}", ctx.runId.orEmpty())
         out = out.replace("{status}", ctx.status.orEmpty())
+        out = out.replace("{tool}", ctx.tool.orEmpty())
         return out
     }
 

@@ -20,4 +20,11 @@ data class TriggerBinding(
     val trigger: TriggerSpec,
     /** Last update of the owning row; a change forces the time family to reschedule. */
     val updatedAtMs: Long = 0L,
+    /**
+     * The next fire already persisted for this binding (`missions.next_run_at`), when there is
+     * one. The time-cron family uses it as the initial delay instead of recomputing from "now":
+     * a cold start re-registers every work request, and recomputing would restart the countdown
+     * each time the app is opened.
+     */
+    val nextRunAtMs: Long? = null,
 )

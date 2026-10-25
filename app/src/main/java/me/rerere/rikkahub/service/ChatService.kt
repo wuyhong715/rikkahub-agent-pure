@@ -513,6 +513,8 @@ class ChatService(
     private val missionEngine: me.rerere.rikkahub.data.mission.MissionEngine,
     /** One creation path for missions the model starts with `mission_create`. */
     private val missionCreationProvider: () -> me.rerere.rikkahub.service.mission.MissionCreationService,
+    /** 批 I — 任务级工具 hook（PreToolUse 拦截 / PostToolUse 观察）。 */
+    private val missionToolHooks: me.rerere.rikkahub.service.mission.MissionToolHooks,
     /** P5 — per-step run breakpoints, written from the loop's checkpoint hook. */
     private val runCheckpointRepository: me.rerere.rikkahub.data.agentrun.RunCheckpointRepository,
     /** P6 — multi-run orchestration behind the `mission_dispatch` tool. */
@@ -893,6 +895,21 @@ class ChatService(
     fun getGenerationJobStateFlow(conversationId: Uuid): Flow<Job?> {
         val session = sessions[conversationId] ?: return flowOf(null)
         return session.generationJob
+    }
+
+    /**
+     * True while the conversation's current turn is parked on a tool call the human has not
+     * answered.
+     *
+     * Read by the run watcher: an interactive (SEMI/MANUAL) round goes idle *because* of this,
+     * and treating that idle as "the round is over" settled the ledger and journaled
+     * RUN_FINISHED under a generation that was about to continue.
+     */
+    fun hasPendingToolApprovals(conversationId: Uuid): Boolean {
+        val conversation = sessions[conversationId]?.state?.value ?: return false
+        return conversation.messageNodes.any { node ->
+            node.currentMessage.parts.any { part -> part is UIMessagePart.Tool && part.isPending }
+        }
     }
 
     fun getProcessingStatusFlow(conversationId: Uuid): StateFlow<String?> {
@@ -2142,6 +2159,19 @@ class ChatService(
                 },
                 onToolExecuted = { toolName, argsJson, outputJson ->
                     missionEngine.onToolExecuted(conversation.id.toString(), toolName, argsJson, outputJson)
+                    // 批 I — PostToolUse：观察型 hook（lint / 格式化检查）不阻塞工具循环，
+                    // 失败只进 run journal；任务收尾/交接时会读到。
+                    appScope.launch {
+                        runCatching {
+                            missionToolHooks.after(conversation.id.toString(), toolName, outputJson)
+                        }
+                    }
+                },
+                // 批 I — PreToolUse：拦截型 hook。返回理由即不执行该工具。
+                beforeToolGate = { toolName, argsJson ->
+                    runCatching {
+                        missionToolHooks.before(conversation.id.toString(), toolName, argsJson)
+                    }.getOrNull()
                 },
                 // 批 E — a mission round that stops on a tool approval shows WAITING_APPROVAL
                 // instead of RUNNING; onApprovalResolved (handleToolApproval) restores RUNNING.
@@ -2972,7 +3002,7 @@ class ChatService(
             } else {
                 "${ColdMemoryRules.WORKSPACE_PREFIX}/$dir"
             },
-            search = { query, limit -> memoryIndex.search(dir, query, limit) },
+            search = { query, limit -> memoryIndex.search(workspaceId, dir, query, limit) },
         )
         return tools
     }

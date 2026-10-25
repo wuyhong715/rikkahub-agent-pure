@@ -2973,6 +2973,12 @@ HARDLINE 保护仍然生效：rm -rf /、mkfs、shutdown / reboot、向块设备
   <string name="mission_limits_deadline">截止时间（从此刻起多少小时，留空=不限）</string>
   <string name="mission_limits_wrapup">收尾窗口（分钟，0=关闭）</string>
   <string name="mission_limits_acceptance">验收条件（每行一条：命令: / 文件: / 包含: 路径 | 文本 / 不含: 路径 | 文本 / 大小: 路径 | 字节数）</string>
+  <string name="mission_limits_tool_hooks">工具级 hook（每行一条：前: 工具_* | 命令，后: 工具_* | 命令）</string>
+  <string name="mission_menu_fork">分叉任务</string>
+  <string name="mission_fork_title">分叉这个任务</string>
+  <string name="mission_fork_desc">把当前工作区复制一份，另起一个独立任务。原任务不受影响。工作流文档会一起带过去；会话记录、轮次快照和截止时间不会。</string>
+  <string name="mission_fork_instruction">另一条路（可留空）</string>
+  <string name="mission_fork_confirm">分叉并启动</string>
   <string name="mission_limits_confirm">完成后需我确认</string>
   <string name="mission_limits_confirm_desc">模型报告完成后先进入待验收，由你确认交付才会关闭任务。</string>
   <string name="mission_rework_title">打回重做</string>

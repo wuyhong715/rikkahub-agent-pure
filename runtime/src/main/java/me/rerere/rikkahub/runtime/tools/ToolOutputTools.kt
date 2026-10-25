@@ -42,6 +42,15 @@ data class ToolOutputSlice(
  */
 object ToolOutputRules {
 
+    /**
+     * The name of the tool that reads a spilled result back.
+     *
+     * Shared with the generation loop, which must not truncate this tool's own answer: its whole
+     * job is to hand back a page the model asked for, so spilling *it* produces a notice pointing
+     * at yet another file — an endless ladder that never reaches the content.
+     */
+    const val READ_TOOL_NAME: String = "tool_output_read"
+
     const val EXTENSION: String = ".txt"
 
     /** Enough for a provider tool-call id plus the extension; anything longer is not one. */
@@ -122,7 +131,7 @@ fun buildToolOutputReadTool(
     read: suspend (fileName: String, offset: Int, limitChars: Int) -> ToolOutputSlice?,
 ): List<Tool> = listOf(
     Tool(
-        name = "tool_output_read",
+        name = ToolOutputRules.READ_TOOL_NAME,
         description = """
             Read the full text of a tool result that was truncated to fit the context budget.
 

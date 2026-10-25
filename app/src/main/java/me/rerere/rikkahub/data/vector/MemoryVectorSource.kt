@@ -9,10 +9,16 @@ package me.rerere.rikkahub.data.vector
  * identity the model already uses for `memory_read` - the file name - is also the index key, and
  * a hit can be handed straight back to `memory_read` for the full text.
  *
- * The scope is part of the source key (`memory:<dir>`) rather than a filter on the query: two
- * assistants with different knowledge bases must not see each other's notes, and a directory
- * *is* the assistant's scope. The cost is that moving a directory re-embeds it, which is the
- * right trade against "search leaks another assistant's memory".
+ * The scope is part of the source key (`memory:<workspace>:<dir>`) rather than a filter on the
+ * query: two assistants with different knowledge bases must not see each other's notes. The cost
+ * is that moving a directory re-embeds it, which is the right trade against "search leaks another
+ * assistant's memory".
+ *
+ * The workspace id is part of the key because a directory *relative to a workspace* is the real
+ * scope, not the directory name: two workspaces both using the default `memory/` directory used
+ * to collapse into one `memory:memory` source, so opening assistant B wiped assistant A's rows
+ * (each sync treats the other's documents as deleted) and `memory_search` happily returned them.
+ * [WorkspaceLibrarySource] has carried its workspace id all along; this is the same key shape.
  */
 class MemoryVectorSource(
     private val store: VectorIndexStore,
@@ -63,6 +69,8 @@ class MemoryVectorSource(
      * happened at the wrong moment.
      */
     suspend fun sync(
+        /** The workspace the directory lives in - part of the index key, see the class doc. */
+        workspaceId: String,
         dir: String,
         docs: List<Doc>,
         nowMs: Long,
@@ -84,7 +92,13 @@ class MemoryVectorSource(
                 reason = "no embedding model is installed",
             )
 
-        val source = sourceOf(dir)
+        val source = sourceOf(workspaceId, dir)
+        // One-time cleanup for indexes built before the workspace id joined the key: those rows
+        // live under `memory:<dir>`, belong to no identifiable workspace, and can neither be
+        // shown (that interleaving is the leak) nor credited to an owner. Dropping them lets the
+        // next sync rebuild from the real files; the statement is idempotent, so later runs are
+        // a no-op.
+        store.forgetSource(legacySourceOf(dir))
         var indexed = 0
         var unchanged = 0
         var skipped = 0
@@ -142,12 +156,13 @@ class MemoryVectorSource(
      * has to explain it either way.
      */
     suspend fun search(
+        workspaceId: String,
         dir: String,
         query: String,
         limit: Int = VectorIndexStore.DEFAULT_LIMIT,
         relativeFloor: Float = VectorSearchRules.DEFAULT_RELATIVE_FLOOR,
     ): SearchOutcome {
-        val source = sourceOf(dir)
+        val source = sourceOf(workspaceId, dir)
         val model = embeddings.ensureLoaded()
             ?: return SearchOutcome(available = false, hits = emptyList(), indexedDocuments = 0, stale = false)
         val queryVector = embeddings.embedQuery(query)
@@ -164,8 +179,21 @@ class MemoryVectorSource(
     companion object {
         const val KIND = "memory"
 
-        /** The source key for one knowledge base directory. */
-        fun sourceOf(dir: String): String = "$KIND:$dir"
+        /**
+         * The source key for one knowledge base directory of one workspace.
+         *
+         * The workspace id is not decoration: the directory is stored per assistant, so the same
+         * string ("memory") is the default for every assistant in the app. Without the id two
+         * workspaces shared one key, which both leaked notes across assistants and made each
+         * assistant's sync delete the other's rows (they look like deleted documents).
+         */
+        fun sourceOf(workspaceId: String, dir: String): String = "$KIND:$workspaceId:$dir"
+
+        /**
+         * The pre-workspace key shape (`memory:<dir>`), kept only so [sync] can delete the rows
+         * that were written under it. Never used to read or write.
+         */
+        fun legacySourceOf(dir: String): String = "$KIND:$dir"
 
         /**
          * Roughly 1.5 MB of text. Above this a single document costs hundreds of embedding calls

@@ -246,8 +246,13 @@ class ToolVectorIndex(
      * has a different sentence for it.
      */
     private suspend fun awaitRankable(entries: List<ToolCatalogEntry>): Boolean {
-        val model = activeModelId ?: return false
-        if (ToolVectorCacheRules.ready(model, entries, cache)) return true
+        // No model *ready* is not the same as no model *installed*. prewarm() is launched when the
+        // tool surface is built, so on the first turn after a cold start the model is still being
+        // loaded: returning here without waiting silently cost that turn its semantic ranking (and
+        // told the model "no embedding model is installed" if it went and asked). prepare() has the
+        // real answer — it loads the model, and reports false only when there is none.
+        val model = activeModelId
+        if (model != null && ToolVectorCacheRules.ready(model, entries, cache)) return true
         return withTimeoutOrNull(READY_WAIT_MS) { prepare(entries) } == true
     }
 

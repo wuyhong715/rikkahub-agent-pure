@@ -26,6 +26,7 @@ import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.data.runevent.RunEventType
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.service.mission.LaunchSource
+import me.rerere.rikkahub.service.mission.MissionForkService
 import me.rerere.rikkahub.service.mission.MissionContinueComposer
 import me.rerere.rikkahub.service.mission.MissionLauncher
 import me.rerere.rikkahub.service.mission.MissionWorkflowDocs
@@ -45,6 +46,8 @@ class MissionDetailVM(
     private val missionLauncher: MissionLauncher,
     /** 批 F — 轮次快照（回退用）。 */
     private val snapshotStore: MissionSnapshotStore,
+    /** 批 I — 任务分叉。 */
+    private val forkService: MissionForkService,
 ) : ViewModel() {
 
     val mission: StateFlow<MissionEntity?> = missionRepository.observeMission(missionId)
@@ -331,6 +334,41 @@ class MissionDetailVM(
             missionRepository.updateExecutionState(missionId, MissionExecutionState.IDLE)
             runCatching { chatService.stopGeneration(convId) }
         }
+    }
+
+    /**
+     * 批 I — 分叉：把当前产物复制到一个新工作区，另起一个任务走另一条路。
+     *
+     * 结果用 [forkOutcome] 暴露给页面（消息 + 新任务 id），页面负责提示；这里不导航，
+     * 免得 VM 依赖导航栈。
+     */
+    val forkOutcome = MutableStateFlow<ForkOutcome?>(null)
+
+    data class ForkOutcome(val missionId: String, val message: String)
+
+    fun fork(instruction: String) {
+        viewModelScope.launch {
+            val outcome = runCatching { forkService.fork(missionId, instruction) }
+                .getOrElse { error ->
+                    forkOutcome.value = ForkOutcome(
+                        missionId = "",
+                        message = "分叉失败：${error.message ?: "未知原因"}",
+                    )
+                    return@launch
+                }
+            forkOutcome.value = ForkOutcome(
+                missionId = outcome.missionId,
+                message = if (outcome.started) {
+                    "已分叉，新任务已启动（${outcome.fileCount} 个文件）"
+                } else {
+                    "已分叉为新任务，但第一轮没起来：${outcome.launchError ?: "请手动启动"}"
+                },
+            )
+        }
+    }
+
+    fun clearForkOutcome() {
+        forkOutcome.value = null
     }
 
     /** First / manual launch of the mission (wish-style Create source). */

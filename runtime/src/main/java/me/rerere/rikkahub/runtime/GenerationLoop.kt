@@ -50,6 +50,7 @@ import me.rerere.rikkahub.runtime.tools.ContentRouter
 import me.rerere.rikkahub.runtime.tools.ConversationInjections
 import me.rerere.rikkahub.runtime.tools.MEMORY_TOOL_NAME
 import me.rerere.rikkahub.runtime.tools.ToolExecutionRetryPolicy
+import me.rerere.rikkahub.runtime.tools.ToolOutputRules
 import me.rerere.rikkahub.runtime.tools.ToolResultBudget
 import me.rerere.rikkahub.runtime.tools.buildMemoryTools
 import me.rerere.rikkahub.runtime.tools.buildTruncationNotice
@@ -474,6 +475,10 @@ class GenerationLoop(
         // Fired once per tool right after its result lands in `executedTools`. ChatService
         // routes this into the MissionEngine so workbench missions can log artifacts.
         onToolExecuted: (suspend (toolName: String, argsJson: String, outputJson: String) -> Unit)? = null,
+        // 批 I — PreToolUse 闸门：返回非 null 表示拦截这次调用（内容是给模型看的理由）。
+        // 只在任务会话上由 ChatService 接线；null（默认）= 不拦截，行为与之前一致。
+        // 放在真正执行之前、审批之后：用户点过「允许」也不代表任务的策略允许。
+        beforeToolGate: (suspend (toolName: String, argsJson: String) -> String?)? = null,
         // 批 E — fired once when this turn stops because at least one tool call needs the
         // user's approval. ChatService routes it into the MissionEngine so a mission waiting
         // on an approval shows WAITING_APPROVAL instead of pretending to still be running.
@@ -920,6 +925,31 @@ class GenerationLoop(
                         // sees a structured refusal and can pivot. Sitting here rather than in
                         // the approval lookup is deliberate: it also covers the resume path,
                         // where tools arrive already Approved.
+                        val toolGateReason = beforeToolGate?.let { gate ->
+                            runCatching { gate(tool.toolName, tool.input) }.getOrNull()
+                        }
+                        if (toolGateReason != null) {
+                            Log.w(TAG, "generateText: tool gate blocked ${tool.toolName}: $toolGateReason")
+                            executedTools += tool.copy(
+                                output = listOf(
+                                    UIMessagePart.Text(
+                                        json.encodeToString(buildJsonObject {
+                                            put("error", JsonPrimitive("blocked_by_tool_hook"))
+                                            put(
+                                                "detail",
+                                                JsonPrimitive(
+                                                    "$toolGateReason\n" +
+                                                        "This call was blocked by the mission's PreToolUse hook. " +
+                                                        "Do not retry the same call; adjust the approach or report blocked."
+                                                )
+                                            )
+                                        })
+                                    )
+                                )
+                            )
+                            return@forEach
+                        }
+
                         val headlessRefusal = host.headlessRefusal(tool.toolName, conversationId)
                         if (headlessRefusal != null) {
                             Log.w(TAG, "generateText: ${tool.toolName} refused — headless conversation has no approval channel")
@@ -1754,6 +1784,12 @@ class GenerationLoop(
         val textParts = output.filterIsInstance<UIMessagePart.Text>()
         val nonTextParts = output.filter { it !is UIMessagePart.Text }
         if (textParts.isEmpty()) return output
+        // The reader of a spilled result is exempt from the budget that spilled it. Its answer is
+        // already a bounded page (ToolOutputRules.MAX_SLICE_CHARS) and it exists precisely because
+        // the model could not see the content otherwise: truncating it hands back a notice pointing
+        // at a *new* file, that notice gets truncated the same way, and the model loops forever
+        // without ever reading a byte of what it asked for.
+        if (toolName == ToolOutputRules.READ_TOOL_NAME) return output
         val totalChars = textParts.sumOf { it.text.length }
         val fullText = textParts.joinToString("\n") { it.text }
 
