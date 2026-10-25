@@ -599,6 +599,17 @@ class RouteActivity : ComponentActivity() {
                                 me.rerere.rikkahub.ui.pages.setting.shizuku.SettingShizukuPage()
                             }
 
+                            entry<Screen.Instances> {
+                                me.rerere.rikkahub.ui.pages.setting.instances.InstancesPage()
+                            }
+
+                            entry<Screen.InstanceDetail> { key ->
+                                me.rerere.rikkahub.ui.pages.setting.instances.InstanceDetailPage(
+                                    kindName = key.kind,
+                                    key = key.key,
+                                )
+                            }
+
                             entry<Screen.ScheduledJobDetail> { key ->
                                 me.rerere.rikkahub.ui.pages.setting.scheduledjobs.ScheduledJobDetailScreen(jobId = key.id)
                             }
@@ -901,6 +912,17 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object SettingShizuku : Screen
+
+    /**
+     * 运行实例（App 宿主 / Shizuku / 工作区 / SSH / Termux 的统一入口）。
+     *
+     * 取代了三处旧入口：权限里的 Shizuku 与 Termux、连接里的 SSH、扩展里的工作区。
+     */
+    @Serializable
+    data object Instances : Screen
+
+    @Serializable
+    data class InstanceDetail(val kind: String, val key: String) : Screen
 
     @Serializable
     data class ScheduledJobDetail(val id: String) : Screen

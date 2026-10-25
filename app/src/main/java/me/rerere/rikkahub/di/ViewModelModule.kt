@@ -29,6 +29,7 @@ import me.rerere.rikkahub.ui.pages.setting.locallm.SettingLocalLlmViewModel
 import me.rerere.rikkahub.ui.pages.share.handler.ShareHandlerVM
 import me.rerere.rikkahub.ui.pages.translator.TranslatorVM
 import me.rerere.rikkahub.ui.pages.setting.doctor.DoctorViewModel
+import me.rerere.rikkahub.ui.pages.setting.instances.InstancesVM
 import me.rerere.rikkahub.ui.pages.setting.scheduledjobs.ScheduledJobsViewModel
 import me.rerere.rikkahub.ui.pages.workbench.MissionDetailVM
 import me.rerere.rikkahub.ui.pages.workbench.MissionWorkflowsVM
@@ -124,6 +125,8 @@ val viewModelModule = module {
     viewModelOf(::DoctorViewModel)
     viewModelOf(::SettingBrowserViewModel)
     viewModelOf(::SettingTermuxViewModel)
+    // 运行实例页（App 宿主 / Shizuku / 工作区 / SSH / Termux 的统一入口）
+    viewModelOf(::InstancesVM)
     // P2-32 ssh hosts page
     viewModelOf(::SettingSshViewModel)
 

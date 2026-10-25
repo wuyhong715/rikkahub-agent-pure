@@ -3414,4 +3414,26 @@ HARDLINE protections still apply: rm -rf /, mkfs, shutdown / reboot, dd to block
   <string name="mission_trigger_every_day">every day</string>
   <string name="mission_trigger_next_run">Next run: %1$s</string>
   <string name="mission_trigger_paused">Paused</string>
+
+  <!-- Runtime instances: the single hub for app host / Shizuku / workspace / SSH / Termux -->
+  <string name="setting_page_group_instances">Runtime</string>
+  <string name="setting_page_instances">Runtime instances</string>
+  <string name="setting_page_instances_desc">Where commands, files and UI actions actually run.</string>
+  <string name="instances_page_title">Runtime instances</string>
+  <string name="instances_action_check_all">Check all</string>
+  <string name="instances_action_recheck">Check again</string>
+  <string name="instances_section_manage">Manage</string>
+  <string name="instances_section_actions">Fix</string>
+  <string name="instances_section_tools">Tools this instance backs</string>
+  <string name="instances_manage_ssh">SSH hosts</string>
+  <string name="instances_manage_ssh_desc">Add, edit or remove saved hosts and their credentials.</string>
+  <string name="instances_manage_workspaces">Workspaces</string>
+  <string name="instances_manage_workspaces_desc">Create, rename, install or delete Linux workspaces.</string>
+  <string name="instances_state_ready">Ready</string>
+  <string name="instances_state_needs_setup">Needs setup</string>
+  <string name="instances_state_unavailable">Not ready</string>
+  <string name="instances_open_settings">Open settings for this instance</string>
+  <string name="instances_probe_never">Never checked</string>
+  <string name="instances_last_checked">Checked %1$s</string>
+  <string name="instances_missing">This instance no longer exists. It may have been deleted in another screen.</string>
 </resources>

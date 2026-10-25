@@ -47,8 +47,6 @@ import me.rerere.hugeicons.stroke.Book01
 import me.rerere.hugeicons.stroke.Bookshelf01
 import me.rerere.hugeicons.stroke.Brain02
 import me.rerere.hugeicons.stroke.Clapping01
-import me.rerere.hugeicons.stroke.ComputerTerminal01
-import me.rerere.hugeicons.stroke.Console
 import me.rerere.hugeicons.stroke.Cpu
 import me.rerere.hugeicons.stroke.CursorPointer01
 import me.rerere.hugeicons.stroke.Database02
@@ -58,7 +56,6 @@ import me.rerere.hugeicons.stroke.GlobalSearch
 import me.rerere.hugeicons.stroke.ImageUpload
 import me.rerere.hugeicons.stroke.InLove
 import me.rerere.hugeicons.stroke.Internet
-import me.rerere.hugeicons.stroke.Link01
 import me.rerere.hugeicons.stroke.LookTop
 import me.rerere.hugeicons.stroke.McpServer
 import me.rerere.hugeicons.stroke.Megaphone01
@@ -302,7 +299,25 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                 }
             }
 
-            // 4. Device & permissions — the Android grants the automation rides on.
+            // 4. Runtime instances — where commands, files and UI actions actually run.
+            //
+            // 这一组是三处旧入口的合并（权限里的 Shizuku / Termux、连接里的 SSH、扩展里的工作区）：
+            // 同一个问题"命令跑在哪"以前要记三条路径。后端细节页仍在，只是必须从实例行进来。
+            item("runtimeInstances") {
+                CardGroup(
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                    title = { Text(stringResource(R.string.setting_page_group_instances)) },
+                ) {
+                    item(
+                        onClick = { navController.navigate(Screen.Instances) },
+                        leadingContent = { Icon(HugeIcons.Cpu, null) },
+                        supportingContent = { Text(stringResource(R.string.setting_page_instances_desc)) },
+                        headlineContent = { Text(stringResource(R.string.setting_page_instances)) },
+                    )
+                }
+            }
+
+            // 5. Device & permissions — the Android grants the automation rides on.
             item("deviceSettings") {
                 CardGroup(
                     modifier = Modifier.padding(horizontal = 8.dp),
@@ -332,33 +347,16 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         supportingContent = { Text(stringResource(R.string.setting_page_permissions_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_permissions)) },
                     )
-                    item(
-                        onClick = { navController.navigate(Screen.SettingShizuku) },
-                        leadingContent = { Icon(HugeIcons.Console, null) },
-                        supportingContent = { Text(stringResource(R.string.setting_page_shizuku_desc)) },
-                        headlineContent = { Text(stringResource(R.string.setting_page_shizuku)) },
-                    )
-                    item(
-                        onClick = { navController.navigate(Screen.SettingTermux) },
-                        leadingContent = { Icon(HugeIcons.ComputerTerminal01, null) },
-                        supportingContent = { Text(stringResource(R.string.setting_page_termux_desc)) },
-                        headlineContent = { Text(stringResource(R.string.setting_page_termux)) },
-                    )
                 }
             }
 
-            // 5. Connections — everything that reaches another machine.
+            // 6. Connections — everything that reaches another machine.
+            // (SSH 主机不在这里：它是运行实例的一种，入口在上一组。)
             item("connectionSettings") {
                 CardGroup(
                     modifier = Modifier.padding(horizontal = 8.dp),
                     title = { Text(stringResource(R.string.setting_page_group_connections)) },
                 ) {
-                    item(
-                        onClick = { navController.navigate(Screen.SettingSsh) },
-                        leadingContent = { Icon(HugeIcons.Link01, null) },
-                        supportingContent = { Text(stringResource(R.string.setting_page_ssh_desc)) },
-                        headlineContent = { Text(stringResource(R.string.setting_page_ssh)) },
-                    )
                     item(
                         onClick = { navController.navigate(Screen.SettingWeb) },
                         leadingContent = { Icon(HugeIcons.ServerStack01, null) },
@@ -380,7 +378,7 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                 }
             }
 
-            // 6. Data.
+            // 7. Data.
             item("dataSettings") {
                 val storageState by produceState(-1 to 0L) {
                     value = filesManager.countChatFiles()
@@ -416,7 +414,7 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                 }
             }
 
-            // 7. About & diagnostics.
+            // 8. About & diagnostics.
             item("aboutSettings") {
                 val context = LocalContext.current
                 val shareText = stringResource(R.string.setting_page_share_text)

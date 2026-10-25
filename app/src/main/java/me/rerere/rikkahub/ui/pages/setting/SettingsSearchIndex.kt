@@ -145,16 +145,31 @@ fun settingsSearchIndex(developerMode: Boolean): List<SettingsSearchEntry> {
             groupRes = R.string.setting_page_group_device,
             route = Screen.SettingPermissions,
         ),
+        // Runtime instances — the single hub for all five backends. The per-backend pages
+        // keep their own entries (a search for "termux" should land on Termux), but their
+        // group label now points here, because that is where the hub row lives.
+        SettingsSearchEntry(
+            titleRes = R.string.setting_page_instances,
+            descriptionRes = R.string.setting_page_instances_desc,
+            groupRes = R.string.setting_page_group_instances,
+            route = Screen.Instances,
+            altTitles = listOf(
+                R.string.setting_page_shizuku,
+                R.string.setting_page_termux,
+                R.string.setting_page_ssh,
+                R.string.extensions_page_workspace,
+            ),
+        ),
         SettingsSearchEntry(
             titleRes = R.string.setting_page_shizuku,
             descriptionRes = R.string.setting_page_shizuku_desc,
-            groupRes = R.string.setting_page_group_device,
+            groupRes = R.string.setting_page_group_instances,
             route = Screen.SettingShizuku,
         ),
         SettingsSearchEntry(
             titleRes = R.string.setting_page_termux,
             descriptionRes = R.string.setting_page_termux_desc,
-            groupRes = R.string.setting_page_group_device,
+            groupRes = R.string.setting_page_group_instances,
             route = Screen.SettingTermux,
         ),
 
@@ -162,7 +177,7 @@ fun settingsSearchIndex(developerMode: Boolean): List<SettingsSearchEntry> {
         SettingsSearchEntry(
             titleRes = R.string.setting_page_ssh,
             descriptionRes = R.string.setting_page_ssh_desc,
-            groupRes = R.string.setting_page_group_connections,
+            groupRes = R.string.setting_page_group_instances,
             route = Screen.SettingSsh,
         ),
         SettingsSearchEntry(
