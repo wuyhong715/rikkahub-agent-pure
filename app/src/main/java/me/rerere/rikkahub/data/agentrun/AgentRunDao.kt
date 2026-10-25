@@ -51,6 +51,21 @@ interface AgentRunDao {
     @Query("SELECT * FROM agent_runs ORDER BY updated_at_ms DESC LIMIT :limit")
     suspend fun getRecent(limit: Int): List<AgentRun>
 
+    /**
+     * Refreshes the liveness stamp of an in-flight run.
+     *
+     * `getStranded(cutoff)` decides "this process died" from `updated_at_ms`, and nothing wrote
+     * that column after `open()`. A round legitimately longer than the 30-minute threshold
+     * (round timeouts go up to 999 minutes) therefore looked dead to the watchdog — which runs
+     * EVERY 15 MINUTES INSIDE THE SAME PROCESS and would resume it underneath itself.
+     * Terminal rows are never touched.
+     */
+    @Query(
+        "UPDATE agent_runs SET updated_at_ms = :nowMs WHERE id = :id " +
+            "AND status IN ('queued', 'awaiting_approval', 'running')"
+    )
+    suspend fun touch(id: String, nowMs: Long): Int
+
     @Query(
         "SELECT * FROM agent_runs WHERE kind = :kind AND domain_id = :domainId " +
             "ORDER BY updated_at_ms DESC LIMIT :limit"

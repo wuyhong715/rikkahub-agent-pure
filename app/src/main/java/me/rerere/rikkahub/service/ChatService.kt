@@ -1768,15 +1768,23 @@ class ChatService(
             )
         }
         // P6 — parallel child runs (inert unless the model fans work out).
-        addAll(
-            createMissionDispatchTools(
-                orchestrator = runOrchestrator,
-                defaultAssistantId = surfaceAssistant.id,
-                conversationId = conversationId,
-                missionIdProvider = { runCatching { missionEngine.missionIdFor(conversationId.toString()) }.getOrNull() },
-                definitions = localTools.expertDefinitionsBlocking(),
+        // Registered only on a user-facing conversation. This used to be unconditional — headless
+        // mission rounds and every child they spawn (`headless = true`) got it too, with no
+        // approval, no depth cap and no budget: an unapproved fork bomb that also bypassed the
+        // sub-agent surface. A frozen surface means we are already inside a delegated child.
+        if (!HeadlessConversations.isHeadless(conversationId) &&
+            me.rerere.rikkahub.subagent.SubAgentSurface.frozenFor(conversationId) == null
+        ) {
+            addAll(
+                createMissionDispatchTools(
+                    orchestrator = runOrchestrator,
+                    defaultAssistantId = surfaceAssistant.id,
+                    conversationId = conversationId,
+                    missionIdProvider = { runCatching { missionEngine.missionIdFor(conversationId.toString()) }.getOrNull() },
+                    definitions = localTools.expertDefinitionsBlocking(),
+                )
             )
-        )
+        }
         // 批 A — mission_report: the task-mode signal tool. Attached only inside a mission
         // execution session; inert everywhere else, mirroring mission_dispatch's registration
         // shape so the regenerate path sees the same surface the first pass had. The report
@@ -2315,15 +2323,23 @@ class ChatService(
                 }
             )
         }
-        addAll(
-            createMissionDispatchTools(
-                orchestrator = runOrchestrator,
-                defaultAssistantId = surfaceAssistant.id,
-                conversationId = conversationId,
-                missionIdProvider = { runCatching { missionEngine.missionIdFor(conversationId.toString()) }.getOrNull() },
-                definitions = localTools.expertDefinitionsBlocking(),
+        // Registered only on a user-facing conversation. This used to be unconditional — headless
+        // mission rounds and every child they spawn (`headless = true`) got it too, with no
+        // approval, no depth cap and no budget: an unapproved fork bomb that also bypassed the
+        // sub-agent surface. A frozen surface means we are already inside a delegated child.
+        if (!HeadlessConversations.isHeadless(conversationId) &&
+            me.rerere.rikkahub.subagent.SubAgentSurface.frozenFor(conversationId) == null
+        ) {
+            addAll(
+                createMissionDispatchTools(
+                    orchestrator = runOrchestrator,
+                    defaultAssistantId = surfaceAssistant.id,
+                    conversationId = conversationId,
+                    missionIdProvider = { runCatching { missionEngine.missionIdFor(conversationId.toString()) }.getOrNull() },
+                    definitions = localTools.expertDefinitionsBlocking(),
+                )
             )
-        )
+        }
         // 批 A — mission_report, mirroring the regenerate path above so both build paths
         // expose the same surface. Inert outside mission execution sessions.
         // Resolved once per turn; null on an ordinary chat, which is what keeps the signal

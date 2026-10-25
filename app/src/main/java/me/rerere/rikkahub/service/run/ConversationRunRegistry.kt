@@ -32,6 +32,15 @@ object ConversationRunRegistry {
 
     fun runIdFor(conversationId: Uuid): String? = bindings[conversationId]?.runId
 
+    /**
+     * Every run this process is currently driving.
+     *
+     * The boot-recovery sweep needs it: it decides "the process that owned this run died" from a
+     * timestamp, but the sweep also runs *inside the live process* (the 15-minute watchdog), where
+     * a merely slow run looks identical to a dead one.
+     */
+    fun activeRunIds(): Set<String> = bindings.values.mapTo(HashSet()) { it.runId }
+
     fun kindFor(conversationId: Uuid): String? = bindings[conversationId]?.kind
 
     /** Checkpoint id for a conversation: the owning run, or the synthetic chat scope. */

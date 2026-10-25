@@ -74,6 +74,15 @@ class AgentRunRepository(private val dao: AgentRunDao) {
      * Move a row to a non-terminal status (e.g. `running`, `awaiting_approval`). Read-
      * modify-write under the lock. No-ops if the row is unknown or already terminal.
      */
+    /**
+     * Best-effort liveness stamp for a run that is still generating (see [AgentRunDao.touch]).
+     * Never throws, never flips a status: a missed heartbeat only means the watchdog waits one
+     * more cycle.
+     */
+    suspend fun heartbeat(id: String) {
+        runCatching { dao.touch(id, System.currentTimeMillis()) }
+    }
+
     suspend fun setStatus(id: String, status: AgentRunStatus, lastError: String? = null) {
         runCatching {
             writeMutex.withLock {

@@ -173,13 +173,24 @@ object HardlineCommandGuard {
                 checkCommand(input["command"]?.jsonPrimitive?.contentOrNull)
             toolName == "shizuku_exec" ->
                 checkCommand(input["command"]?.jsonPrimitive?.contentOrNull)
+            // root_exec runs the command as UID 0 through `su -c`, and the workspace shell tools
+            // run it in the proot container. They were the only shell surfaces with NO hardline
+            // arm at all, so with YOLO on (or after one mistaken approval) `rm -rf /`, `mkfs`,
+            // `dd of=/dev/mmcblk0` or `reboot` went straight through at root.
+            toolName == "root_exec" ||
+                toolName == "workspace_shell" ||
+                toolName == "workspace_run_background" ->
+                checkCommand(input["command"]?.jsonPrimitive?.contentOrNull)
             // Sub-agent dispatch — the spawned LLM gets the parent's full tool surface
             // headlessly, so a `task` / `prompt` containing a literal hardline-blocked
             // command (e.g. `rm -rf /`) shouldn't be authorised even if the parent
             // workflow_create approval was granted. Walk all string args.
             toolName == "subagent_dispatch" ||
                 toolName == "subagent_send" ||
-                toolName == "subagent_fanout" -> walkAndCheck(input)
+                toolName == "subagent_fanout" ||
+                // Same reasoning: these fan out into headless children that inherit the surface.
+                // mission_dispatch was simply missing from this list.
+                toolName == "mission_dispatch" -> walkAndCheck(input)
             // MCP-relayed tools: we don't know which server or what arg shape carries shell
             // content, so we recursively scan every string value in the input. False
             // positives are fine — an MCP tool whose legitimate-purpose arg happens to

@@ -22,6 +22,9 @@ import me.rerere.rikkahub.service.run.RunOrchestrator
 import me.rerere.rikkahub.service.run.RunRequest
 import kotlin.uuid.Uuid
 
+/** Hard ceiling on one call, matching what the description advertises. */
+private const val MAX_TASKS = 6
+
 /**
  * P6 — `mission_dispatch`: split the caller's work into parallel child runs.
  *
@@ -59,8 +62,7 @@ fun createMissionDispatchTools(
                     N modules, research M questions, generate K variants). Do NOT use it for steps
                     that must happen in order — call tools sequentially for those.
 
-                    Every child inherits this conversation's assistant unless `assistant_id` or
-                    `agent` says otherwise. The call returns only after all children finish, and
+                    Every child inherits this conversation's assistant unless `agent` says otherwise. The call returns only after all children finish, and
                     each child's final text comes back in the aggregate (truncated); the full text
                     stays in the child's own conversation, reachable via conversation_search/read
                     if you need the remainder.
@@ -90,10 +92,6 @@ fun createMissionDispatchTools(
                                 put("title", buildJsonObject {
                                     put("type", "string")
                                     put("description", "Short label for the run (shown on the timeline).")
-                                })
-                                put("assistant_id", buildJsonObject {
-                                    put("type", "string")
-                                    put("description", "Optional assistant uuid; defaults to this conversation's.")
                                 })
                                 if (enabledExpertsOf(definitions).isNotEmpty()) {
                                     put("agent", buildJsonObject {
@@ -127,15 +125,19 @@ fun createMissionDispatchTools(
             val params = args.jsonObject
             val tasks = params["tasks"]?.jsonArray ?: error("tasks is required")
             require(tasks.isNotEmpty()) { "tasks must not be empty" }
+            // The schema advertises 1-6 and nothing enforced it: a model could ask for fifty
+            // children and get fifty headless generations.
+            require(tasks.size <= MAX_TASKS) { "at most $MAX_TASKS tasks per call (got ${tasks.size})" }
 
             val missionId = runCatching { missionIdProvider() }.getOrNull()
             val requests = tasks.map { element ->
                 val task = element.jsonObject
                 val prompt = task["prompt"]?.jsonPrimitive?.contentOrNull
                     ?: error("each task needs a prompt")
-                val assistantId = task["assistant_id"]?.jsonPrimitive?.contentOrNull
-                    ?.let { raw -> runCatching { Uuid.parse(raw) }.getOrNull() }
-                    ?: defaultAssistantId
+                // Deliberately NOT model-controllable any more. `assistant_id` let the model run
+                // children as ANY assistant on the device — its workspace, its memories, its
+                // granted MCP servers — a privilege escalation dressed as a parameter.
+                val assistantId = defaultAssistantId
                 // P6 — an expert, when named, supplies this child's model and prompt. Resolved
                 // against the SAME enabled roster the description advertises, and a name that
                 // matches nothing fails loudly instead of quietly running on the parent's

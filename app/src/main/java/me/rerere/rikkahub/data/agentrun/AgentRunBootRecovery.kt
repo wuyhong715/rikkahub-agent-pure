@@ -39,6 +39,14 @@ class AgentRunBootRecovery(
      * and must NOT be flipped to process_lost). Default: never resume — the pre-P5 sweep.
      */
     private val resume: suspend (AgentRun) -> Boolean = { false },
+    /**
+     * Runs that are provably alive in THIS process (bound in [ConversationRunRegistry]).
+     *
+     * The sweep runs both at startup (nothing is live, the default is right) and from the
+     * 15-minute watchdog inside a live process — where flipping a slow-but-running row to
+     * `process_lost` made the mission supervisor start a second round in the same conversation.
+     */
+    private val liveRunIds: () -> Set<String> = { emptySet() },
 ) {
 
     /** Convenience constructor for production wiring — posts a real Android notification. */
@@ -59,7 +67,8 @@ class AgentRunBootRecovery(
     suspend fun runRecovery(): Int {
         return runCatching {
             val cutoff = System.currentTimeMillis() - AgentRunDefaults.STRANDED_THRESHOLD_MS
-            val stranded = repository.getStranded(cutoff)
+            val live = runCatching { liveRunIds() }.getOrDefault(emptySet())
+            val stranded = repository.getStranded(cutoff).filterNot { it.id in live }
             if (stranded.isEmpty()) {
                 logSafe { Log.i(TAG, "runRecovery: no stranded runs") }
                 return@runCatching 0
@@ -86,7 +95,9 @@ class AgentRunBootRecovery(
                 )
             }
             if (flipped > 0) {
-                runCatching { notifyStranded(stranded) }
+                // `lost`, not `stranded`: the resumed ones were just put back to work and telling
+                // the user "N runs were lost" about them is a lie.
+                runCatching { notifyStranded(lost) }
                     .onFailure { logSafe { Log.w(TAG, "notifyStranded failed", it) } }
             }
             flipped

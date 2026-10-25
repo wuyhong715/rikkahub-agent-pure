@@ -42,9 +42,14 @@ class BackupManager(
         try {
             val settings = settingsStore.settingsFlowRaw.first()
             ZipOutputStream(FileOutputStream(archive)).use { zip ->
-                zip.putNextEntry(ZipEntry("settings.json"))
-                zip.write(json.encodeToString(settings).toByteArray(Charsets.UTF_8))
-                zip.closeEntry()
+                // Only when the caller asked for configuration. Writing it unconditionally meant a
+                // "restore just the workspaces" backup still carried — and later overwrote — every
+                // API key and assistant the user had deliberately kept.
+                if (BackupItem.CONFIG in selected) {
+                    zip.putNextEntry(ZipEntry("settings.json"))
+                    zip.write(json.encodeToString(settings).toByteArray(Charsets.UTF_8))
+                    zip.closeEntry()
+                }
                 if (BackupItem.DATABASE in selected) {
                     val snapshot = File(staging, SQLiteConfiguration.DATABASE_NAME)
                     DatabaseBackup.createSnapshot(database.openHelper.writableDatabase, snapshot)
@@ -139,7 +144,12 @@ class BackupManager(
                             currentCoroutineContext().ensureActive()
                             if (entry.isDirectory) continue
                             val target = when (entry.name) {
-                                "settings.json" -> File(staging, "settings.json")
+                                // Ignored unless the restore asked for configuration: an old archive
+                                // still contains the file, and honouring it silently replaced the
+                                // current settings (and bypassed the "no selected data" check by
+                                // counting as one restored entry).
+                                "settings.json" ->
+                                    if (BackupItem.CONFIG in selected) File(staging, "settings.json") else null
                                 DatabaseBackup.ARCHIVE_DATABASE ->
                                     if (BackupItem.DATABASE in selected) stagedDatabase else null
 

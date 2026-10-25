@@ -58,7 +58,13 @@ class RunResumeCoordinator(
 
         return when (decision) {
             RunResumeDecision.AUTO_RESUME -> {
-                journal(run, conversationId, "resuming", "auto-resume from step ${checkpoint.stepIndex}")
+                journal(
+                    run = run,
+                    conversationId = conversationId,
+                    title = "resuming",
+                    detail = "auto-resume from step ${checkpoint.stepIndex}",
+                    missionId = checkpoint.missionId,
+                )
                 val result = runCatching { runService.resume(run.id) }.getOrNull()
                 val completed = result?.status == RunStatus.COMPLETED
                 if (!completed) {
@@ -67,6 +73,7 @@ class RunResumeCoordinator(
                         conversationId = conversationId,
                         title = "resume failed",
                         detail = result?.failure ?: "resume attempt did not complete",
+                        missionId = checkpoint.missionId,
                     )
                 }
                 completed
@@ -78,6 +85,7 @@ class RunResumeCoordinator(
                     conversationId = conversationId,
                     title = "interrupted",
                     detail = RunResumePolicy.describeBreakpoint(checkpoint),
+                    missionId = checkpoint.missionId,
                 )
                 false
             }
@@ -104,13 +112,21 @@ class RunResumeCoordinator(
         }.getOrNull()
     }
 
-    private suspend fun journal(run: AgentRun, conversationId: Uuid, title: String, detail: String) {
+    private suspend fun journal(
+        run: AgentRun,
+        conversationId: Uuid,
+        title: String,
+        detail: String,
+        missionId: String? = null,
+    ) {
         runCatching {
             runEventRepository.emit(
                 type = RunEventType.NOTE,
                 title = title,
                 detail = detail,
-                missionId = null,
+                // A mission round's recovery has to show up on the mission timeline; hardcoding
+                // null put it everywhere except where the user was looking.
+                missionId = missionId,
                 conversationId = conversationId.toString(),
                 runId = run.id,
             )

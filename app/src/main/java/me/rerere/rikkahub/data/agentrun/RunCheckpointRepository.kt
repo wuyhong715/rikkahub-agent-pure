@@ -18,7 +18,18 @@ private const val TAG = "RunCheckpointRepository"
  * a later step 7 already wrote. Rows therefore only move forward, and a repeated step
  * index still refreshes `updated_at_ms` (the liveness signal boot recovery uses).
  */
-class RunCheckpointRepository(private val dao: RunCheckpointDao) {
+class RunCheckpointRepository(
+    private val dao: RunCheckpointDao,
+    /**
+     * Used only to stamp `agent_runs.updated_at_ms` whenever a checkpoint lands.
+     *
+     * That column is how boot recovery decides a run's process died, and nothing refreshed it
+     * while a run was alive: a round legitimately longer than the 30-minute threshold looked dead
+     * to the watchdog (which also runs inside the live process). Optional so the JVM tests can
+     * build this with a fake checkpoint DAO alone.
+     */
+    private val agentRunDao: AgentRunDao? = null,
+) {
 
     private val writeMutex = Mutex()
 
@@ -41,6 +52,9 @@ class RunCheckpointRepository(private val dao: RunCheckpointDao) {
         var written: RunCheckpointEntity? = null
         runCatching {
             writeMutex.withLock {
+                // A run that checkpoints is provably alive. `touch` filters on in-flight statuses,
+                // so a synthetic `chat:` scope (no row) is a harmless no-op.
+                runCatching { agentRunDao?.touch(runId, now) }
                 val existing = dao.get(runId)
                 if (existing != null && stepIndex < existing.stepIndex) {
                     // Stale write from an older step — refresh liveness only.

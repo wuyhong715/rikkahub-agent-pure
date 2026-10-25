@@ -315,7 +315,7 @@ val dataSourceModule = module {
     // P5 — durable run breakpoints. DAO + single writer; written from the generation loop's
     // per-step hook and read by boot recovery.
     single { get<AppDatabase>().runCheckpointDao() }
-    single { me.rerere.rikkahub.data.agentrun.RunCheckpointRepository(get()) }
+    single { me.rerere.rikkahub.data.agentrun.RunCheckpointRepository(get(), get()) }
     // P6 — parallel child runs. RunService is resolved through a lambda at dispatch time:
     // RunService is backed by ChatService, which takes this orchestrator to build the
     // `mission_dispatch` tool, so holding the instance eagerly would close a DI cycle.
@@ -605,6 +605,9 @@ val dataSourceModule = module {
         // lambda outlives this provider expression and must not depend on the DSL scope.
         val coordinator = get<me.rerere.rikkahub.data.agentrun.RunResumeCoordinator>()
         AgentRunBootRecovery(
+            liveRunIds = {
+                me.rerere.rikkahub.service.run.ConversationRunRegistry.activeRunIds()
+            },
             context = get(),
             repository = get(),
             resume = coordinator::tryResume,

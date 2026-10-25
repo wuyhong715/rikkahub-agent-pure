@@ -15,6 +15,7 @@ import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
+import me.rerere.rikkahub.data.files.FileFolders
 import io.ktor.utils.io.readAvailable
 import me.rerere.rikkahub.data.db.entity.ManagedFileEntity
 import me.rerere.rikkahub.data.files.FilesManager
@@ -125,10 +126,21 @@ fun Route.filesRoutes(
             }
 
             val filesDir = context.filesDir
+            // Only the media folders this route exists for. It used to serve ANY path under
+            // filesDir — which is where `datastore/settings.preferences_pb` (every provider API
+            // key, S3/WebDAV secrets, MCP headers), the Telegram bot token and the whole workspace
+            // tree live. The server binds 0.0.0.0 with JWT off and CORS anyHost by default, so any
+            // device on the LAN (or any page opened in a local browser) could read them.
+            val folder = relativePath.substringBefore('/', missingDelimiterValue = "")
+            if (folder !in SERVED_FOLDERS) {
+                throw NotFoundException("File not found")
+            }
             val file = File(filesDir, relativePath)
 
-            // Ensure the file is within the app's files directory
-            if (!file.canonicalPath.startsWith(filesDir.canonicalPath)) {
+            // Ensure the file is within the app's files directory. The separator matters: without
+            // it "/data/.../files_backup" also "starts with" "/data/.../files".
+            val rootPath = filesDir.canonicalPath + File.separator
+            if (!file.canonicalPath.startsWith(rootPath)) {
                 throw BadRequestException("Invalid file path")
             }
 
@@ -245,4 +257,19 @@ private fun ManagedFileEntity.toUploadedFileDto(filesManager: FilesManager) = Up
     fileName = displayName,
     mime = mimeType,
     size = sizeBytes,
+)
+
+/**
+ * The sub-trees `/api/files/path/{path}` may serve.
+ *
+ * Managed media only. Everything else under `filesDir` stays off the network: `datastore/` holds
+ * the plaintext provider API keys, the S3/WebDAV secrets and the MCP headers, `tool_outputs/` holds
+ * verbatim tool output, and `workspaces/` is the user's sandbox. The route is reachable from the
+ * LAN (0.0.0.0, JWT off, CORS anyHost by default), so "the app's own directory" is not a safe scope.
+ */
+private val SERVED_FOLDERS = setOf(
+    FileFolders.UPLOAD,
+    FileFolders.IMAGES,
+    FileFolders.VIDEOS,
+    FileFolders.FONTS,
 )
