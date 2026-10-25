@@ -41,17 +41,6 @@ import me.rerere.rikkahub.ui.context.LocalToaster
 import org.koin.androidx.compose.koinViewModel
 
 /**
- * Settings -> Termux. Four sections:
- *
- *  1. Status — integration indicators with tap actions (Termux installed, RUN_COMMAND
- *     permission request, Open Termux, verify smoke test).
- *  2. Timeouts — command timeout and verify smoke-test timeout. (The app-wide per-turn
- *     budget and tool-step ceiling moved to Settings -> Models -> Generation limits.)
- *  3. Defaults & limits — working directory, stdout/stderr caps, apt-wrap toggle.
- *  4. Help — expandable setup instructions for allow-external-apps=true.
- */
-@Composable
-/**
  * 设置项本体。抽出来是为了让「运行实例 → Termux」的详情页直接嵌入同一份 UI，
  * 而不是把六个旋钮复制一遍：两个入口渲染的是同一个组合，改一处两处都变。
  *
