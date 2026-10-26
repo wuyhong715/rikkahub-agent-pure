@@ -40,11 +40,16 @@ internal fun nodeToJson(
     windowId: Int,
     traversalIndex: Int,
     rect: Rect,
+    depth: Int,
 ): JsonObject = buildJsonObject {
     put("node_id", "${windowId}:${traversalIndex}")
     put("bounds", buildJsonArray {
         add(rect.left); add(rect.top); add(rect.right); add(rect.bottom)
     })
+    // The filtered tree is flat: without this the model cannot tell which row, card or group a
+    // button belongs to and falls back to guessing from coordinates. depth is the node's depth
+    // in the *unfiltered* tree, so a jump means intermediate containers were filtered out.
+    if (depth > 0) put("depth", depth)
     node.className?.toString()?.takeIf { it.isNotEmpty() }?.let { put("class", it) }
     node.text?.toString()?.takeIf { it.isNotEmpty() }?.let { put("text", it) }
     node.contentDescription?.toString()?.takeIf { it.isNotEmpty() }?.let {
@@ -54,17 +59,26 @@ internal fun nodeToJson(
     if (node.isClickable) put("clickable", true)
     if (node.isScrollable) put("scrollable", true)
     if (node.isEditable) put("editable", true)
+    // State a click can flip without touching text, structure or bounds. They are in the tree
+    // hash too, so a diff that reports the node as "changed" has something to point at.
+    if (node.isSelected) put("selected", true)
+    if (node.isChecked) put("checked", true)
     if (!node.isEnabled) put("enabled", false)
 }
 
 /**
  * Stable identity for a node across two reads: the same structural parts the screen-state hash
- * uses (class / text / content description / screen bounds). Two nodes with the same signature
- * are indistinguishable to the delta, which is exactly the granularity we want. [rect] must
- * already hold the node's screen bounds.
+ * uses (class / text / content description / selection state / screen bounds). Two nodes with
+ * the same signature are indistinguishable to the delta, which is exactly the granularity we
+ * want. [rect] must already hold the node's screen bounds.
+ *
+ * `isSelected` / `isChecked` are in the signature because they are the one state change that
+ * leaves text, structure and bounds identical: ticking a checkbox, selecting a tab, marking a
+ * row. Without them such a click looks like a no-op and the action envelope retries it.
  */
 internal fun nodeSignature(node: AccessibilityNodeInfo, rect: Rect): String =
     "${node.className}|${node.text}|${node.contentDescription}|" +
+        "${node.isSelected}|${node.isChecked}|" +
         "${rect.left},${rect.top},${rect.right},${rect.bottom}"
 
 internal fun defaultFilter(n: AccessibilityNodeInfo, depth: Int): Boolean {
@@ -108,7 +122,7 @@ fun readWindowTreeTool(
     streamer: InteractiveToolStreamer = InteractiveToolStreamer.NoOp,
 ): Tool = Tool(
     name = "read_window_tree",
-    description = "Snapshot of the active window's a11y node tree. Default filters to visible nodes that are clickable / scrollable / editable / have text or content_description. verbose=true skips the filter (use sparingly). max_nodes caps result (default 300, max 2000). package_name optionally restricts + errors if the foreground app doesn't match. display_id captures the window tree of a virtual display (requires API 33+; pass the display_id returned by virtual_display_create). Every node carries a node_id you can pass directly to click_node / set_text (preferred over by/value or coordinates). The result includes screen_state identifying the current surface (package, shade_open, ime_visible, display size) and tree_hash. Re-reading a screen that did not move answers {unchanged:true} instead of the whole tree again — pass full=true if you really need the nodes. diff=true returns only the nodes that appeared / disappeared since your previous read: much cheaper after an action.",
+    description = "Snapshot of the active window's a11y node tree. Default filters to visible nodes that are clickable / scrollable / editable / have text or content_description. verbose=true skips the filter (use sparingly). max_nodes caps result (default 300, max 2000). package_name optionally restricts + errors if the foreground app doesn't match. display_id captures the window tree of a virtual display (requires API 33+; pass the display_id returned by virtual_display_create). Every node carries a node_id you can pass directly to click_node / set_text (preferred over by/value or coordinates) and a depth: the node's depth in the full tree, where a jump means intermediate containers were filtered out — use it to tell which row, card or group a control belongs to. The result includes screen_state identifying the current surface (package, shade_open, ime_visible, display size) and tree_hash. Re-reading a screen that did not move answers {unchanged:true} instead of the whole tree again — pass full=true if you really need the nodes. diff=true returns only the nodes that appeared / disappeared since your previous read: much cheaper after an action.",
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {
@@ -216,9 +230,9 @@ fun readWindowTreeTool(
                 root = root,
                 filter = if (verbose) ({ _, _ -> true }) else (::defaultFilter),
                 cap = maxNodes,
-                emit = { n, _, idx ->
+                emit = { n, depth, idx ->
                     n.getBoundsInScreen(rect)
-                    nodes.add(nodeToJson(n, root.windowId, idx, rect))
+                    nodes.add(nodeToJson(n, root.windowId, idx, rect, depth))
                     signatures.add(nodeSignature(n, rect))
                 }
             )

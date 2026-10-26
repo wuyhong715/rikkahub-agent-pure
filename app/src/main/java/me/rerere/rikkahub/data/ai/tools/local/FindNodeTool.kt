@@ -4,6 +4,7 @@ import android.graphics.Rect
 import android.view.accessibility.AccessibilityNodeInfo
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.add
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -26,7 +27,11 @@ private const val MATCH_CAP = 50
 /** How many values a miss scans for suggestions before giving up on completeness. */
 private const val SUGGESTION_POOL_CAP = 300
 
-private data class NodeMatch(val node: AccessibilityNodeInfo, val traversalIndex: Int)
+private data class NodeMatch(
+    val node: AccessibilityNodeInfo,
+    val traversalIndex: Int,
+    val depth: Int,
+)
 
 /**
  * Matches nodes via the same traversal (and therefore the same traversalIndex numbering)
@@ -52,7 +57,7 @@ private fun findMatchesUnified(
             }
         },
         cap = MATCH_CAP,
-        emit = { n, _, idx -> out.add(NodeMatch(n, idx)) },
+        emit = { n, depth, idx -> out.add(NodeMatch(n, idx, depth)) },
     )
     return out to truncated
 }
@@ -228,7 +233,7 @@ fun findNodeTool(
                     matches.forEach { m ->
                         val rect = Rect()
                         m.node.getBoundsInScreen(rect)
-                        add(nodeToJson(m.node, root.windowId, m.traversalIndex, rect))
+                        add(nodeToJson(m.node, root.windowId, m.traversalIndex, rect, m.depth))
                     }
                 })
                 if (truncated) put("truncated", true)
@@ -256,9 +261,11 @@ fun clickNodeTool(
     description = """
         Click a node. Preferred selector: node_id from read_window_tree / find_node. Alternative:
         by (text | content_description | view_id_resource_name) + value with optional nth. If the
-        matched node is not clickable, the nearest clickable ancestor is clicked. On stale_node_id
-        the screen changed since your last read: re-run read_window_tree. The result carries an
-        "after" object; check screen_changed to confirm the click did something.
+        matched node is not clickable, the nearest clickable ancestor is clicked. The click is
+        tried as an accessibility action first and retried as a real touch when the view ignores
+        it; `resolved_via` says which one landed: action | gesture | gesture_retry. On
+        stale_node_id the screen changed since your last read: re-run read_window_tree. The result
+        carries an "after" object; check screen_changed to confirm the click did something.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
@@ -314,13 +321,30 @@ fun clickNodeTool(
                 )
             )
         }
+        // Resolved inside the action body, read by the envelope's retry hook: a view that
+        // accepts ACTION_CLICK without doing anything can only be retried as a real touch.
+        var clickTarget: AccessibilityNodeInfo? = null
         val payload = AccessibilityServiceHandle.withService { svc ->
-            withActionEnvelope(svc) { _ ->
+            withActionEnvelope(
+                svc,
+                retryWhenUnchanged = { s, actResult ->
+                    val targetNode = clickTarget
+                    when {
+                        targetNode == null -> null
+                        actResult["success"]?.jsonPrimitive?.booleanOrNull != true -> null
+                        !s.tapNode(targetNode) -> null
+                        else -> buildJsonObject {
+                            put("resolved_via", "gesture_retry")
+                            put("reason", "ACTION_CLICK reported success but the tree did not change")
+                        }
+                    }
+                },
+            ) click@{ _ ->
                 val root = svc.rootInActiveWindow
-                    ?: return@withActionEnvelope buildJsonObject { put("error", "no_active_window") }
+                    ?: return@click buildJsonObject { put("error", "no_active_window") }
                 val pkg = root.packageName?.toString().orEmpty()
                 if (pkgFilter != null && pkgFilter != pkg) {
-                    return@withActionEnvelope buildJsonObject {
+                    return@click buildJsonObject {
                         put("error", "wrong_foreground_app")
                         put("current", pkg)
                     }
@@ -331,7 +355,7 @@ fun clickNodeTool(
                     val (matches, truncated) = findMatchesUnified(svc, root, by!!, value!!)
                     when {
                         matches.isEmpty() -> null to "no_match"
-                        nth >= matches.size -> return@withActionEnvelope buildJsonObject {
+                        nth >= matches.size -> return@click buildJsonObject {
                             put("error", "nth_out_of_range")
                             put("available", matches.size)
                             if (truncated) put("truncated", true)
@@ -347,7 +371,7 @@ fun clickNodeTool(
                         selector = AutomationRecorder.selectorLabel(by, value),
                         ok = false,
                     )
-                    return@withActionEnvelope buildJsonObject {
+                    return@click buildJsonObject {
                         put("error", staleReason ?: "no_match")
                         if (staleReason == "stale_node_id") {
                             put("hint", "the screen changed since read_window_tree; re-run it and use a fresh node_id")
@@ -364,8 +388,19 @@ fun clickNodeTool(
                     }
                 }
                 val clickable = svc.resolveClickable(target)
-                    ?: return@withActionEnvelope buildJsonObject { put("error", "no_clickable_ancestor") }
-                val ok = clickable.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                    ?: return@click buildJsonObject { put("error", "no_clickable_ancestor") }
+                clickTarget = clickable
+                val actionOk = clickable.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                // ACTION_CLICK is refused outright by a fair share of Compose, WebView and
+                // custom-drawn views. Fall back to a real touch immediately. The slower failure —
+                // the view accepts the action and does nothing — is caught by the envelope's
+                // retryWhenUnchanged hook once the UI has settled.
+                val ok = actionOk || svc.tapNode(clickable)
+                val via = when {
+                    actionOk -> "action"
+                    ok -> "gesture"
+                    else -> "none"
+                }
                 AutomationRecorder.recordAction(
                     packageName = pkg,
                     screen = svc.lastWindowClassName,
@@ -381,13 +416,15 @@ fun clickNodeTool(
                 svc.appendLog(
                     ActionLogEntry(
                         type = "click_node",
-                        paramsSummary = (rawNodeId ?: "$by=\"${value?.take(40)}\" nth=$nth") + " -> " + if (ok) "ok" else "fail",
+                        paramsSummary = (rawNodeId ?: "$by=\"${value?.take(40)}\" nth=$nth") +
+                            " -> " + if (ok) via else "fail",
                         success = ok,
                         timestampMs = System.currentTimeMillis(),
                     )
                 )
                 buildJsonObject {
                     put("success", ok)
+                    put("resolved_via", via)
                     put("clicked", buildJsonObject {
                         val rect = android.graphics.Rect()
                         clickable.getBoundsInScreen(rect)

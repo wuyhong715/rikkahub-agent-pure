@@ -4,12 +4,15 @@ import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
 import android.graphics.Bitmap
 import android.graphics.Path
+import android.graphics.PointF
+import android.graphics.Rect
 import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityWindowInfo
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -143,6 +146,91 @@ class RikkaAccessibilityService : AccessibilityService() {
     fun buildSwipePath(sx: Float, sy: Float, ex: Float, ey: Float): Path = Path().apply {
         moveTo(sx, sy)
         lineTo(ex, ey)
+    }
+
+    /**
+     * Taps a single point with a synthetic gesture. Same stroke shape [TapTool] uses, so a
+     * tap issued here behaves exactly like one the model asked for by coordinate.
+     */
+    suspend fun tapAt(x: Float, y: Float): Boolean {
+        val path = buildTapPath(x, y)
+        val gesture = GestureDescription.Builder()
+            .addStroke(GestureDescription.StrokeDescription(path, 0L, 50L))
+            .build()
+        return dispatchGestureAsync(gesture)
+    }
+
+    /**
+     * Taps [node] at a point inside its bounds that no other window covers.
+     *
+     * This is the fallback for views that accept `ACTION_CLICK` and do nothing, and for views
+     * that refuse it outright — a fair share of Compose, WebView and custom-drawn controls only
+     * react to a real touch. Tapping the raw centre is not enough on its own: a floating button,
+     * a bottom sheet or the IME can sit on top of the node while the a11y tree still reports it
+     * as visible, and the touch lands on the overlay instead.
+     *
+     * Returns false only when the node has no usable bounds or the gesture never landed.
+     */
+    suspend fun tapNode(node: AccessibilityNodeInfo): Boolean {
+        val rect = Rect()
+        node.getBoundsInScreen(rect)
+        if (rect.width() <= 0 || rect.height() <= 0) return false
+        val point = clearPointIn(rect, node.windowId) ?: return false
+        return tapAt(point.x, point.y)
+    }
+
+    /**
+     * The first candidate point inside [rect] that no other window covers, or null when every
+     * candidate is covered (the caller should then give up rather than tap blindly).
+     *
+     * Only whole windows are considered — status bar, navigation bar, IME, notification shade,
+     * accessibility overlays and app-drawn floating windows all show up in [getWindows] with
+     * their bounds. Occlusion by a sibling *node* of the same window is not modelled: the a11y
+     * tree gives no z-order, and guessing from traversal order would be worse than the status quo.
+     */
+    fun clearPointIn(rect: Rect, ownWindowId: Int? = null): PointF? {
+        val occluders = occludingWindowBounds(ownWindowId)
+        for (point in candidatePoints(rect)) {
+            val covered = occluders.any {
+                point.x >= it.left && point.x < it.right &&
+                    point.y >= it.top && point.y < it.bottom
+            }
+            if (!covered) return point
+        }
+        return null
+    }
+
+    /** Bounds of every non-application window, i.e. the ones drawn on top of app content. */
+    private fun occludingWindowBounds(ownWindowId: Int?): List<Rect> {
+        val out = mutableListOf<Rect>()
+        val all = try { windows } catch (t: Throwable) { null } ?: return out
+        for (w in all) {
+            if (w.type == AccessibilityWindowInfo.TYPE_APPLICATION) continue
+            if (ownWindowId != null && w.id == ownWindowId) continue
+            val r = Rect()
+            w.getBoundsInScreen(r)
+            if (r.width() > 0 && r.height() > 0) out.add(r)
+        }
+        return out
+    }
+
+    /** Centre first, then the quadrants, then the edges — cheapest good answer first. */
+    private fun candidatePoints(rect: Rect): List<PointF> {
+        val w = rect.width().toFloat()
+        val h = rect.height().toFloat()
+        val out = ArrayList<PointF>(9)
+        out.add(PointF(rect.exactCenterX(), rect.exactCenterY()))
+        for (fx in floatArrayOf(0.3f, 0.7f)) {
+            for (fy in floatArrayOf(0.3f, 0.7f)) {
+                out.add(PointF(rect.left + w * fx, rect.top + h * fy))
+            }
+        }
+        for (fx in floatArrayOf(0.15f, 0.85f)) {
+            for (fy in floatArrayOf(0.15f, 0.85f)) {
+                out.add(PointF(rect.left + w * fx, rect.top + h * fy))
+            }
+        }
+        return out
     }
 
     /**

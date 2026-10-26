@@ -227,9 +227,18 @@ internal fun screenStateJson(
  * go quiet, captures after-state and attaches it under "after". Error results ("error"
  * key present) pass through untouched. Never throws; envelope capture failures degrade to
  * screen_changed=null.
+ *
+ * [retryWhenUnchanged] covers the failure mode a return value cannot: some views accept a
+ * synthetic `ACTION_CLICK` and do nothing — a transparent overlay ate the touch, or a Compose /
+ * WebView / custom-drawn control only listens to real gestures. When the action claims success
+ * but the settled tree is byte-identical to the tree before it, the callback gets the action's
+ * result and returns a description of the retry (merged under "fallback") or null to decline.
+ * A non-null return re-settles and re-hashes, so `after.screen_changed` reports the retry's
+ * effect rather than the first attempt's.
  */
 internal suspend fun withActionEnvelope(
     svc: RikkaAccessibilityService,
+    retryWhenUnchanged: (suspend (RikkaAccessibilityService, JsonObject) -> JsonObject?)? = null,
     act: suspend (RikkaAccessibilityService) -> JsonObject,
 ): JsonObject {
     // "before" reuses the previous action's "after" hash when nothing moved in between, so the
@@ -251,27 +260,64 @@ internal suspend fun withActionEnvelope(
         }
     }
     if (result.containsKey("error")) return result
-    val quiet = awaitQuiet(
-        quietMs = SETTLE_QUIET_MS,
-        timeoutMs = SETTLE_TIMEOUT_MS,
-        now = { SystemClock.uptimeMillis() },
-        lastEvent = { svc.lastWindowEventUptime },
-        floor = actionStart,
-        idleMs = SETTLE_IDLE_MS,
-    )
-    // Fetch the settled root once: it feeds both the post-action hash (forced, so a silent change
-    // is still caught) and the screen-state envelope, halving the expensive root fetches.
-    val settleRoot = try { svc.rootInActiveWindow } catch (t: Throwable) { null }
-    val after = try { treeHashCached(svc, force = true, root = settleRoot) } catch (t: Throwable) {
-        Log.w("ScreenState", "after-hash failed: ${t.message}")
-        null
+
+    // Settle + hash, shared by the first attempt and the retry. The settled root feeds both the
+    // post-action hash (forced, so a silent change is still caught) and the screen-state
+    // envelope, halving the expensive root fetches.
+    suspend fun settle(floor: Long): Triple<Boolean, AccessibilityNodeInfo?, Long?> {
+        val quiet = awaitQuiet(
+            quietMs = SETTLE_QUIET_MS,
+            timeoutMs = SETTLE_TIMEOUT_MS,
+            now = { SystemClock.uptimeMillis() },
+            lastEvent = { svc.lastWindowEventUptime },
+            floor = floor,
+            idleMs = SETTLE_IDLE_MS,
+        )
+        val root = try { svc.rootInActiveWindow } catch (t: Throwable) { null }
+        val hash = try {
+            treeHashCached(svc, force = true, root = root)
+        } catch (t: Throwable) {
+            Log.w("ScreenState", "after-hash failed: ${t.message}")
+            null
+        }
+        return Triple(quiet, root, hash)
     }
-    val changed = if (before != null && after != null) before != after else null
+
+    val first = settle(actionStart)
+    var quiet = first.first
+    var settleRoot = first.second
+    var after = first.third
+    var changed = if (before != null && after != null) before != after else null
+
+    var fallback: JsonObject? = null
+    if (changed == false && retryWhenUnchanged != null) {
+        val retryStart = SystemClock.uptimeMillis()
+        fallback = try {
+            retryWhenUnchanged(svc, result)
+        } catch (c: CancellationException) {
+            throw c
+        } catch (t: Throwable) {
+            Log.w("ScreenState", "retryWhenUnchanged threw: ${t.message}", t)
+            null
+        }
+        if (fallback != null) {
+            val retry = settle(retryStart)
+            quiet = retry.first
+            settleRoot = retry.second
+            after = retry.third
+            changed = if (before != null && after != null) before != after else null
+        }
+    }
+
     val state = screenStateJson(
         svc,
         screenChanged = changed,
         settleTimedOut = !quiet,
         root = settleRoot,
     )
-    return JsonObject(result + ("after" to state))
+    return buildJsonObject {
+        result.forEach { (key, value) -> put(key, value) }
+        put("after", state)
+        fallback?.let { put("fallback", it) }
+    }
 }
