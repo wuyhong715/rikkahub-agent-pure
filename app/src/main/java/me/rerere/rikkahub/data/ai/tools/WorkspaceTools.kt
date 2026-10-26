@@ -2,6 +2,7 @@ package me.rerere.rikkahub.data.ai.tools
 
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.add
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.jsonObject
@@ -25,6 +26,8 @@ import java.io.ByteArrayOutputStream
 import me.rerere.rikkahub.data.runtime.InstanceEnvelopes
 import me.rerere.rikkahub.data.runtime.InstanceId
 import me.rerere.rikkahub.data.runtime.InstanceKind
+import me.rerere.rikkahub.data.ai.tools.local.ResultCheck
+import me.rerere.rikkahub.data.ai.tools.local.putChecks
 
 private const val SHELL_TIMEOUT_MAX_SECONDS = 600L
 private const val MAX_READ_FILE_BYTES = 8L * 1024 * 1024
@@ -158,6 +161,8 @@ suspend fun createWorkspaceTools(
         add(createCreateFolderTool(targets, ::needsApproval, workspaceRepository))
         add(createReadFolderTool(targets, ::needsApproval, workspaceRepository))
         add(createShellTool(targets, ::needsApproval, workspaceRepository, shellCwd))
+        add(createVerifyTool(targets, ::needsApproval, workspaceRepository, shellCwd))
+        add(createProjectOverviewTool(targets, workspaceRepository, shellCwd))
         add(createRunBackgroundTool(targets, ::needsApproval, workspaceRepository, shellCwd))
         add(createBackgroundStatusTool(targets, ::needsApproval, workspaceRepository))
         add(createBackgroundKillTool(targets, ::needsApproval, workspaceRepository))
@@ -930,3 +935,354 @@ private fun WorkspaceFileEntry.toJson() = buildJsonObject {
     put("sizeBytes", sizeBytes)
     put("updatedAt", updatedAt)
 }
+
+// ---------------------------------------------------------------------------
+// Composite tools: verification and project orientation
+// ---------------------------------------------------------------------------
+
+/** Manifests that say "this directory is a project, and here is how it is built". */
+private val BUILD_MANIFESTS = listOf(
+    "build.gradle.kts", "build.gradle", "settings.gradle.kts", "settings.gradle",
+    "pom.xml", "package.json", "cargo.toml", "go.mod", "pyproject.toml",
+    "requirements.txt", "setup.py", "cmakelists.txt", "makefile",
+)
+
+/** Which build system a directory uses, from its top-level entries. */
+internal fun detectProjectType(entries: List<WorkspaceFileEntry>): String {
+    val names = entries.map { it.name.lowercase() }.toSet()
+    return when {
+        "build.gradle.kts" in names || "build.gradle" in names ||
+            "settings.gradle.kts" in names || "settings.gradle" in names -> "gradle"
+        "pom.xml" in names -> "maven"
+        "package.json" in names -> "node"
+        "cargo.toml" in names -> "rust"
+        "go.mod" in names -> "go"
+        "pyproject.toml" in names || "requirements.txt" in names || "setup.py" in names -> "python"
+        "cmakelists.txt" in names -> "cmake"
+        "makefile" in names -> "make"
+        else -> "unknown"
+    }
+}
+
+/**
+ * The command that verifies this project, or null when nothing recognisable is present.
+ * Deliberately conservative: a wrong guess wastes a full build cycle, so only manifests the
+ * tool actually knows produce a command.
+ */
+internal fun inferVerificationCommand(entries: List<WorkspaceFileEntry>): String? {
+    val exact = entries.map { it.name }.toSet()
+    val names = exact.map { it.lowercase() }.toSet()
+    return when {
+        "build.gradle.kts" in names || "build.gradle" in names ||
+            "settings.gradle.kts" in names || "settings.gradle" in names ->
+            if ("gradlew" in exact) "./gradlew test --console=plain" else "gradle test --console=plain"
+        "pom.xml" in names -> "mvn -q test"
+        "package.json" in names -> "npm test"
+        "cargo.toml" in names -> "cargo test"
+        "go.mod" in names -> "go test ./..."
+        "pyproject.toml" in names || "pytest.ini" in names -> "python -m pytest -q"
+        "setup.py" in names || "requirements.txt" in names -> "python -m pytest -q"
+        "cmakelists.txt" in names -> "cmake --build build && ctest --test-dir build --output-on-failure"
+        "makefile" in names -> "make test"
+        else -> null
+    }
+}
+
+/** Last [max] characters, with a marker so a truncated tail is not mistaken for the start. */
+internal fun tailOf(text: String, max: Int = 3_000): String =
+    if (text.length <= max) text else "…\n" + text.takeLast(max)
+
+private val FAILURE_LINE = Regex(
+    "(?i)(\\berror\\b|\\bfailed\\b|\\bfailure\\b|exception|fatal|^e:\\s|\\bunresolved\\b)",
+)
+
+/** Lines a model can act on, not the whole transcript. */
+internal fun failureLines(output: String, limit: Int = 12): List<String> =
+    output.lineSequence()
+        .map { it.trim() }
+        .filter { it.isNotEmpty() && FAILURE_LINE.containsMatchIn(it) }
+        .take(limit)
+        .toList()
+
+/**
+ * T-14 — run the project's verification, and say what it proved.
+ *
+ * Editing code and remembering to run the build are two different habits; the second one is
+ * the one that gets skipped. This tool makes "changed" and "checked" a single call: it infers
+ * the command when the model does not name one, keeps the output tail plus the lines that
+ * matter, and reports exit_code as a check instead of leaving the model to interpret a wall
+ * of log.
+ */
+internal fun createVerifyTool(
+    targets: WorkspaceTargets,
+    needsApproval: (String) -> Boolean,
+    workspaceRepository: WorkspaceRepository,
+    defaultCwd: String? = null,
+) = Tool(
+    name = "verify_workspace",
+    description = """
+        Run the workspace project's tests / build and report what the result proves.
+
+        Use it after editing code instead of running workspace_shell by hand: it picks the
+        project's own command when you omit one (gradlew / mvn / npm / cargo / go / pytest /
+        cmake / make), runs it in the given cwd, and returns exit_code, the tail of the output,
+        and the lines that look like failures.
+
+        Read checks: exit_ok=false means the change is not verified — read failure_lines and
+        fix the first one before claiming success. A timed_out result proves nothing either
+        way. If project_unknown, pass command explicitly.
+    """.trimIndent().replace("\n", " "),
+    parameters = {
+        InputSchema.Obj(
+            properties = buildJsonObject {
+                putWorkspaceProperty(targets)
+                put("command", buildJsonObject {
+                    put("type", "string")
+                    put(
+                        "description",
+                        "Verification command. Omit to infer it from the project's manifest.",
+                    )
+                })
+                put("cwd", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Working directory relative to the workspace root (default: the session cwd)")
+                })
+                put("timeout", buildJsonObject {
+                    put("type", "integer")
+                    put("description", "Timeout in seconds (default 120, max 600)")
+                })
+            },
+        )
+    },
+    needsApproval = { needsApproval("workspace_shell") },
+    execute = {
+        val targetId = targets.resolveOrNull(it.jsonObject.string("workspace"))
+        if (targetId == null) {
+            return@Tool listOf(
+                UIMessagePart.Text(
+                    unknownWorkspaceEnvelope(targets, it.jsonObject.string("workspace")).toString()
+                )
+            )
+        }
+        val params = it.jsonObject
+        val cwd = (params.string("cwd") ?: defaultCwd.orEmpty())
+            .removePrefix("/workspace/").removePrefix("/workspace")
+        val timeoutMillis = (params.string("timeout")?.toLongOrNull() ?: 120L)
+            .coerceIn(1L, SHELL_TIMEOUT_MAX_SECONDS) * 1_000L
+
+        val explicit = params.string("command")?.trim()?.takeIf { it.isNotEmpty() }
+        val inferred = explicit == null
+        val command = explicit ?: run {
+            val entries = runCatching {
+                workspaceRepository.listFiles(
+                    id = targetId,
+                    area = me.rerere.workspace.WorkspaceStorageArea.FILES,
+                    path = cwd,
+                    limit = 200,
+                )
+            }.getOrDefault(emptyList())
+            inferVerificationCommand(entries)
+        }
+
+        if (command == null) {
+            return@Tool listOf(
+                UIMessagePart.Text(
+                    buildJsonObject {
+                        put("error", "project_unknown")
+                        put("cwd", cwd)
+                        put(
+                            "recovery",
+                            "No recognisable manifest in this directory. Pass command explicitly " +
+                                "(e.g. ./gradlew test, npm test, pytest -q).",
+                        )
+                    }.toString()
+                )
+            )
+        }
+
+        val result = runCatching {
+            workspaceRepository.executeCommand(targetId, command, cwd, timeoutMillis)
+        }.getOrElse { error ->
+            return@Tool listOf(
+                UIMessagePart.Text(
+                    InstanceEnvelopes.failure(
+                        id = InstanceId(InstanceKind.WORKSPACE, targetId),
+                        error = "workspace_shell_failed",
+                        recovery = error.message
+                            ?: "在工作区详情里点重新检测；仍失败就重装 rootfs（文件区不受影响）。",
+                    ).toString()
+                )
+            )
+        }
+
+        val combined = buildString {
+            append(result.stdout)
+            if (result.stderr.isNotBlank()) {
+                if (isNotEmpty()) append('\n')
+                append(result.stderr)
+            }
+        }
+        val failures = failureLines(combined)
+        val exitOk = result.exitCode == 0
+
+        val payload = buildJsonObject {
+            put("command", command)
+            put("inferred", inferred)
+            if (cwd.isNotBlank()) put("cwd", cwd)
+            put("exit_code", result.exitCode)
+            put("timed_out", result.timedOut)
+            if (result.truncated) put("truncated", true)
+            put("output_tail", tailOf(combined))
+            put("failure_lines", buildJsonArray { failures.forEach { add(it) } })
+            putChecks(
+                listOf(
+                    ResultCheck("command_resolved", true, command),
+                    ResultCheck(
+                        "not_timed_out",
+                        !result.timedOut,
+                        if (result.timedOut) "timed out after ${timeoutMillis / 1000}s" else "completed",
+                    ),
+                    ResultCheck(
+                        "exit_ok",
+                        exitOk,
+                        "exit=${result.exitCode}",
+                    ),
+                    ResultCheck(
+                        "failure_lines_seen",
+                        exitOk || failures.isNotEmpty(),
+                        if (failures.isEmpty()) "no failure-looking lines" else "${failures.size} lines",
+                    ),
+                )
+            )
+            if (!exitOk) {
+                put(
+                    "next",
+                    "Verification failed. Fix the first failure in failure_lines, then run " +
+                        "verify_workspace again before claiming the change works.",
+                )
+            }
+        }
+        listOf(UIMessagePart.Text(payload.toString()))
+    },
+)
+
+/**
+ * T-15 — what this workspace is, in one call.
+ *
+ * The first cheap step of every coding task is the same: list the root, find the manifest,
+ * find the readme, learn the test command. Four round trips that the model sometimes skips
+ * and then guesses at. This returns them together.
+ */
+internal fun createProjectOverviewTool(
+    targets: WorkspaceTargets,
+    workspaceRepository: WorkspaceRepository,
+    defaultCwd: String? = null,
+) = Tool(
+    name = "project_overview",
+    description = """
+        Summarise a workspace directory before working in it: top-level entries, detected
+        project type (gradle / maven / node / rust / go / python / cmake / make), the build and
+        test commands, and the start of the README.
+
+        Use this as the first step of a coding task instead of list + read + guessing. checks
+        say what was found: has_manifest=false means the path is not a project root, and
+        test_command_known=false means verification will need an explicit command.
+    """.trimIndent().replace("\n", " "),
+    parameters = {
+        InputSchema.Obj(
+            properties = buildJsonObject {
+                putWorkspaceProperty(targets)
+                put("path", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Directory relative to the workspace root (default: the session cwd)")
+                })
+            },
+        )
+    },
+    execute = {
+        val targetId = targets.resolveOrNull(it.jsonObject.string("workspace"))
+        if (targetId == null) {
+            return@Tool listOf(
+                UIMessagePart.Text(
+                    unknownWorkspaceEnvelope(targets, it.jsonObject.string("workspace")).toString()
+                )
+            )
+        }
+        val path = (it.jsonObject.string("path") ?: defaultCwd.orEmpty())
+            .removePrefix("/workspace/").removePrefix("/workspace")
+
+        val entries = runCatching {
+            workspaceRepository.listFiles(
+                id = targetId,
+                area = me.rerere.workspace.WorkspaceStorageArea.FILES,
+                path = path,
+                limit = 80,
+            )
+        }.getOrElse { error ->
+            return@Tool listOf(
+                UIMessagePart.Text(
+                    InstanceEnvelopes.failure(
+                        id = InstanceId(InstanceKind.WORKSPACE, targetId),
+                        error = "workspace_list_failed",
+                        recovery = error.message ?: "检查工作区是否就绪。",
+                    ).toString()
+                )
+            )
+        }
+
+        val projectType = detectProjectType(entries)
+        val testCommand = inferVerificationCommand(entries)
+        val manifests = entries.filter {
+            !it.isDirectory && it.name.lowercase() in BUILD_MANIFESTS
+        }
+        val readme = entries.firstOrNull {
+            !it.isDirectory && it.name.lowercase().startsWith("readme")
+        }
+        val readmeExcerpt = readme?.let { entry ->
+            runCatching {
+                workspaceRepository.readTextInRootfs(
+                    targetId,
+                    "/workspace/${entry.path.trimStart('/')}",
+                ).take(1_200)
+            }.getOrNull()
+        }
+
+        val payload = buildJsonObject {
+            put("path", path)
+            put("project_type", projectType)
+            testCommand?.let { put("test_command", it) }
+            put("entries", buildJsonArray {
+                entries.forEach { entry ->
+                    add(buildJsonObject {
+                        put("name", entry.name)
+                        put("path", entry.path)
+                        put("is_directory", entry.isDirectory)
+                        if (!entry.isDirectory) put("size_bytes", entry.sizeBytes)
+                    })
+                }
+            })
+            put("build_files", buildJsonArray { manifests.forEach { add(it.name) } })
+            readmeExcerpt?.takeIf { it.isNotBlank() }?.let { put("readme_excerpt", it) }
+            putChecks(
+                listOf(
+                    ResultCheck(
+                        "has_manifest",
+                        manifests.isNotEmpty(),
+                        if (manifests.isEmpty()) "no build manifest in this directory" else manifests.joinToString { it.name },
+                    ),
+                    ResultCheck(
+                        "test_command_known",
+                        testCommand != null,
+                        testCommand ?: "unknown; pass an explicit command to verify_workspace",
+                    ),
+                    ResultCheck(
+                        "has_readme",
+                        readmeExcerpt != null,
+                        readme?.name ?: "no README in this directory",
+                    ),
+                )
+            )
+        }
+        listOf(UIMessagePart.Text(payload.toString()))
+    },
+)
