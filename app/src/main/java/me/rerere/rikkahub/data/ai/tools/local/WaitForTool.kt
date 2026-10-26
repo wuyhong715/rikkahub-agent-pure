@@ -144,6 +144,7 @@ fun waitForTool(
             val start: Long = SystemClock.uptimeMillis()
             // Snapshot taken before the first poll so a change that lands mid-wait is not missed.
             val startHash = if (screenChange) treeSnapshotCached(svc, force = true)?.hash else null
+            val startEventUptime = svc.lastWindowEventUptime
 
             var matched = false
             var timedOut = false
@@ -159,6 +160,10 @@ fun waitForTool(
                         return@run false
                     }
                     if (screenChange) {
+                        // The tree cannot move without a window event, so skip the walk entirely
+                        // while nothing has fired: a 15s wait on a still screen would otherwise
+                        // re-walk the tree 125 times for nothing.
+                        if (svc.lastWindowEventUptime <= startEventUptime) return@run false
                         val now = treeSnapshotCached(svc, force = true, root = root)?.hash
                         if (now == null || now == startHash) return@run false
                     }
