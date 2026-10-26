@@ -949,6 +949,8 @@ class LocalTools(
             tools.add(clickNodeTool(invocationContext, interactiveToolStreamer))
             tools.add(me.rerere.rikkahub.data.ai.tools.local.setTextTool(invocationContext, interactiveToolStreamer))
             tools.add(scrollTool(invocationContext, interactiveToolStreamer))
+            // Block until the screen reaches a condition, instead of the model polling the tree.
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.waitForTool(invocationContext, interactiveToolStreamer))
             tools.add(globalActionTool(invocationContext, interactiveToolStreamer))
             tools.add(takeScreenshotTool(context))  // take_screenshot IS the screenshot; skip auto-stream
             tools.add(me.rerere.rikkahub.data.ai.tools.local.wakeScreenTool(context))
