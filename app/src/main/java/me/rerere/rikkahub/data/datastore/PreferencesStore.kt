@@ -278,6 +278,7 @@ class SettingsStore(
         val SEARCH_COMMON = stringPreferencesKey("search_common")
         val SEARCH_SELECTED = intPreferencesKey("search_selected")
         val ENABLE_WEB_FETCH_TOOLS = booleanPreferencesKey("enable_web_fetch_tools")
+        val ENABLE_AUTO_RECALL = booleanPreferencesKey("enable_auto_recall")
         val PARSE_TEXT_TOOL_CALLS = booleanPreferencesKey("parse_text_tool_calls")
 
         // MCP
@@ -426,6 +427,7 @@ class SettingsStore(
                 preferences[SEARCH_SELECTED] =
                     settings.searchServiceSelected.coerceIn(0, maxOf(0, settings.searchServices.size - 1))
                 preferences[ENABLE_WEB_FETCH_TOOLS] = settings.enableWebFetchTools
+                preferences[ENABLE_AUTO_RECALL] = settings.enableAutoRecall
                 preferences[PARSE_TEXT_TOOL_CALLS] = settings.parseTextToolCalls
 
                 preferences[MCP_SERVERS] = JsonInstant.encodeToString(settings.mcpServers)
@@ -626,6 +628,7 @@ class SettingsStore(
                 } ?: SearchCommonOptions(),
                 searchServiceSelected = preferences[SEARCH_SELECTED] ?: 0,
                 enableWebFetchTools = preferences[ENABLE_WEB_FETCH_TOOLS] != false,
+                enableAutoRecall = preferences[ENABLE_AUTO_RECALL] != false,
                 parseTextToolCalls = preferences[PARSE_TEXT_TOOL_CALLS] != false,
                 mcpServers = preferences[MCP_SERVERS]?.let { raw ->
                     runCatching { JsonInstant.decodeFromString<List<McpServerConfig>>(raw) }.getOrElse {
@@ -1193,6 +1196,12 @@ data class Settings(
     val searchCommonOptions: SearchCommonOptions = SearchCommonOptions(),
     val searchServiceSelected: Int = 0,
     val enableWebFetchTools: Boolean = true,
+    /**
+     * Proactively search the assistant's knowledge base with every user message and append a
+     * short file menu to the system prompt (T-16). On by default: the step models skip is
+     * remembering that a note might exist, not opening it.
+     */
+    val enableAutoRecall: Boolean = true,
     /**
      * Recover a tool call a model wrote as literal reply text (`<tool_call>{…}</tool_call>`)
      * instead of in the structured field. Some OpenAI-compatible gateways serve models whose chat

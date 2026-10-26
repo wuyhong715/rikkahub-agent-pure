@@ -535,6 +535,10 @@ class ChatService(
     // Moxw - <app_environment> 系统提示注入 (依赖 workspaceRepository / libraryIndex, 故在类内构造)
     private val appEnvironmentTransformer = me.rerere.rikkahub.data.ai.transformers
         .AppEnvironmentTransformer(workspaceRepository, libraryIndex)
+    // T-16 — proactive recall: one knowledge-base search per new user message, injected as a
+    // short file menu rather than as passages.
+    private val autoRecallTransformer = me.rerere.rikkahub.data.ai.transformers
+        .AutoRecallTransformer(memoryIndex, workspaceRepository)
 
     // 统一会话管理
     private val sessions = ConcurrentHashMap<Uuid, ConversationSession>()
@@ -2257,6 +2261,7 @@ class ChatService(
                             add(templateTransformer)
                             add(workspaceReminderTransformer)
                             add(appEnvironmentTransformer)
+                            add(autoRecallTransformer)
                             // 放在最后: 估算的是已注入模板 / workspace 引导之后的最终请求上下文
                             add(ContextBudgetReminderTransformer)
                         },
