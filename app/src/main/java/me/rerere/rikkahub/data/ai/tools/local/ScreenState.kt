@@ -12,6 +12,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import me.rerere.rikkahub.service.RikkaAccessibilityService
@@ -135,53 +136,102 @@ internal fun surfaceFactsOf(svc: RikkaAccessibilityService): List<SurfaceFacts> 
         emptyList()
     }
 
+/** How many new nodes an action envelope reports before it stops collecting. */
+private const val ADDED_NODE_CAP = 20
+
 /**
- * Hash of the filtered node tree; null when there is no active window. [root] lets a caller
- * that already holds the active root reuse it instead of triggering another fetch.
+ * One walk of the filtered tree.
+ *
+ * [signatures] is the ordered structural signature list the hash and the read_window_tree delta
+ * are both built from. [identities] is what each node *is*, used to tell new content from content
+ * that merely moved. [added] is the ready-to-emit node JSON for the nodes whose identity was not
+ * in the baseline, which is how an action reports what it changed without the model paying for a
+ * second read_window_tree.
  */
-internal fun treeHash(svc: RikkaAccessibilityService, root: AccessibilityNodeInfo? = null): Long? {
+internal class TreeSnapshot(
+    val hash: Long,
+    val signatures: List<String>,
+    /** [nodeIdentity] per emitted node, in the same order as [signatures]. */
+    val identities: List<String>,
+    val added: List<JsonObject> = emptyList(),
+    val addedTruncated: Boolean = false,
+)
+
+/**
+ * Walks the filtered tree once and returns its snapshot; null when there is no active window.
+ *
+ * [root] lets a caller that already holds the active root reuse it instead of triggering another
+ * `rootInActiveWindow` fetch. [baseline] turns the walk into a delta.
+ *
+ * The delta compares *identities*, not signatures: a scroll moves every node's bounds, which
+ * would make a signature-based delta report the whole screen as new. What actually matters after
+ * an action is "did content appear", and content that only moved is not new content.
+ */
+internal fun treeSnapshot(
+    svc: RikkaAccessibilityService,
+    root: AccessibilityNodeInfo? = null,
+    baseline: Set<String>? = null,
+): TreeSnapshot? {
     val r = root ?: svc.rootInActiveWindow ?: return null
-    val parts = mutableListOf<String>()
+    val parts = ArrayList<String>(256)
+    val ids = ArrayList<String>(256)
+    val added = ArrayList<JsonObject>(if (baseline == null) 0 else ADDED_NODE_CAP)
+    var addedTruncated = false
     val rect = Rect()
+    val windowId = r.windowId
     svc.traverseTree(
         root = r,
         filter = ::defaultFilter,
         cap = HASH_NODE_CAP,
-        emit = { n, _, _ -> parts.add(nodeSignature(n, rect)) },
+        emit = { n, depth, idx ->
+            n.getBoundsInScreen(rect)
+            parts.add(nodeSignature(n, rect))
+            val identity = nodeIdentity(n)
+            ids.add(identity)
+            if (baseline != null && identity !in baseline) {
+                if (added.size < ADDED_NODE_CAP) {
+                    added.add(nodeToJson(n, windowId, idx, rect, depth))
+                } else {
+                    addedTruncated = true
+                }
+            }
+        },
         recycle = true,
     )
-    return fnv1a64(parts)
+    return TreeSnapshot(fnv1a64(parts), parts, ids, added, addedTruncated)
 }
 
 // Device-level cache so an action that follows another action pays for ONE tree walk instead of
-// two: the "before" hash of action N is usually the "after" hash of action N-1, and nothing can
-// have moved in between unless a window event fired. Guarded by a lock; the stored event uptime
-// is read *before* the walk so an event that lands mid-walk only makes the entry look staler
-// (forcing a recompute), never fresher.
+// two: the "before" snapshot of action N is usually the "after" snapshot of action N-1, and
+// nothing can have moved in between unless a window event fired. Guarded by a lock; the stored
+// event uptime is read *before* the walk so an event that lands mid-walk only makes the entry
+// look staler (forcing a recompute), never fresher.
 private val hashCacheLock = Any()
-private var cachedTreeHash: Long? = null
-private var cachedHashEventUptime: Long = -1L
+private var cachedSnapshot: TreeSnapshot? = null
+private var cachedSnapshotEventUptime: Long = -1L
 
 /**
- * [treeHash], reusing the previous result when no window event has arrived since it was captured
- * (the screen cannot have moved, so the hash is still valid). Pass [force] = true to always walk
- * — used for the post-action hash, so a silent change that emits no event is still noticed.
+ * [treeSnapshot], reusing the previous walk when no window event has arrived since it was
+ * captured (the screen cannot have moved, so it is still valid) and no [baseline] was asked for.
+ * Pass [force] = true to always walk — used for the post-action snapshot, so a silent change that
+ * emits no event is still noticed.
  */
-internal fun treeHashCached(
+internal fun treeSnapshotCached(
     svc: RikkaAccessibilityService,
     force: Boolean = false,
     root: AccessibilityNodeInfo? = null,
-): Long? {
+    baseline: Set<String>? = null,
+): TreeSnapshot? {
     val eventUptime = svc.lastWindowEventUptime
-    if (!force) {
+    if (!force && baseline == null) {
         synchronized(hashCacheLock) {
-            cachedTreeHash?.let { if (eventUptime <= cachedHashEventUptime) return it }
+            cachedSnapshot?.let { if (eventUptime <= cachedSnapshotEventUptime) return it }
         }
     }
-    val fresh = treeHash(svc, root)
+    val fresh = treeSnapshot(svc, root, baseline)
     synchronized(hashCacheLock) {
-        cachedTreeHash = fresh
-        cachedHashEventUptime = eventUptime
+        cachedSnapshot = fresh
+        cachedSnapshotEventUptime = eventUptime
     }
     return fresh
 }
@@ -198,6 +248,8 @@ internal fun screenStateJson(
     screenChanged: Boolean?,
     settleTimedOut: Boolean = false,
     root: AccessibilityNodeInfo? = null,
+    newNodes: List<JsonObject> = emptyList(),
+    newNodesTruncated: Boolean = false,
 ): JsonObject {
     val activeRoot = root ?: (try { svc.rootInActiveWindow } catch (t: Throwable) { null })
     val windows = surfaceFactsOf(svc)
@@ -219,6 +271,10 @@ internal fun screenStateJson(
         })
         if (screenChanged != null) put("screen_changed", JsonPrimitive(screenChanged))
         if (settleTimedOut) put("settle", JsonPrimitive("timeout"))
+        if (newNodes.isNotEmpty()) {
+            put("new_nodes", buildJsonArray { newNodes.forEach { add(it) } })
+            if (newNodesTruncated) put("new_nodes_truncated", JsonPrimitive(true))
+        }
     }
 }
 
@@ -243,10 +299,14 @@ internal suspend fun withActionEnvelope(
 ): JsonObject {
     // "before" reuses the previous action's "after" hash when nothing moved in between, so the
     // common action-after-action sequence pays for one tree walk instead of two.
-    val before = try { treeHashCached(svc) } catch (t: Throwable) {
-        Log.w("ScreenState", "before-hash failed: ${t.message}")
+    val before = try { treeSnapshotCached(svc) } catch (t: Throwable) {
+        Log.w("ScreenState", "before-snapshot failed: ${t.message}")
         null
     }
+    // Everything the model already knows about this screen, by identity. The post-action walk
+    // diffs against it, so the envelope can report what appeared instead of only that *something*
+    // did — and a scroll, which moves everything without adding anything, reports nothing.
+    val baseline = before?.identities?.toSet()
     val actionStart = SystemClock.uptimeMillis()
     val result = try {
         act(svc)
@@ -264,7 +324,7 @@ internal suspend fun withActionEnvelope(
     // Settle + hash, shared by the first attempt and the retry. The settled root feeds both the
     // post-action hash (forced, so a silent change is still caught) and the screen-state
     // envelope, halving the expensive root fetches.
-    suspend fun settle(floor: Long): Triple<Boolean, AccessibilityNodeInfo?, Long?> {
+    suspend fun settle(floor: Long): Triple<Boolean, AccessibilityNodeInfo?, TreeSnapshot?> {
         val quiet = awaitQuiet(
             quietMs = SETTLE_QUIET_MS,
             timeoutMs = SETTLE_TIMEOUT_MS,
@@ -274,20 +334,20 @@ internal suspend fun withActionEnvelope(
             idleMs = SETTLE_IDLE_MS,
         )
         val root = try { svc.rootInActiveWindow } catch (t: Throwable) { null }
-        val hash = try {
-            treeHashCached(svc, force = true, root = root)
+        val snapshot = try {
+            treeSnapshotCached(svc, force = true, root = root, baseline = baseline)
         } catch (t: Throwable) {
-            Log.w("ScreenState", "after-hash failed: ${t.message}")
+            Log.w("ScreenState", "after-snapshot failed: ${t.message}")
             null
         }
-        return Triple(quiet, root, hash)
+        return Triple(quiet, root, snapshot)
     }
 
     val first = settle(actionStart)
     var quiet = first.first
     var settleRoot = first.second
     var after = first.third
-    var changed = if (before != null && after != null) before != after else null
+    var changed = if (before != null && after != null) before.hash != after.hash else null
 
     var fallback: JsonObject? = null
     if (changed == false && retryWhenUnchanged != null) {
@@ -305,7 +365,7 @@ internal suspend fun withActionEnvelope(
             quiet = retry.first
             settleRoot = retry.second
             after = retry.third
-            changed = if (before != null && after != null) before != after else null
+            changed = if (before != null && after != null) before.hash != after.hash else null
         }
     }
 
@@ -314,6 +374,10 @@ internal suspend fun withActionEnvelope(
         screenChanged = changed,
         settleTimedOut = !quiet,
         root = settleRoot,
+        // Only worth reporting when something actually moved: after a no-op click these are the
+        // nodes that "appeared" relative to a baseline nothing changed, which is a lie.
+        newNodes = if (changed == true) after?.added.orEmpty() else emptyList(),
+        newNodesTruncated = changed == true && after?.addedTruncated == true,
     )
     return buildJsonObject {
         result.forEach { (key, value) -> put(key, value) }

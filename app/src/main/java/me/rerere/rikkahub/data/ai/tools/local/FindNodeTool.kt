@@ -62,18 +62,40 @@ private fun findMatchesUnified(
     return out to truncated
 }
 
+/** Ceiling on the candidates considered when healing a stale node_id. */
+private const val HEAL_MATCH_CAP = 200
+
+/** What a node_id resolved to. [healedFrom] is set when the index was stale but the node was found again. */
+private data class NodeResolution(
+    val node: AccessibilityNodeInfo?,
+    val reason: String? = null,
+    val healedFrom: String? = null,
+)
+
 /**
- * Resolves a read_window_tree node_id back to a live node. Returns the node or null with
- * a reason string. Staleness detection: window changed, index out of range, or the node
- * is no longer visible.
+ * Resolves a read_window_tree node_id back to a live node.
+ *
+ * A traversal index is not stable: it counts every node in the full walk, so inserting one row
+ * above the target — a new message, an ad, the IME pushing the layout up — shifts every index
+ * after it. The old behaviour was to answer stale_node_id and make the model re-read the whole
+ * tree, which costs a round trip and a full tree's worth of tokens for a screen that did not
+ * change at all.
+ *
+ * So the read that produced the id also remembered what each node *was* ([nodeIdentity]). When
+ * the index now holds a different node, or holds nothing, this looks for the remembered identity
+ * instead and takes the instance whose index moved least — sibling duplicates keep their order,
+ * so nearest wins. [healedFrom] reports the id the model sent, so the tool result can hand back
+ * a fresh one.
  */
 private fun resolveByNodeId(
     svc: RikkaAccessibilityService,
     root: AccessibilityNodeInfo,
     windowId: Int,
     traversalIndex: Int,
-): Pair<AccessibilityNodeInfo?, String?> {
-    if (root.windowId != windowId) return null to "stale_node_id"
+    conversationKey: String?,
+): NodeResolution {
+    if (root.windowId != windowId) return NodeResolution(null, "stale_node_id")
+
     var found: AccessibilityNodeInfo? = null
     // filter=true makes emitted == seen, so cap=traversalIndex stops exactly at the node.
     svc.traverseTree(
@@ -82,9 +104,35 @@ private fun resolveByNodeId(
         cap = traversalIndex,
         emit = { n, _, idx -> if (idx == traversalIndex) found = n },
     )
-    val node = found ?: return null to "stale_node_id"
-    if (!node.isVisibleToUser) return null to "stale_node_id"
-    return node to null
+    val direct = found
+    val expected = TreeSnapshotCache.get(conversationKey)
+        ?.identities
+        ?.get("$windowId:$traversalIndex")
+
+    if (direct != null && direct.isVisibleToUser) {
+        // No fingerprint on record (the id predates the last read) — trust the index as before.
+        if (expected == null) return NodeResolution(direct)
+        // The node at that index is still the one the model saw.
+        if (nodeIdentity(direct) == expected) return NodeResolution(direct)
+    }
+    if (expected == null) return NodeResolution(null, "stale_node_id")
+
+    var best: AccessibilityNodeInfo? = null
+    var bestDelta: Int = Int.MAX_VALUE
+    svc.traverseTree(
+        root = root,
+        filter = { n, _ -> n.isVisibleToUser && nodeIdentity(n) == expected },
+        cap = HEAL_MATCH_CAP,
+        emit = { n, _, idx: Int ->
+            val delta: Int = if (idx > traversalIndex) idx - traversalIndex else traversalIndex - idx
+            if (delta < bestDelta) {
+                bestDelta = delta
+                best = n
+            }
+        },
+    )
+    val healed: AccessibilityNodeInfo = best ?: return NodeResolution(null, "stale_node_id")
+    return NodeResolution(healed, healedFrom = "$windowId:$traversalIndex")
 }
 
 private fun parseSelector(input: kotlinx.serialization.json.JsonElement): Triple<String?, String?, String?> {
@@ -228,6 +276,12 @@ fun findNodeTool(
                     timestampMs = System.currentTimeMillis(),
                 )
             )
+            // Remember what these nodes were, so a click on one of these ids survives the list
+            // re-laying out between find_node and click_node.
+            TreeSnapshotCache.remember(
+                invocationContext.callerConversationId,
+                matches.associate { "${root.windowId}:${it.traversalIndex}" to nodeIdentity(it.node) },
+            )
             buildJsonObject {
                 put("matches", buildJsonArray {
                     matches.forEach { m ->
@@ -263,9 +317,12 @@ fun clickNodeTool(
         by (text | content_description | view_id_resource_name) + value with optional nth. If the
         matched node is not clickable, the nearest clickable ancestor is clicked. The click is
         tried as an accessibility action first and retried as a real touch when the view ignores
-        it; `resolved_via` says which one landed: action | gesture | gesture_retry. On
-        stale_node_id the screen changed since your last read: re-run read_window_tree. The result
-        carries an "after" object; check screen_changed to confirm the click did something.
+        it; `resolved_via` says which one landed: action | gesture | gesture_retry. A node_id
+        whose index moved (a row was inserted above it, the IME pushed the layout up) is re-found
+        by node identity and the click still lands, reported as healed_from; only a node that is
+        really gone returns stale_node_id, and only then should you re-run read_window_tree. The
+        result carries an "after" object; check screen_changed to confirm the click did something,
+        and its new_nodes to see what appeared without paying for another read.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
@@ -349,8 +406,17 @@ fun clickNodeTool(
                         put("current", pkg)
                     }
                 }
+                var resolution: NodeResolution? = null
                 val (target, staleReason) = if (parsedNodeId != null) {
-                    resolveByNodeId(svc, root, parsedNodeId.first, parsedNodeId.second)
+                    val resolved = resolveByNodeId(
+                        svc = svc,
+                        root = root,
+                        windowId = parsedNodeId.first,
+                        traversalIndex = parsedNodeId.second,
+                        conversationKey = invocationContext.callerConversationId,
+                    )
+                    resolution = resolved
+                    resolved.node to resolved.reason
                 } else {
                     val (matches, truncated) = findMatchesUnified(svc, root, by!!, value!!)
                     when {
@@ -425,6 +491,15 @@ fun clickNodeTool(
                 buildJsonObject {
                     put("success", ok)
                     put("resolved_via", via)
+                    resolution?.healedFrom?.let { staleId ->
+                        put("healed_from", staleId)
+                        put(
+                            "note",
+                            "node_id $staleId was stale: the tree shifted and that index no longer " +
+                                "holds this node. It was re-found by identity, so the click landed. " +
+                                "Use the node_id from a fresh read from now on.",
+                        )
+                    }
                     put("clicked", buildJsonObject {
                         val rect = android.graphics.Rect()
                         clickable.getBoundsInScreen(rect)
@@ -545,8 +620,17 @@ fun setTextTool(
                         put("current", pkg)
                     }
                 }
+                var resolution: NodeResolution? = null
                 val (target, staleReason) = if (parsedNodeId != null) {
-                    resolveByNodeId(svc, root, parsedNodeId.first, parsedNodeId.second)
+                    val resolved = resolveByNodeId(
+                        svc = svc,
+                        root = root,
+                        windowId = parsedNodeId.first,
+                        traversalIndex = parsedNodeId.second,
+                        conversationKey = invocationContext.callerConversationId,
+                    )
+                    resolution = resolved
+                    resolved.node to resolved.reason
                 } else {
                     val (matches, truncated) = findMatchesUnified(svc, root, by!!, value!!)
                     when {
@@ -627,6 +711,15 @@ fun setTextTool(
                     put("success", ok)
                     if (!ok) put("reason", "action_rejected")
                     put("set_to", newText)
+                    resolution?.healedFrom?.let { staleId ->
+                        put("healed_from", staleId)
+                        put(
+                            "note",
+                            "node_id $staleId was stale: the tree shifted and that index no longer " +
+                                "holds this field. It was re-found by identity, so the text landed. " +
+                                "Use the node_id from a fresh read from now on.",
+                        )
+                    }
                 }
             }
         }
