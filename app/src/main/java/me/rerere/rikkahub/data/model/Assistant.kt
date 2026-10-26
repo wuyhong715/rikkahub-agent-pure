@@ -52,6 +52,18 @@ data class Assistant(
     val localTools: List<LocalToolOption> = listOf(LocalToolOption.TimeInfo),
     val enableWebSearch: Boolean = false, // 网络搜索开关(每个助手独立)
     val workspaceId: Uuid? = null,
+    /**
+     * 允许这个助手使用**所有**工作区：workspace_* 工具会多一个可选的 `workspace` 参数，
+     * 可以按名字指定作用于哪一个；省略时仍用 [workspaceId] 指的那一个。
+     *
+     * 与 [workspaceId] 的关系是"主工作区 + 全量访问"，不是二选一：冷记忆、文件库这类需要
+     * 一个确定目录的功能仍然依赖 [workspaceId]。[workspaceId] 为空而这里为 true 时，
+     * 主工作区取最近访问的那个就绪工作区。
+     *
+     * 用 EncodeDefault.NEVER：没勾过的助手载荷保持逐字节不变。
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val workspaceAll: Boolean = false,
     val background: String? = null, // 聊天页背景图地址(本地文件 URI 或网络 URL), 为 null 时无背景
     val backgroundOpacity: Float = 1.0f, // 背景图不透明度(0~1)
     val useGradientBackground: Boolean = false, // 开启后聊天页使用动态渐变背景

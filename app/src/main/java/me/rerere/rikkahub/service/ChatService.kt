@@ -112,7 +112,7 @@ import me.rerere.rikkahub.data.datastore.SkillGroupRules
 import me.rerere.rikkahub.data.ai.tools.CompactionToolResult
 import me.rerere.rikkahub.data.ai.tools.buildCompactionTools
 import me.rerere.rikkahub.runtime.tools.buildMemoryLookupTool
-import me.rerere.rikkahub.data.ai.tools.createWorkspaceTools
+import me.rerere.rikkahub.data.ai.tools.createWorkspaceToolsForTurn
 import me.rerere.rikkahub.data.ai.tools.buildColdMemoryTools
 import me.rerere.rikkahub.runtime.tools.buildToolOutputReadTool
 import me.rerere.rikkahub.runtime.tools.ToolOutputRules
@@ -1772,7 +1772,7 @@ class ChatService(
                 ),
             )
         )
-        addAll(createWorkspaceToolsIfReady(workspaceIdForTurn(surfaceAssistant, conversationId), conversation.workspaceCwd))
+        addAll(workspaceToolsForTurn(surfaceAssistant, conversationId, conversation.workspaceCwd))
         // T-06 / (7) - cold memory (Markdown knowledge base). Same on both build paths so a
         // regenerate sees the surface the first pass had. Off unless enabled AND configured.
         addAll(createColdMemoryToolsIfConfigured(surfaceAssistant))
@@ -2334,7 +2334,7 @@ class ChatService(
                     // options did not already allow. There is no other mode: nothing attaches the
                     // whole surface, which is what makes the embedding model a prerequisite rather
                     // than an enhancement.
-                    addAll(createWorkspaceToolsIfReady(workspaceIdForTurn(surfaceAssistant, conversationId), conversation.workspaceCwd))
+                    addAll(workspaceToolsForTurn(surfaceAssistant, conversationId, conversation.workspaceCwd))
                     // T-06 / (7) - cold memory, mirroring the regenerate path above.
                     addAll(createColdMemoryToolsIfConfigured(surfaceAssistant))
                     // The recovery path for a truncated tool result, mirrored from the
@@ -2972,22 +2972,27 @@ class ChatService(
      * 助理没绑工作区时任务轮次根本没有 workspace_* 工具；绑了 A 而任务是 B 时，模型在 A 里
      * 读写执行，系统在 B 里验收，永远对不上。
      */
-    private suspend fun workspaceIdForTurn(assistant: Assistant, conversationId: Uuid): String? =
-        runCatching { missionEngine.workspaceIdFor(conversationId.toString()) }.getOrNull()
+    /**
+     * 本轮的工作区工具。
+     *
+     * 任务的快照、hook、机器验收、产物预览全部按 `mission.workspaceId` 查找，所以**任务轮次
+     * 锁死在任务工作区**：这时即使助手开了「所有工作区」，也不把多目标传下去，否则模型在 A 里
+     * 干活、系统在 B 里验收，永远对不上。非任务轮次才传播这个开关。
+     */
+    private suspend fun workspaceToolsForTurn(
+        assistant: Assistant,
+        conversationId: Uuid,
+        cwd: String?,
+    ): List<Tool> {
+        val missionWorkspaceId = runCatching { missionEngine.workspaceIdFor(conversationId.toString()) }
+            .getOrNull()
             ?.takeIf { it.isNotBlank() }
-            ?: assistant.workspaceId?.toString()
-
-    private suspend fun createWorkspaceToolsIfReady(workspaceId: String?, cwd: String? = null): List<Tool> {
-        if (workspaceId.isNullOrBlank()) return emptyList()
-        val workspace = workspaceRepository.getById(workspaceId) ?: return emptyList()
-        if (workspace.shellStatus != WorkspaceShellStatus.READY.name) {
-            Log.d(
-                TAG,
-                "createWorkspaceToolsIfReady: skip workspace tools, workspace=$workspaceId, status=${workspace.shellStatus}"
-            )
-            return emptyList()
-        }
-        return createWorkspaceTools(workspaceId, workspaceRepository, cwd)
+        return createWorkspaceToolsForTurn(
+            primaryWorkspaceId = missionWorkspaceId ?: assistant.workspaceId?.toString(),
+            workspaceRepository = workspaceRepository,
+            cwd = cwd,
+            allWorkspaces = assistant.workspaceAll && missionWorkspaceId == null,
+        )
     }
 
     /**

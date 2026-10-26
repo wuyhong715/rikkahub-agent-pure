@@ -69,7 +69,14 @@ class ChatToolFactory(
         if (assistant.enableRecentChatsReference) {
             addAll(createConversationTools(conversationRepository, assistant.id, conversationIndex))
         }
-        addAll(createWorkspaceToolsIfReady(assistant.workspaceId?.toString(), workspaceCwd))
+        addAll(
+            createWorkspaceToolsForTurn(
+                primaryWorkspaceId = assistant.workspaceId?.toString(),
+                workspaceRepository = workspaceRepository,
+                cwd = workspaceCwd,
+                allWorkspaces = assistant.workspaceAll,
+            ),
+        )
         if (assistant.enabledSkills.isNotEmpty()) {
             addAll(
                 createSkillTools(
@@ -110,16 +117,4 @@ class ChatToolFactory(
         return mcpTools
     }
 
-    private suspend fun createWorkspaceToolsIfReady(workspaceId: String?, cwd: String?): List<Tool> {
-        if (workspaceId.isNullOrBlank()) return emptyList()
-        val workspace = workspaceRepository.getById(workspaceId) ?: return emptyList()
-        if (workspace.shellStatus != WorkspaceShellStatus.READY.name) {
-            Log.d(
-                TAG,
-                "createWorkspaceToolsIfReady: skip workspace tools, workspace=$workspaceId, status=${workspace.shellStatus}"
-            )
-            return emptyList()
-        }
-        return createWorkspaceTools(workspaceId, workspaceRepository, cwd)
-    }
 }

@@ -44,10 +44,93 @@ val WorkspaceToolDefaultApprovals: Map<String, Boolean> = mapOf(
 fun resolveWorkspaceToolApproval(name: String, overrides: Map<String, Boolean>): Boolean =
     overrides[name] ?: WorkspaceToolDefaultApprovals[name] ?: false
 
+/**
+ * 工作区工具的目标解析。
+ *
+ * 「所有工作区」不是"换一个绑定"，而是"同一个工具能指向任意一个"：因此工具多一个可选的
+ * `workspace` 参数（名字或 id），省略时落回主工作区 [primaryId]。多工作区时才会出现这个参数，
+ * 单工作区助手的 schema 保持原样。
+ */
+class WorkspaceTargets(
+    val primaryId: String,
+    val options: List<Option>,
+) {
+    data class Option(val id: String, val name: String, val root: String)
+
+    /** 只有真正可选时才给模型加参数——单工作区时 schema 与以前逐字节一致。 */
+    val multi: Boolean get() = options.size > 1
+
+    fun resolveOrNull(requested: String?): String? {
+        // 单工作区助手不该因为模型多写了一个 workspace 参数就失败：直接忽略。
+        if (!multi) return primaryId
+        if (requested.isNullOrBlank()) return primaryId
+        val q = requested.trim()
+        return options.firstOrNull { it.id == q || it.name.equals(q, ignoreCase = true) || it.root.equals(q, ignoreCase = true) }?.id
+    }
+
+    fun describe(): String = options.joinToString("; ") { "${it.name} (${it.id.take(8)})" }
+}
+
+private fun JsonObjectBuilder.putWorkspaceProperty(targets: WorkspaceTargets) {
+    if (!targets.multi) return
+    // 说明里直接列出可用项：模型不该为了选一个工作区先调一次工具。
+    put("workspace", buildJsonObject {
+        put("type", "string")
+        put(
+            "description",
+            "Which workspace to act on, by name. Omit to use the assistant's primary workspace. " +
+                "Available: ${targets.describe()}",
+        )
+    })
+}
+
+private fun unknownWorkspaceEnvelope(targets: WorkspaceTargets, requested: String?): kotlinx.serialization.json.JsonObject =
+    buildJsonObject {
+        put("error", "unknown_workspace")
+        put("requested", requested.orEmpty())
+        put("available", targets.describe())
+        put(
+            "recovery",
+            "用 workspace_list 查看有哪些工作区；或者省略 workspace 参数，用助手的主工作区。",
+        )
+    }
+
+/**
+ * 本轮的工作区工具。三个入口（对话、rerun、旧 factory）都走这里，避免再次出现"三条路径三种行为"。
+ *
+ * - 未开「所有工作区」：沿用旧的严格判定——主工作区存在且 shell 就绪才给工具。
+ * - 开了：至少在有一个就绪工作区时给工具；主工作区没绑（或指向的工作区没就绪）时，
+ *   取最近访问的那个当主工作区，其余通过工具参数指定。
+ *
+ * 冷记忆 / 文件库这类需要"一个确定目录"的功能不受影响：它们仍然只认 [assistant.workspaceId]。
+ */
+suspend fun createWorkspaceToolsForTurn(
+    primaryWorkspaceId: String?,
+    workspaceRepository: WorkspaceRepository,
+    cwd: String?,
+    allWorkspaces: Boolean,
+): List<Tool> {
+    if (!allWorkspaces) {
+        if (primaryWorkspaceId.isNullOrBlank()) return emptyList()
+        val workspace = workspaceRepository.getById(primaryWorkspaceId) ?: return emptyList()
+        if (workspace.shellStatus != me.rerere.workspace.WorkspaceShellStatus.READY.name) return emptyList()
+        return createWorkspaceTools(primaryWorkspaceId, workspaceRepository, cwd)
+    }
+
+    val ready = workspaceRepository.getAll()
+        .filter { it.shellStatus == me.rerere.workspace.WorkspaceShellStatus.READY.name }
+    if (ready.isEmpty()) return emptyList()
+    val primary = ready.firstOrNull { it.id == primaryWorkspaceId }
+        ?: ready.maxByOrNull { it.lastAccessAt ?: it.updatedAt }
+        ?: return emptyList()
+    return createWorkspaceTools(primary.id, workspaceRepository, cwd, allWorkspaces = true)
+}
+
 suspend fun createWorkspaceTools(
     workspaceId: String?,
     workspaceRepository: WorkspaceRepository,
     cwd: String? = null,
+    allWorkspaces: Boolean = false,
 ): List<Tool> {
     if (workspaceId.isNullOrBlank()) return emptyList()
     val approvalOverrides = workspaceRepository.getById(workspaceId)?.toolApprovalOverrides().orEmpty()
@@ -55,18 +138,65 @@ suspend fun createWorkspaceTools(
 
     val shellCwd = cwd?.removePrefix("/workspace/")?.removePrefix("/workspace")
 
-    return listOf(
-        createReadFileTool(workspaceId, ::needsApproval, workspaceRepository),
-        createWriteFileTool(workspaceId, ::needsApproval, workspaceRepository),
-        createEditFileTool(workspaceId, ::needsApproval, workspaceRepository),
-        createCreateFolderTool(workspaceId, ::needsApproval, workspaceRepository),
-        createReadFolderTool(workspaceId, ::needsApproval, workspaceRepository),
-        createShellTool(workspaceId, ::needsApproval, workspaceRepository, shellCwd),
-        createRunBackgroundTool(workspaceId, ::needsApproval, workspaceRepository, shellCwd),
-        createBackgroundStatusTool(workspaceId, ::needsApproval, workspaceRepository),
-        createBackgroundKillTool(workspaceId, ::needsApproval, workspaceRepository),
-    )
+    // 审批覆盖来自主工作区：用户对"工作区 shell 要不要问"的答案是一份，不按工作区分叉。
+    val targets = if (allWorkspaces) {
+        val ready = workspaceRepository.getAll()
+            .filter { it.shellStatus == me.rerere.workspace.WorkspaceShellStatus.READY.name }
+            .map { WorkspaceTargets.Option(it.id, it.name, it.root) }
+        WorkspaceTargets(
+            primaryId = workspaceId,
+            options = ready.ifEmpty { listOf(WorkspaceTargets.Option(workspaceId, workspaceId, "")) },
+        )
+    } else {
+        WorkspaceTargets(primaryId = workspaceId, options = emptyList())
+    }
+
+    return buildList {
+        add(createReadFileTool(targets, ::needsApproval, workspaceRepository))
+        add(createWriteFileTool(targets, ::needsApproval, workspaceRepository))
+        add(createEditFileTool(targets, ::needsApproval, workspaceRepository))
+        add(createCreateFolderTool(targets, ::needsApproval, workspaceRepository))
+        add(createReadFolderTool(targets, ::needsApproval, workspaceRepository))
+        add(createShellTool(targets, ::needsApproval, workspaceRepository, shellCwd))
+        add(createRunBackgroundTool(targets, ::needsApproval, workspaceRepository, shellCwd))
+        add(createBackgroundStatusTool(targets, ::needsApproval, workspaceRepository))
+        add(createBackgroundKillTool(targets, ::needsApproval, workspaceRepository))
+        if (allWorkspaces) add(createListWorkspacesTool(workspaceRepository))
+    }
 }
+
+/**
+ * 只有在"所有工作区"模式下才注册：让模型先看得见有哪些，而不是靠猜名字。
+ * 纯读，不需要审批。
+ */
+private fun createListWorkspacesTool(workspaceRepository: WorkspaceRepository) = Tool(
+    name = "workspace_list",
+    description = "List every workspace on this device with its id, name, root and shell status. " +
+        "Use it to pick the `workspace` argument for the other workspace_* tools.",
+    parameters = {
+        InputSchema.Obj(properties = buildJsonObject {})
+    },
+    needsApproval = { false },
+    execute = {
+        val workspaces = workspaceRepository.getAll()
+        listOf(
+            UIMessagePart.Text(
+                buildJsonArray {
+                    workspaces.forEach { workspace ->
+                        add(
+                            buildJsonObject {
+                                put("id", workspace.id)
+                                put("name", workspace.name)
+                                put("root", workspace.root)
+                                put("shell_status", workspace.shellStatus)
+                            }
+                        )
+                    }
+                }.toString()
+            )
+        )
+    },
+)
 
 private val IMAGE_EXTENSIONS = setOf(
     "png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "heic", "heif", "avif", "ico",
@@ -74,9 +204,8 @@ private val IMAGE_EXTENSIONS = setOf(
 
 private fun String.isImagePath(): Boolean =
     substringAfterLast('.', "").lowercase() in IMAGE_EXTENSIONS
-
 private fun createReadFileTool(
-    workspaceId: String,
+    targets: WorkspaceTargets,
     needsApproval: (String) -> Boolean,
     workspaceRepository: WorkspaceRepository,
 ) = Tool(
@@ -89,6 +218,7 @@ private fun createReadFileTool(
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {
+            putWorkspaceProperty(targets)
                 putPathProperty(required = true)
             },
             required = listOf("path"),
@@ -96,11 +226,17 @@ private fun createReadFileTool(
     },
     needsApproval = { needsApproval("workspace_read_file") },
     execute = {
+        val targetId = targets.resolveOrNull(it.jsonObject.string("workspace"))
+        if (targetId == null) {
+            return@Tool listOf(
+                UIMessagePart.Text(unknownWorkspaceEnvelope(targets, it.jsonObject.string("workspace")).toString())
+            )
+        }
         val path = it.jsonObject.absolutePath("path")
         if (path.isImagePath()) {
-            workspaceRepository.readImageInRootfs(workspaceId, path)
+            workspaceRepository.readImageInRootfs(targetId, path)
         } else {
-            val text = workspaceRepository.readTextInRootfs(workspaceId, path)
+            val text = workspaceRepository.readTextInRootfs(targetId, path)
             listOf(
                 UIMessagePart.Text(
                     buildJsonObject {
@@ -114,7 +250,7 @@ private fun createReadFileTool(
 )
 
 private fun createWriteFileTool(
-    workspaceId: String,
+    targets: WorkspaceTargets,
     needsApproval: (String) -> Boolean,
     workspaceRepository: WorkspaceRepository,
 ) = Tool(
@@ -126,6 +262,7 @@ private fun createWriteFileTool(
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {
+            putWorkspaceProperty(targets)
                 putPathProperty(required = true)
                 put("text", buildJsonObject {
                     put("type", "string")
@@ -141,6 +278,12 @@ private fun createWriteFileTool(
     },
     needsApproval = { needsApproval("workspace_write_file") || it.pathOutsideWritableRoots("path") },
     execute = {
+        val targetId = targets.resolveOrNull(it.jsonObject.string("workspace"))
+        if (targetId == null) {
+            return@Tool listOf(
+                UIMessagePart.Text(unknownWorkspaceEnvelope(targets, it.jsonObject.string("workspace")).toString())
+            )
+        }
         val params = it.jsonObject
         val path = params.absolutePath("path")
         val text = params.string("text") ?: error("text is required")
@@ -148,11 +291,11 @@ private fun createWriteFileTool(
         // 批 H — 覆盖写留 diff（新建文件没有旧版本，diff 为 null）。读旧内容失败不阻断写入：
         // 一个读不出来的旧文件不该让「保存」这件事失败。
         val previous = if (overwrite) {
-            runCatching { workspaceRepository.readTextInRootfs(workspaceId, path) }.getOrNull()
+            runCatching { workspaceRepository.readTextInRootfs(targetId, path) }.getOrNull()
         } else {
             null
         }
-        val entry = workspaceRepository.writeTextInRootfs(workspaceId, path, text, overwrite)
+        val entry = workspaceRepository.writeTextInRootfs(targetId, path, text, overwrite)
         val diff = previous?.let { old ->
             runCatching { generateUnifiedDiff(old, text, entry.path) }.getOrNull()
         }
@@ -166,7 +309,7 @@ private fun createWriteFileTool(
 )
 
 private fun createEditFileTool(
-    workspaceId: String,
+    targets: WorkspaceTargets,
     needsApproval: (String) -> Boolean,
     workspaceRepository: WorkspaceRepository,
 ) = Tool(
@@ -180,6 +323,7 @@ private fun createEditFileTool(
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {
+            putWorkspaceProperty(targets)
                 putPathProperty(required = true)
                 put("old_text", buildJsonObject {
                     put("type", "string")
@@ -199,6 +343,12 @@ private fun createEditFileTool(
     },
     needsApproval = { needsApproval("workspace_edit_file") || it.pathOutsideWritableRoots("path") },
     execute = {
+        val targetId = targets.resolveOrNull(it.jsonObject.string("workspace"))
+        if (targetId == null) {
+            return@Tool listOf(
+                UIMessagePart.Text(unknownWorkspaceEnvelope(targets, it.jsonObject.string("workspace")).toString())
+            )
+        }
         val params = it.jsonObject
         val path = params.absolutePath("path")
         val oldText = params.string("old_text") ?: error("old_text is required")
@@ -206,14 +356,14 @@ private fun createEditFileTool(
         val replaceAll = params["replace_all"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull() ?: false
         require(oldText.isNotEmpty()) { "old_text must not be empty" }
 
-        val original = workspaceRepository.readTextInRootfs(workspaceId, path)
+        val original = workspaceRepository.readTextInRootfs(targetId, path)
         // 逐级尝试 exact -> line_trimmed -> block_anchor 替换器, 见 TextReplacers.kt
         val result = try {
             replaceText(original, oldText, newText, replaceAll)
         } catch (e: IllegalArgumentException) {
             error("${e.message} (path: $path)")
         }
-        val entry = workspaceRepository.writeTextInRootfs(workspaceId, path, result.updated, overwrite = true)
+        val entry = workspaceRepository.writeTextInRootfs(targetId, path, result.updated, overwrite = true)
         val diff = generateUnifiedDiff(original, result.updated, entry.path)
         listOf(
             UIMessagePart.Text(
@@ -232,7 +382,7 @@ private fun createEditFileTool(
 )
 
 private fun createCreateFolderTool(
-    workspaceId: String,
+    targets: WorkspaceTargets,
     needsApproval: (String) -> Boolean,
     workspaceRepository: WorkspaceRepository,
 ) = Tool(
@@ -245,6 +395,7 @@ private fun createCreateFolderTool(
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {
+            putWorkspaceProperty(targets)
                 putPathProperty(required = true)
             },
             required = listOf("path"),
@@ -252,14 +403,20 @@ private fun createCreateFolderTool(
     },
     needsApproval = { needsApproval("workspace_create_folder") || it.pathOutsideWritableRoots("path") },
     execute = {
+        val targetId = targets.resolveOrNull(it.jsonObject.string("workspace"))
+        if (targetId == null) {
+            return@Tool listOf(
+                UIMessagePart.Text(unknownWorkspaceEnvelope(targets, it.jsonObject.string("workspace")).toString())
+            )
+        }
         val path = it.jsonObject.absolutePath("path")
-        val entry = workspaceRepository.createFolderInRootfs(workspaceId, path)
+        val entry = workspaceRepository.createFolderInRootfs(targetId, path)
         listOf(UIMessagePart.Text(entry.toJson().toString()))
     },
 )
 
 private fun createReadFolderTool(
-    workspaceId: String,
+    targets: WorkspaceTargets,
     needsApproval: (String) -> Boolean,
     workspaceRepository: WorkspaceRepository,
 ) = Tool(
@@ -272,6 +429,7 @@ private fun createReadFolderTool(
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {
+            putWorkspaceProperty(targets)
                 putPathProperty(required = true)
             },
             required = listOf("path"),
@@ -279,14 +437,20 @@ private fun createReadFolderTool(
     },
     needsApproval = { needsApproval("workspace_read_folder") },
     execute = {
+        val targetId = targets.resolveOrNull(it.jsonObject.string("workspace"))
+        if (targetId == null) {
+            return@Tool listOf(
+                UIMessagePart.Text(unknownWorkspaceEnvelope(targets, it.jsonObject.string("workspace")).toString())
+            )
+        }
         val path = it.jsonObject.absolutePath("path")
-        val result = workspaceRepository.readFolderTree(workspaceId, path)
+        val result = workspaceRepository.readFolderTree(targetId, path)
         listOf(UIMessagePart.Text(formatWorkspaceTree(path, result)))
     },
 )
 
 private fun createShellTool(
-    workspaceId: String,
+    targets: WorkspaceTargets,
     needsApproval: (String) -> Boolean,
     workspaceRepository: WorkspaceRepository,
     defaultCwd: String? = null,
@@ -303,6 +467,7 @@ private fun createShellTool(
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {
+            putWorkspaceProperty(targets)
                 put("command", buildJsonObject {
                     put("type", "string")
                     put("description", "Shell command to run")
@@ -331,6 +496,12 @@ private fun createShellTool(
     },
     needsApproval = { needsApproval("workspace_shell") },
     execute = {
+        val targetId = targets.resolveOrNull(it.jsonObject.string("workspace"))
+        if (targetId == null) {
+            return@Tool listOf(
+                UIMessagePart.Text(unknownWorkspaceEnvelope(targets, it.jsonObject.string("workspace")).toString())
+            )
+        }
         val params = it.jsonObject
         val command = params.string("command") ?: error("command is required")
         val cwd = (params.string("cwd") ?: defaultCwd.orEmpty())
@@ -343,7 +514,7 @@ private fun createShellTool(
         // 现在都在同一处成形：失败走统一包络（带 instance 与可执行的 recovery），成功保持
         // 原来的字段名不变。
         val payload = runCatching {
-            workspaceRepository.executeCommand(workspaceId, command, cwd, timeoutMillis)
+            workspaceRepository.executeCommand(targetId, command, cwd, timeoutMillis)
         }.fold(
             onSuccess = { result ->
                 buildJsonObject {
@@ -356,7 +527,7 @@ private fun createShellTool(
             },
             onFailure = { t ->
                 InstanceEnvelopes.failure(
-                    id = InstanceId(InstanceKind.WORKSPACE, workspaceId),
+                    id = InstanceId(InstanceKind.WORKSPACE, targetId),
                     error = "workspace_shell_failed",
                     recovery = t.message
                         ?: "在工作区详情里点重新检测；仍失败就重装 rootfs（文件区不受影响）。",
@@ -368,7 +539,7 @@ private fun createShellTool(
 )
 
 private fun createRunBackgroundTool(
-    workspaceId: String,
+    targets: WorkspaceTargets,
     needsApproval: (String) -> Boolean,
     workspaceRepository: WorkspaceRepository,
     defaultCwd: String? = null,
@@ -388,6 +559,7 @@ private fun createRunBackgroundTool(
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {
+            putWorkspaceProperty(targets)
                 put("command", buildJsonObject {
                     put("type", "string")
                     put("description", "Shell command to run persistently in the background")
@@ -409,11 +581,17 @@ private fun createRunBackgroundTool(
     },
     needsApproval = { needsApproval("workspace_run_background") },
     execute = {
+        val targetId = targets.resolveOrNull(it.jsonObject.string("workspace"))
+        if (targetId == null) {
+            return@Tool listOf(
+                UIMessagePart.Text(unknownWorkspaceEnvelope(targets, it.jsonObject.string("workspace")).toString())
+            )
+        }
         val params = it.jsonObject
         val command = params.string("command") ?: error("command is required")
         val cwd = (params.string("cwd") ?: defaultCwd.orEmpty())
             .removePrefix("/workspace/").removePrefix("/workspace")
-        val status = workspaceRepository.startBackground(workspaceId, command, cwd)
+        val status = workspaceRepository.startBackground(targetId, command, cwd)
         listOf(
             UIMessagePart.Text(
                 buildJsonObject {
@@ -427,7 +605,7 @@ private fun createRunBackgroundTool(
 )
 
 private fun createBackgroundStatusTool(
-    workspaceId: String,
+    targets: WorkspaceTargets,
     needsApproval: (String) -> Boolean,
     workspaceRepository: WorkspaceRepository,
 ) = Tool(
@@ -439,6 +617,7 @@ private fun createBackgroundStatusTool(
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {
+            putWorkspaceProperty(targets)
                 put("id", buildJsonObject {
                     put("type", "string")
                     put("description", "Task id returned by workspace_run_background. Omit to list all.")
@@ -449,11 +628,17 @@ private fun createBackgroundStatusTool(
     },
     needsApproval = { needsApproval("workspace_background_status") },
     execute = {
+        val targetId = targets.resolveOrNull(it.jsonObject.string("workspace"))
+        if (targetId == null) {
+            return@Tool listOf(
+                UIMessagePart.Text(unknownWorkspaceEnvelope(targets, it.jsonObject.string("workspace")).toString())
+            )
+        }
         val taskId = it.jsonObject.string("id")
         val statuses = if (taskId != null) {
-            listOfNotNull(workspaceRepository.backgroundStatus(workspaceId, taskId))
+            listOfNotNull(workspaceRepository.backgroundStatus(targetId, taskId))
         } else {
-            workspaceRepository.listBackground(workspaceId)
+            workspaceRepository.listBackground(targetId)
         }
         listOf(
             UIMessagePart.Text(
@@ -468,7 +653,7 @@ private fun createBackgroundStatusTool(
 )
 
 private fun createBackgroundKillTool(
-    workspaceId: String,
+    targets: WorkspaceTargets,
     needsApproval: (String) -> Boolean,
     workspaceRepository: WorkspaceRepository,
 ) = Tool(
@@ -477,6 +662,7 @@ private fun createBackgroundKillTool(
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {
+            putWorkspaceProperty(targets)
                 put("id", buildJsonObject {
                     put("type", "string")
                     put("description", "Task id returned by workspace_run_background")
@@ -487,8 +673,14 @@ private fun createBackgroundKillTool(
     },
     needsApproval = { needsApproval("workspace_background_kill") },
     execute = {
+        val targetId = targets.resolveOrNull(it.jsonObject.string("workspace"))
+        if (targetId == null) {
+            return@Tool listOf(
+                UIMessagePart.Text(unknownWorkspaceEnvelope(targets, it.jsonObject.string("workspace")).toString())
+            )
+        }
         val taskId = it.jsonObject.string("id") ?: error("id is required")
-        val killed = workspaceRepository.killBackground(workspaceId, taskId)
+        val killed = workspaceRepository.killBackground(targetId, taskId)
         listOf(
             UIMessagePart.Text(
                 buildJsonObject {

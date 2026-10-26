@@ -49,7 +49,19 @@ class WorkspaceReminderTransformer(
             distro = readyWorkspace?.let { readDistroName(it.id) },
         ) ?: return messages
 
-        // 与 ChatToolFactory.createWorkspaceToolsIfReady 保持一致: 仅在 shell 就绪时才读取 AGENTS.md 作为工作区指令
+        // 「所有工作区」：工具多了一个可选的 workspace 参数，提示词必须先让模型知道有哪些可选，
+        // 否则它只会用主工作区。任务轮次不传播这个开关（任务锁死在任务工作区），所以这里也排除。
+        if (ctx.assistant.workspaceAll && ctx.missionWorkspaceId == null) {
+            val selectable = workspaceRepository.getAll()
+                .filter { it.shellStatus == WorkspaceShellStatus.READY.name }
+            if (selectable.size > 1) {
+                prompt += "\n\n- 这个助手可以使用所有工作区：workspace_* 工具支持可选的 `workspace` 参数（按名字指定）。" +
+                    "可用：" + selectable.joinToString("、") { it.name } + "。省略参数时用主工作区；" +
+                    "`workspace_list` 可以看到全部工作区及其状态。"
+            }
+        }
+
+        // 与 ChatToolFactory 的 createWorkspaceToolsForTurn 保持一致: 仅在 shell 就绪时才读取 AGENTS.md 作为工作区指令
         if (readyWorkspace != null) {
             prompt += buildAgentsPrompt(readyWorkspace.id, ctx.workspaceCwd)
         }
