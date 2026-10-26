@@ -45,6 +45,9 @@ object LocalToolFilter {
         MOXW_GUIDE_TOOL_NAME,
         "web_fetch",
         "web_extract",
+        // research shares the web-reading switch with web_fetch/web_extract rather than a
+        // group row; leaving it out of this set would let a stale per-group opt-out hide it.
+        "research",
     )
 
     /**

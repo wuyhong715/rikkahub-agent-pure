@@ -127,6 +127,9 @@ import me.rerere.rikkahub.data.ai.tools.local.batchMoveTool
 import me.rerere.rikkahub.data.ai.tools.local.batchDeleteTool
 import me.rerere.rikkahub.data.ai.tools.local.webFetchTool
 import me.rerere.rikkahub.data.ai.tools.local.webExtractTool
+import me.rerere.rikkahub.data.ai.tools.local.researchTool
+import me.rerere.rikkahub.data.ai.tools.local.fetchFileTool
+import me.rerere.rikkahub.data.ai.tools.local.launchAndReadTool
 import me.rerere.rikkahub.data.event.AppEvent
 import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.utils.readClipboardText
@@ -262,6 +265,10 @@ object LenientLocalToolListSerializer : KSerializer<List<LocalToolOption>> {
 }
 
 private val TOP_TOOL_EXAMPLES: Map<String, String> = mapOf(
+    // Composite tools: one call where the model would otherwise chain several.
+    "research" to "research(query=\"Kotlin 2.2 release notes\", max_sources=3)",
+    "fetch_file" to "fetch_file(url=\"https://example.com/report.pdf\")",
+    "launch_and_read" to "launch_and_read(package_name=\"com.android.settings\")",
     // P2-33 image generation tools
     "generate_image" to "generate_image(prompt=\"a red panda on a bamboo branch, watercolor\")",
     // P2-33b video generation tool
@@ -848,6 +855,7 @@ class LocalTools(
         }
         if (options.contains(LocalToolOption.Download)) {
             tools.add(downloadTool(context))
+            tools.add(fetchFileTool(context))
             tools.add(writeTextFileTool(context))
         }
         if (options.contains(LocalToolOption.Location)) {
@@ -944,6 +952,8 @@ class LocalTools(
             tools.add(globalActionTool(invocationContext, interactiveToolStreamer))
             tools.add(takeScreenshotTool(context))  // take_screenshot IS the screenshot; skip auto-stream
             tools.add(me.rerere.rikkahub.data.ai.tools.local.wakeScreenTool(context))
+            // Launch + settle + tree in one call: launch_app alone does not prove the app came up.
+            tools.add(launchAndReadTool(context, invocationContext))
         }
         if (options.contains(LocalToolOption.AppLauncher)) {
             tools.add(me.rerere.rikkahub.data.ai.tools.local.launchAppTool(context, invocationContext, interactiveToolStreamer))
@@ -1154,6 +1164,10 @@ class LocalTools(
         if (settingsStore.settingsFlow.value.enableWebFetchTools) {
             tools.add(webFetchTool(okHttpClient))
             tools.add(webExtractTool(okHttpClient))
+            // research reads pages with the same egress-guarded client and the same provider
+            // configuration as search_web. Gating it here keeps one switch for "read the web";
+            // the settings lambda is read per call so a provider change takes effect at once.
+            tools.add(researchTool(okHttpClient) { settingsStore.settingsFlow.value })
         }
         // Phase 25 — Phase 3 second cut + ExternalStorage + Archive.
         if (options.contains(LocalToolOption.SmsSend)) {
