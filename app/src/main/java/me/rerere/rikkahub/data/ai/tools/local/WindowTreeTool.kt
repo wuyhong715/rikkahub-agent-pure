@@ -28,51 +28,98 @@ private const val MAX_NODES_HARD_CEILING = 2000
 private const val MAX_REMOVED_SIGNATURES = 50
 
 /**
- * JSON for one node. [rect] must already hold the node's screen bounds — the caller fetches them
- * once per node so the tree walk and the tree hash share a single `getBoundsInScreen` IPC (that
- * call is a cross-process hop, and it used to run twice per node).
+ * One node as a single tab-separated line.
  *
- * Boolean flags are emitted only when noteworthy — `clickable` / `scrollable` / `editable` when
- * true, `enabled` when false — which roughly halves the tokens of the old all-fields form.
+ * The tree used to be a JSON array of objects, and about 60% of its bytes were the same seven
+ * key names repeated 300 times — `"content_description":` alone costs 24 bytes per node that has
+ * one. A fixed-column line says the same thing in a third of the space, and a list of lines is
+ * easier to read than a list of objects anyway.
+ *
+ * Columns (tab separated, trailing empties dropped):
+ *   1  node_id@depth   `12:34@3`; no `@` means depth 0
+ *   2  flags           c=clickable l=long-clickable s=scrollable e=editable
+ *                      S=selected K=checked f=focused P=password d=disabled
+ *   3  bounds          `left,top,right,bottom`
+ *   4  class           short name: `android.widget.Button` -> `Button`
+ *   5  text            `***` for password fields, never the real value
+ *   6  desc            content description
+ *   7  hint            hint of an empty input — how a blank EditText says what it wants
+ *   8  view_id         resource name
+ *
+ * [rect] must already hold the node's screen bounds — the caller fetches them once per node so
+ * the tree walk and the tree hash share a single `getBoundsInScreen` IPC.
  */
-internal fun nodeToJson(
+internal fun nodeToLine(
     node: AccessibilityNodeInfo,
     windowId: Int,
     traversalIndex: Int,
     rect: Rect,
     depth: Int,
-): JsonObject = buildJsonObject {
-    put("node_id", "${windowId}:${traversalIndex}")
-    put("bounds", buildJsonArray {
-        add(rect.left); add(rect.top); add(rect.right); add(rect.bottom)
-    })
-    // The filtered tree is flat: without this the model cannot tell which row, card or group a
-    // button belongs to and falls back to guessing from coordinates. depth is the node's depth
-    // in the *unfiltered* tree, so a jump means intermediate containers were filtered out.
-    if (depth > 0) put("depth", depth)
-    node.className?.toString()?.takeIf { it.isNotEmpty() }?.let { put("class", it) }
-    node.text?.toString()?.takeIf { it.isNotEmpty() }?.let { put("text", it) }
-    node.contentDescription?.toString()?.takeIf { it.isNotEmpty() }?.let {
-        put("content_description", it)
+): String {
+    val fields = ArrayList<String>(8)
+    // depth rides on the id instead of taking its own column: it is read together with the id
+    // nine times out of ten, and the unfiltered depth is what tells "a button in a row" from
+    // "a button in a toolbar" once the containers have been filtered out.
+    fields.add(
+        if (depth > 0) "$windowId:$traversalIndex@$depth" else "$windowId:$traversalIndex"
+    )
+    fields.add(nodeFlags(node))
+    fields.add("${rect.left},${rect.top},${rect.right},${rect.bottom}")
+    fields.add(shortClassName(node.className?.toString()))
+    fields.add(cell(if (node.isPassword) "***" else node.text?.toString()))
+    fields.add(cell(node.contentDescription?.toString()))
+    fields.add(cell(node.hintText?.toString()))
+    fields.add(cell(node.viewIdResourceName))
+    // Trailing empties cost nothing to drop and the common button line loses two tabs.
+    while (fields.size > 3 && fields[fields.size - 1].isEmpty()) {
+        fields.removeAt(fields.size - 1)
     }
-    node.viewIdResourceName?.takeIf { it.isNotEmpty() }?.let { put("view_id", it) }
-    if (node.isClickable) put("clickable", true)
-    if (node.isScrollable) put("scrollable", true)
-    if (node.isEditable) put("editable", true)
-    // State a click can flip without touching text, structure or bounds. They are in the tree
-    // hash too, so a diff that reports the node as "changed" has something to point at.
-    if (node.isSelected) put("selected", true)
-    if (node.isChecked) put("checked", true)
-    if (!node.isEnabled) put("enabled", false)
+    return fields.joinToString("\t")
+}
+
+/** The state letters for one node, in the order documented on [nodeToLine]. */
+private fun nodeFlags(node: AccessibilityNodeInfo): String = buildString {
+    if (node.isClickable) append('c')
+    // Long-clickable on its own is a real signal ("press and hold to delete"); on a clickable
+    // node it is noise, since most clickable views are also long-clickable.
+    if (node.isLongClickable && !node.isClickable) append('l')
+    if (node.isScrollable) append('s')
+    if (node.isEditable) append('e')
+    if (node.isSelected) append('S')
+    if (node.isChecked) append('K')
+    if (node.isFocused) append('f')
+    if (node.isPassword) append('P')
+    if (!node.isEnabled) append('d')
+}
+
+/** `android.widget.Button` -> `Button`; a bare name is returned unchanged. */
+internal fun shortClassName(raw: String?): String {
+    val name = raw?.takeIf { it.isNotEmpty() } ?: return ""
+    val cut = name.lastIndexOf('.')
+    return if (cut in 0 until name.length - 1) name.substring(cut + 1) else name
+}
+
+/** A cell cannot contain a tab or a newline: either would split the record. */
+internal fun cell(raw: String?): String {
+    val value = raw?.takeIf { it.isNotEmpty() } ?: return ""
+    if (value.indexOf('\t') < 0 && value.indexOf('\n') < 0 && value.indexOf('\r') < 0) return value
+    return value.replace('\t', ' ').replace('\n', ' ').replace('\r', ' ')
 }
 
 /**
- * What a node *is*, ignoring where it sits and what state it is in: class, view id, text and
- * content description. This is the handle used to re-attach a node_id after the tree shifted —
- * inserting a row above the target moves every traversal index, but leaves these four intact.
+ * What a node *is*, ignoring where it sits and what state it is in: class, view id, text,
+ * content description and hint. This is the handle used to re-attach a node_id after the tree
+ * shifted — inserting a row above the target moves every traversal index, but leaves these
+ * intact. The hint is part of it because two empty inputs are otherwise identical.
+ *
+ * Password text is masked: this string is compared, stored and (for removed nodes) printed, and
+ * the a11y layer happily hands out what the user typed into a password field.
  */
-internal fun nodeIdentity(node: AccessibilityNodeInfo): String =
-    "${node.className}|${node.viewIdResourceName}|${node.text}|${node.contentDescription}"
+internal fun nodeIdentity(node: AccessibilityNodeInfo): String {
+    val text = if (node.isPassword) "***" else node.text?.toString()
+    return "${node.className}|${node.viewIdResourceName}|$text|" +
+        "${node.contentDescription}|${node.hintText}"
+}
 
 /**
  * Stable identity for a node across two reads: the same structural parts the screen-state hash
@@ -83,18 +130,25 @@ internal fun nodeIdentity(node: AccessibilityNodeInfo): String =
  * `isSelected` / `isChecked` are in the signature because they are the one state change that
  * leaves text, structure and bounds identical: ticking a checkbox, selecting a tab, marking a
  * row. Without them such a click looks like a no-op and the action envelope retries it.
+ *
+ * Password text is masked here too — a signature is not only hashed, it is also printed in the
+ * `removed` list of a diff.
  */
-internal fun nodeSignature(node: AccessibilityNodeInfo, rect: Rect): String =
-    "${node.className}|${node.text}|${node.contentDescription}|" +
+internal fun nodeSignature(node: AccessibilityNodeInfo, rect: Rect): String {
+    val text = if (node.isPassword) "***" else node.text?.toString()
+    return "${node.className}|$text|${node.contentDescription}|" +
         "${node.isSelected}|${node.isChecked}|" +
         "${rect.left},${rect.top},${rect.right},${rect.bottom}"
+}
 
 internal fun defaultFilter(n: AccessibilityNodeInfo, depth: Int): Boolean {
     if (!n.isVisibleToUser) return false
     if (n.isClickable || n.isScrollable || n.isEditable) return true
     val text = n.text?.toString().orEmpty()
     val cd = n.contentDescription?.toString().orEmpty()
-    return text.isNotEmpty() || cd.isNotEmpty()
+    // An empty input has neither text nor a description; its hint is the only thing that says
+    // what it is for, and dropping it leaves the model staring at a blank EditText.
+    return text.isNotEmpty() || cd.isNotEmpty() || !n.hintText.isNullOrEmpty()
 }
 
 /**
@@ -130,7 +184,7 @@ fun readWindowTreeTool(
     streamer: InteractiveToolStreamer = InteractiveToolStreamer.NoOp,
 ): Tool = Tool(
     name = "read_window_tree",
-    description = "Snapshot of the active window's a11y node tree. Default filters to visible nodes that are clickable / scrollable / editable / have text or content_description. verbose=true skips the filter (use sparingly). max_nodes caps result (default 300, max 2000). package_name optionally restricts + errors if the foreground app doesn't match. display_id captures the window tree of a virtual display (requires API 33+; pass the display_id returned by virtual_display_create). Every node carries a node_id you can pass directly to click_node / set_text (preferred over by/value or coordinates) and a depth: the node's depth in the full tree, where a jump means intermediate containers were filtered out — use it to tell which row, card or group a control belongs to. Node ids are re-attached after the tree shifts: a click on an id whose index moved still lands and reports healed_from. The result includes screen_state identifying the current surface (package, shade_open, ime_visible, display size) and tree_hash. Re-reading a screen that did not move answers {unchanged:true} instead of the whole tree again — pass full=true if you really need the nodes. diff=true returns only the nodes that appeared / disappeared since your previous read: much cheaper after an action.",
+    description = "Snapshot of the active window's a11y node tree. Default filters to visible nodes that are clickable / scrollable / editable / have text, content_description or a hint. verbose=true skips the filter (use sparingly). max_nodes caps result (default 300, max 2000). package_name errors when the foreground app does not match. display_id reads a virtual display (API 33+; pass the id from virtual_display_create). `nodes` is a list of records whose fields are separated by a TAB, in this order: node_id@depth, flags, bounds, class, text, desc, hint, view_id. flags letters: c=clickable l=long-clickable s=scrollable e=editable S=selected K=checked f=focused P=password d=disabled; password text is always ***. depth is the node's depth in the full tree, so a jump means containers were filtered out — use it to tell which row, card or group a control belongs to. The first field is the node_id for click_node / set_text; it survives a tree shift, and the result reports healed_from when the id had moved. The result also carries screen_state (package, shade_open, ime_visible, display size) and tree_hash. Re-reading an unmoved screen answers {unchanged:true} instead of the whole tree — pass full=true to force it. diff=true returns only the nodes that appeared / disappeared since your previous read.",
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {
@@ -231,7 +285,7 @@ fun readWindowTreeTool(
                     put("nodes", buildJsonArray { })
                 }
             }
-            val nodes = mutableListOf<JsonObject>()
+            val nodes = mutableListOf<String>()
             val signatures = mutableListOf<String>()
             // Remember what each emitted node *was*, so click_node can re-attach its id after the
             // tree shifted instead of asking for a fresh read.
@@ -243,7 +297,7 @@ fun readWindowTreeTool(
                 cap = maxNodes,
                 emit = { n, depth, idx ->
                     n.getBoundsInScreen(rect)
-                    nodes.add(nodeToJson(n, root.windowId, idx, rect, depth))
+                    nodes.add(nodeToLine(n, root.windowId, idx, rect, depth))
                     signatures.add(nodeSignature(n, rect))
                     identities["${root.windowId}:$idx"] = nodeIdentity(n)
                 }

@@ -12,6 +12,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -57,9 +58,10 @@ internal fun imeVisible(windows: List<SurfaceFacts>): Boolean =
     windows.any { it.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD }
 
 /** Parses the "windowId:traversalIndex" node_id emitted by read_window_tree.
- *  Traversal indices are 1-based (the service counts nodes from 1). */
+ *  Traversal indices are 1-based (the service counts nodes from 1).
+ *  Node records carry the depth as a suffix (`12:34@3`); a bare id is accepted too. */
 internal fun parseNodeId(raw: String): Pair<Int, Int>? {
-    val parts = raw.split(":")
+    val parts = raw.substringBefore('@').split(":")
     if (parts.size != 2) return null
     val windowId = parts[0].toIntOrNull() ?: return null
     val traversalIndex = parts[1].toIntOrNull() ?: return null
@@ -153,7 +155,7 @@ internal class TreeSnapshot(
     val signatures: List<String>,
     /** [nodeIdentity] per emitted node, in the same order as [signatures]. */
     val identities: List<String>,
-    val added: List<JsonObject> = emptyList(),
+    val added: List<String> = emptyList(),
     val addedTruncated: Boolean = false,
 )
 
@@ -175,7 +177,7 @@ internal fun treeSnapshot(
     val r = root ?: svc.rootInActiveWindow ?: return null
     val parts = ArrayList<String>(256)
     val ids = ArrayList<String>(256)
-    val added = ArrayList<JsonObject>(if (baseline == null) 0 else ADDED_NODE_CAP)
+    val added = ArrayList<String>(if (baseline == null) 0 else ADDED_NODE_CAP)
     var addedTruncated = false
     val rect = Rect()
     val windowId = r.windowId
@@ -190,7 +192,7 @@ internal fun treeSnapshot(
             ids.add(identity)
             if (baseline != null && identity !in baseline) {
                 if (added.size < ADDED_NODE_CAP) {
-                    added.add(nodeToJson(n, windowId, idx, rect, depth))
+                    added.add(nodeToLine(n, windowId, idx, rect, depth))
                 } else {
                     addedTruncated = true
                 }
@@ -248,7 +250,7 @@ internal fun screenStateJson(
     screenChanged: Boolean?,
     settleTimedOut: Boolean = false,
     root: AccessibilityNodeInfo? = null,
-    newNodes: List<JsonObject> = emptyList(),
+    newNodes: List<String> = emptyList(),
     newNodesTruncated: Boolean = false,
 ): JsonObject {
     val activeRoot = root ?: (try { svc.rootInActiveWindow } catch (t: Throwable) { null })
