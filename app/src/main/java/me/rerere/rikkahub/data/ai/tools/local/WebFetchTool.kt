@@ -124,6 +124,8 @@ internal fun buildExtractEnvelope(
         page.siteName?.let { put("site_name", it) }
         page.description?.let { put("description", it) }
         page.language?.let { put("language", it) }
+        page.author?.let { put("author", it) }
+        page.publishedAt?.let { put("published_at", it) }
         if (mode == FetchExtract.LINKS) {
             put("links", buildJsonArray {
                 page.links.forEach { link ->
@@ -165,7 +167,8 @@ fun webFetchTool(client: OkHttpClient): Tool = Tool(
         pass next_start_index back as start_index to continue. method is GET (default), POST, PUT,
         PATCH, DELETE or HEAD. Response headers are omitted unless include_headers=true. Private,
         loopback and link-local addresses are refused. Returns {status, ok, final_url, extract_mode, title,
-        text, truncated, next_start_index} or {error, detail, recovery}.
+        site_name, author, published_at, text, truncated, next_start_index} or {error, detail, recovery}.
+        author and published_at appear only when the page declares them.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(

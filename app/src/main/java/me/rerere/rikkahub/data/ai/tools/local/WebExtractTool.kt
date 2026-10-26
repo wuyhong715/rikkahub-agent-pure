@@ -31,8 +31,10 @@ fun webExtractTool(client: OkHttpClient): Tool = Tool(
         next_start_index back as start_index to continue reading. Use this instead of
         web_fetch when you want to read a page rather than inspect its markup. Pages that
         build their content with JavaScript may return empty_extraction, use the browser
-        tools for those. Returns {status, final_url, title, text, truncated,
-        next_start_index} or {error, detail, recovery}.
+        tools for those. Returns {status, final_url, title, site_name, author, published_at,
+        text, truncated, next_start_index} or {error, detail, recovery}; author and
+        published_at appear only when the page declares them, and a page that declares no
+        date is a weak source for a current claim.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
