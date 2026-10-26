@@ -48,6 +48,37 @@ class WebExtractorTest {
     }
 
     @Test
+    fun `metadata mode reads the declared author and publication time`() {
+        val html = """
+            <html><head>
+              <meta property="article:published_time" content="2026-10-01T08:30:00Z">
+              <meta name="author" content="Ada Lovelace">
+            </head><body><p>Body</p></body></html>
+        """.trimIndent()
+        val page = WebExtractor.extract(html, "https://example.com/p", ExtractMode.METADATA, 10_000, 0)
+
+        assertEquals("Ada Lovelace", page.author)
+        assertEquals("2026-10-01T08:30:00Z", page.publishedAt)
+    }
+
+    @Test
+    fun `publication time falls back to json-ld and stays null when the page declares none`() {
+        val jsonLd = """
+            <html><head><script type="application/ld+json">
+            {"@type":"NewsArticle","datePublished":"2026-09-30T12:00:00+08:00"}
+            </script></head><body><p>Body</p></body></html>
+        """.trimIndent()
+        val dated = WebExtractor.extract(jsonLd, "https://example.com/p", ExtractMode.METADATA, 10_000, 0)
+        assertEquals("2026-09-30T12:00:00+08:00", dated.publishedAt)
+
+        // A page without a date must report null, not a guess — that null is the signal the
+        // caller uses to downgrade the source.
+        val undated = WebExtractor.extract(articleHtml, "https://example.com/p", ExtractMode.METADATA, 10_000, 0)
+        assertNull(undated.publishedAt)
+        assertNull(undated.author)
+    }
+
+    @Test
     fun `metadata mode reads title description and site name`() {
         val page = WebExtractor.extract(articleHtml, "https://example.com/p", ExtractMode.METADATA, 10_000, 0)
 

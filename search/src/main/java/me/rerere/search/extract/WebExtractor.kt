@@ -29,6 +29,10 @@ data class ExtractedPage(
     val siteName: String? = null,
     val description: String? = null,
     val language: String? = null,
+    /** Byline the page declares, when it declares one. */
+    val author: String? = null,
+    /** Publication time as declared by the page (ISO-8601 in practice), never inferred. */
+    val publishedAt: String? = null,
     val text: String = "",
     val links: List<ExtractedLink> = emptyList(),
     val truncated: Boolean = false,
@@ -55,6 +59,20 @@ object WebExtractor {
 
     /** Block elements whose boundaries must survive as paragraph breaks. */
     private const val BLOCK_SELECTOR = "h1, h2, h3, h4, h5, h6, p, li, blockquote, pre, tr, dd, dt"
+
+    /** Where a page usually declares when it was published, in priority order. */
+    private val PUBLISHED_SELECTORS = listOf(
+        "meta[property=article:published_time]",
+        "meta[property=og:article:published_time]",
+        "meta[name=date]",
+        "meta[name=pubdate]",
+        "meta[name=publishdate]",
+        "meta[itemprop=datePublished]",
+        "time[datetime]",
+    )
+
+    /** `"datePublished":"2026-…"` inside a JSON-LD block; the selector cannot reach it. */
+    private val JSON_LD_DATE = Regex("\"datePublished\"\\s*:\\s*\"([^\"]{4,64})\"")
 
     private val POSITIVE = Regex(
         "article|body|content|entry|main|page|post|story|text|blog",
@@ -129,7 +147,26 @@ object WebExtractor {
         description = doc.selectFirst("meta[name=description]")?.attr("content")?.ifBlank { null }
             ?: doc.selectFirst("meta[property=og:description]")?.attr("content")?.ifBlank { null },
         language = doc.selectFirst("html")?.attr("lang")?.ifBlank { null },
+        author = doc.selectFirst("meta[name=author]")?.attr("content")?.ifBlank { null }
+            ?: doc.selectFirst("meta[property=article:author]")?.attr("content")?.ifBlank { null },
+        publishedAt = publishedTime(doc),
     )
+
+    /**
+     * The page's own publication time, from the first tag that declares one. Returned as found
+     * (ISO-8601 in practice) rather than parsed into an instant: a timezone guess would be worse
+     * than the raw string, and the caller only needs "is there one, and roughly how old".
+     */
+    private fun publishedTime(doc: Document): String? {
+        val declared = PUBLISHED_SELECTORS.firstNotNullOfOrNull { selector ->
+            val element = doc.selectFirst(selector) ?: return@firstNotNullOfOrNull null
+            (element.attr("content").ifBlank { element.attr("datetime") }).ifBlank { null }
+        }
+        if (declared != null) return declared
+        // JSON-LD is common on news sites and selectors cannot reach into a script body; one
+        // narrow regex beats pulling a JSON parser into this module for a single field.
+        return JSON_LD_DATE.find(doc.html())?.groupValues?.get(1)?.ifBlank { null }
+    }
 
     /**
      * Pick the container most likely to hold the article. Score is text length discounted by

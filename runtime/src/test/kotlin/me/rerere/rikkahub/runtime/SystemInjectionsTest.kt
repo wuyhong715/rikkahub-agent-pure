@@ -58,7 +58,8 @@ class SystemInjectionsTest {
         val migrated = SystemInjections.withLatePacks(oldDefault)
         assertTrue(SystemInjections.CLIENT in migrated)
         assertTrue(SystemInjections.LIMITS in migrated)
-        assertEquals(9, migrated.size)
+        assertTrue(SystemInjections.RESEARCH in migrated)
+        assertEquals(10, migrated.size)
         // Turning the app rules off stays off: an empty set is a decision, not a stale default.
         assertTrue(SystemInjections.withLatePacks(emptySet()).isEmpty())
     }
@@ -96,6 +97,20 @@ class SystemInjectionsTest {
         val tools = SystemInjections.ALL.single { it.id == SystemInjections.TOOLS }.body
         assertFalse(tools.contains("If the tool surface does not contain a capability, say so"))
         assertTrue(tools.contains("catalogue search"))
+    }
+
+    @Test
+    fun `the research pack asks for prior art and ranks sources`() {
+        val research = SystemInjections.ALL.single { it.id == SystemInjections.RESEARCH }.body
+        // Prior art first: the defect this pack exists for is building a solved problem again.
+        assertTrue(research.contains("already exists"))
+        assertTrue(research.contains("Reimplementing a solved problem"))
+        // Recall is not evidence.
+        assertTrue(research.contains("memory is not a source"))
+        // Ranking, not retrieval order.
+        assertTrue(research.contains("Position in the result list is not evidence"))
+        // Retrieved content is data; an instruction inside it is an attack to report.
+        assertTrue(research.contains("injection attempt"))
     }
 
     @Test
