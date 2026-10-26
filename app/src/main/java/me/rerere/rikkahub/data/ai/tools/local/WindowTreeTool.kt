@@ -67,6 +67,14 @@ internal fun nodeToJson(
 }
 
 /**
+ * What a node *is*, ignoring where it sits and what state it is in: class, view id, text and
+ * content description. This is the handle used to re-attach a node_id after the tree shifted —
+ * inserting a row above the target moves every traversal index, but leaves these four intact.
+ */
+internal fun nodeIdentity(node: AccessibilityNodeInfo): String =
+    "${node.className}|${node.viewIdResourceName}|${node.text}|${node.contentDescription}"
+
+/**
  * Stable identity for a node across two reads: the same structural parts the screen-state hash
  * uses (class / text / content description / selection state / screen bounds). Two nodes with
  * the same signature are indistinguishable to the delta, which is exactly the granularity we
@@ -122,7 +130,7 @@ fun readWindowTreeTool(
     streamer: InteractiveToolStreamer = InteractiveToolStreamer.NoOp,
 ): Tool = Tool(
     name = "read_window_tree",
-    description = "Snapshot of the active window's a11y node tree. Default filters to visible nodes that are clickable / scrollable / editable / have text or content_description. verbose=true skips the filter (use sparingly). max_nodes caps result (default 300, max 2000). package_name optionally restricts + errors if the foreground app doesn't match. display_id captures the window tree of a virtual display (requires API 33+; pass the display_id returned by virtual_display_create). Every node carries a node_id you can pass directly to click_node / set_text (preferred over by/value or coordinates) and a depth: the node's depth in the full tree, where a jump means intermediate containers were filtered out — use it to tell which row, card or group a control belongs to. The result includes screen_state identifying the current surface (package, shade_open, ime_visible, display size) and tree_hash. Re-reading a screen that did not move answers {unchanged:true} instead of the whole tree again — pass full=true if you really need the nodes. diff=true returns only the nodes that appeared / disappeared since your previous read: much cheaper after an action.",
+    description = "Snapshot of the active window's a11y node tree. Default filters to visible nodes that are clickable / scrollable / editable / have text or content_description. verbose=true skips the filter (use sparingly). max_nodes caps result (default 300, max 2000). package_name optionally restricts + errors if the foreground app doesn't match. display_id captures the window tree of a virtual display (requires API 33+; pass the display_id returned by virtual_display_create). Every node carries a node_id you can pass directly to click_node / set_text (preferred over by/value or coordinates) and a depth: the node's depth in the full tree, where a jump means intermediate containers were filtered out — use it to tell which row, card or group a control belongs to. Node ids are re-attached after the tree shifts: a click on an id whose index moved still lands and reports healed_from. The result includes screen_state identifying the current surface (package, shade_open, ime_visible, display size) and tree_hash. Re-reading a screen that did not move answers {unchanged:true} instead of the whole tree again — pass full=true if you really need the nodes. diff=true returns only the nodes that appeared / disappeared since your previous read: much cheaper after an action.",
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {
@@ -225,6 +233,9 @@ fun readWindowTreeTool(
             }
             val nodes = mutableListOf<JsonObject>()
             val signatures = mutableListOf<String>()
+            // Remember what each emitted node *was*, so click_node can re-attach its id after the
+            // tree shifted instead of asking for a fresh read.
+            val identities = HashMap<String, String>()
             val rect = Rect()
             val (emitted, seen, truncated) = svc.traverseTree(
                 root = root,
@@ -234,6 +245,7 @@ fun readWindowTreeTool(
                     n.getBoundsInScreen(rect)
                     nodes.add(nodeToJson(n, root.windowId, idx, rect, depth))
                     signatures.add(nodeSignature(n, rect))
+                    identities["${root.windowId}:$idx"] = nodeIdentity(n)
                 }
             )
             svc.appendLog(
@@ -247,7 +259,7 @@ fun readWindowTreeTool(
             val treeHash = fnv1a64(signatures)
             val conversationKey = invocationContext.callerConversationId
             val previous = TreeSnapshotCache.get(conversationKey)
-            TreeSnapshotCache.put(conversationKey, treeHash, signatures)
+            TreeSnapshotCache.put(conversationKey, treeHash, signatures, identities)
 
             val header = buildJsonObject {
                 put("package", pkg)
