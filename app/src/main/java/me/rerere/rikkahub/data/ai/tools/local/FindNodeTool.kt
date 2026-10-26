@@ -205,10 +205,11 @@ fun findNodeTool(
     description = """
         Find accessibility nodes in the active window matching a selector. by: text |
         content_description | view_id_resource_name. Returns {matches: [...]} with at most 50
-        node summaries. Use read_window_tree first to see what's available, then this for
-        targeted lookups. Matching runs over the same traversal as read_window_tree, so
-        returned node_ids agree across both tools; truncated=true means more than 50 nodes
-        matched.
+        node records, in the same tab-separated form read_window_tree uses (node_id@depth, flags,
+        bounds, class, text, desc, hint, view_id); the first field is a node_id you can pass
+        straight to click_node / set_text. Use read_window_tree first to see what's available, then
+        this for targeted lookups. Matching runs over the same traversal as read_window_tree, so
+        returned node_ids agree across both tools; truncated=true means more than 50 nodes matched.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
@@ -287,7 +288,7 @@ fun findNodeTool(
                     matches.forEach { m ->
                         val rect = Rect()
                         m.node.getBoundsInScreen(rect)
-                        add(nodeToJson(m.node, root.windowId, m.traversalIndex, rect, m.depth))
+                        add(nodeToLine(m.node, root.windowId, m.traversalIndex, rect, m.depth))
                     }
                 })
                 if (truncated) put("truncated", true)
@@ -329,7 +330,7 @@ fun clickNodeTool(
             properties = buildJsonObject {
                 put("node_id", buildJsonObject {
                     put("type", "string")
-                    put("description", "Node handle from read_window_tree/find_node (\"windowId:index\"). Preferred over by/value; on a stale id you get stale_node_id and should re-read the tree.")
+                    put("description", "Node handle from read_window_tree/find_node, \"windowId:index\" or \"windowId:index@depth\". Preferred over by/value; an id whose index moved is re-found automatically and reports healed_from, and only a node that is really gone returns stale_node_id.")
                 })
                 put("by", buildJsonObject {
                     put("type", "string")
@@ -355,7 +356,7 @@ fun clickNodeTool(
             return@Tool listOf(
                 UIMessagePart.Text(
                     buildJsonObject {
-                        put("error", "node_id must look like \"windowId:index\" as returned by read_window_tree")
+                        put("error", "node_id must look like \"windowId:index\" or \"windowId:index@depth\" as returned by read_window_tree")
                     }.toString()
                 )
             )
@@ -542,7 +543,7 @@ fun setTextTool(
             properties = buildJsonObject {
                 put("node_id", buildJsonObject {
                     put("type", "string")
-                    put("description", "Node handle from read_window_tree/find_node (\"windowId:index\"). Preferred over by/value; on a stale id you get stale_node_id and should re-read the tree.")
+                    put("description", "Node handle from read_window_tree/find_node, \"windowId:index\" or \"windowId:index@depth\". Preferred over by/value; an id whose index moved is re-found automatically and reports healed_from, and only a node that is really gone returns stale_node_id.")
                 })
                 put("by", buildJsonObject {
                     put("type", "string")
@@ -588,7 +589,7 @@ fun setTextTool(
             return@Tool listOf(
                 UIMessagePart.Text(
                     buildJsonObject {
-                        put("error", "node_id must look like \"windowId:index\" as returned by read_window_tree")
+                        put("error", "node_id must look like \"windowId:index\" or \"windowId:index@depth\" as returned by read_window_tree")
                     }.toString()
                 )
             )
