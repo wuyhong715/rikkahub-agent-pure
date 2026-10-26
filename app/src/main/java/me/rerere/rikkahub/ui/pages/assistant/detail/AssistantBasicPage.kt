@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
@@ -235,6 +236,30 @@ internal fun AssistantBasicContent(
                         workspace?.name ?: stringResource(R.string.workspace_no_binding)
                     },
                 )
+
+                // 「所有工作区」不是换一个绑定，而是给上主工作区之后再开一扇门：工具多一个
+                // 可选的 workspace 参数，冷记忆 / 文件库仍然只认上面选中的那一个。
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(stringResource(R.string.assistant_page_workspace_all))
+                        Text(
+                            text = stringResource(R.string.assistant_page_workspace_all_desc),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = assistant.workspaceAll,
+                        onCheckedChange = { enabled ->
+                            onUpdate(assistant.copy(workspaceAll = enabled))
+                        },
+                    )
+                }
             }
 
             HorizontalDivider()

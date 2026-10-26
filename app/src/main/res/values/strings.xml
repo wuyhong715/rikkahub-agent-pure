@@ -3466,4 +3466,6 @@ HARDLINE protections still apply: rm -rf /, mkfs, shutdown / reboot, dd to block
   <string name="instances_perm_notifications">Notification access</string>
   <string name="instances_perm_granted">Granted</string>
   <string name="instances_perm_missing">Not granted</string>
+  <string name="assistant_page_workspace_all">Allow all workspaces</string>
+  <string name="assistant_page_workspace_all_desc">Workspace tools get an optional workspace argument, so this assistant can read, write and run commands in any Linux workspace. Cold memory and the file library still use the selected workspace above.</string>
 </resources>

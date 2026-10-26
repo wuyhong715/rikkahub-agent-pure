@@ -31,7 +31,10 @@ class WorkspaceInstanceAdapter(
                 .mapNotNull { it.workspaceId?.toString() }
                 .groupingBy { it }
                 .eachCount()
-            workspaces.map { entity -> toInstance(entity, bound[entity.id] ?: 0, lastProbeAt = null) }
+            val wildcard = settings.assistants.count { it.workspaceAll }
+            workspaces.map { entity ->
+                toInstance(entity, bound[entity.id] ?: 0, wildcard, lastProbeAt = null)
+            }
         }
 
     override suspend fun probe(id: InstanceId?): List<RuntimeInstance> {
@@ -42,10 +45,11 @@ class WorkspaceInstanceAdapter(
             .groupingBy { it }
             .eachCount()
         val now = clock()
+        val wildcard = settings.assistants.count { it.workspaceAll }
         return workspaces
             .filter { id == null || it.id == id.key }
             .map { entity ->
-                val observed = toInstance(entity, bound[entity.id] ?: 0, lastProbeAt = now)
+                val observed = toInstance(entity, bound[entity.id] ?: 0, wildcard, lastProbeAt = now)
                 // 只有状态已经是 READY 才值得花一次 proot 启动去验证；DISABLED/BROKEN 的结论
                 // 不需要跑命令就知道。这条深探测只在用户点「重新检测」时走到（注册表 TTL 保护）。
                 if (observed.isReady) deepCheck(observed) else observed
@@ -104,6 +108,7 @@ class WorkspaceInstanceAdapter(
     private fun toInstance(
         entity: WorkspaceEntity,
         boundAssistants: Int,
+        wildcardAssistants: Int,
         lastProbeAt: Long?,
     ): RuntimeInstance {
         val state = InstanceStateMappers.workspace(entity.shellStatus)
@@ -112,7 +117,10 @@ class WorkspaceInstanceAdapter(
         } else {
             emptySet()
         }
-        val binding = if (boundAssistants > 0) "被 $boundAssistants 个助手绑定" else "未绑定助手"
+        val binding = buildString {
+            append(if (boundAssistants > 0) "被 $boundAssistants 个助手绑定" else "未绑定助手")
+            if (wildcardAssistants > 0) append(" · $wildcardAssistants 个助手可用全部")
+        }
         return RuntimeInstance(
             id = InstanceId(InstanceKind.WORKSPACE, entity.id),
             displayName = entity.name,
