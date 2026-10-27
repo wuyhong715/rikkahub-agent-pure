@@ -461,6 +461,10 @@ fun ChatDrawerContent(
                                 }
                             )
 
+                            // 助手身份是“当前上下文”，下面一行是全局导航/动作。一条发丝线把两者
+                            // 切开，否则助手卡和五个月亮形入口会糊成同一排按钮。
+                            DrawerHairline(modifier = Modifier.padding(horizontal = 6.dp))
+
                             Row(
                                 horizontalArrangement = Arrangement.SpaceAround,
                                 verticalAlignment = Alignment.CenterVertically,

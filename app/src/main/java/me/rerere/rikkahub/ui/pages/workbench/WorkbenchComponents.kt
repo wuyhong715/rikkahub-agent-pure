@@ -61,6 +61,9 @@ import me.rerere.rikkahub.data.mission.executionStateEnum
 import me.rerere.rikkahub.data.mission.statusEnum
 import me.rerere.rikkahub.ui.components.richtext.DiffAddedColor
 import me.rerere.rikkahub.ui.components.richtext.DiffRemovedColor
+import me.rerere.rikkahub.ui.theme.GroupCard
+import me.rerere.rikkahub.ui.theme.Hairline
+import me.rerere.rikkahub.ui.theme.Spacing
 
 @Composable
 fun missionStatusLabel(status: MissionStatus): String = stringResource(
@@ -73,15 +76,39 @@ fun missionStatusLabel(status: MissionStatus): String = stringResource(
     }
 )
 
+/**
+ * 语气 → 颜色对（容器色 / 其上文字色）。药丸用这一对。
+ *
+ * 注意这里**不再按 MissionStatus 直接分支**：分支已经在 [statusTone] 里做过一次，
+ * 这里只负责“语气长什么样”。状态增删时只改一处，不会出现两个状态共用一个颜色。
+ */
 @Composable
-fun missionStatusColors(status: MissionStatus): Pair<Color, Color> {
+internal fun missionStatusColors(status: MissionStatus): Pair<Color, Color> {
     val scheme = MaterialTheme.colorScheme
-    return when (status) {
-        MissionStatus.ACTIVE -> scheme.primaryContainer to scheme.onPrimaryContainer
-        MissionStatus.BLOCKED -> scheme.errorContainer to scheme.onErrorContainer
-        MissionStatus.REVIEW -> scheme.tertiaryContainer to scheme.onTertiaryContainer
-        MissionStatus.DONE -> scheme.secondaryContainer to scheme.onSecondaryContainer
-        MissionStatus.ARCHIVED -> scheme.surfaceVariant to scheme.onSurfaceVariant
+    return when (statusTone(status)) {
+        MissionStatusTone.PROGRESS -> scheme.primaryContainer to scheme.onPrimaryContainer
+        MissionStatusTone.ATTENTION -> scheme.errorContainer to scheme.onErrorContainer
+        MissionStatusTone.REVIEW -> scheme.tertiaryContainer to scheme.onTertiaryContainer
+        MissionStatusTone.COMPLETE -> scheme.secondaryContainer to scheme.onSecondaryContainer
+        MissionStatusTone.MUTED -> scheme.surfaceVariant to scheme.onSurfaceVariant
+    }
+}
+
+/**
+ * 实心强调色：给左侧色条和进度条。
+ *
+ * 容器色画细线太淡（尤其浅色主题），而实心色是这套主题里本来就有的“饱和档”：
+ * primary / error / tertiary / secondary / outline，跟着动态取色一起变，不硬编码。
+ */
+@Composable
+internal fun missionStatusAccent(status: MissionStatus): Color {
+    val scheme = MaterialTheme.colorScheme
+    return when (statusTone(status)) {
+        MissionStatusTone.PROGRESS -> scheme.primary
+        MissionStatusTone.ATTENTION -> scheme.error
+        MissionStatusTone.REVIEW -> scheme.tertiary
+        MissionStatusTone.COMPLETE -> scheme.secondary
+        MissionStatusTone.MUTED -> scheme.outline
     }
 }
 
@@ -109,25 +136,24 @@ fun MissionCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val (statusColor, _) = missionStatusColors(mission.statusEnum)
+    val accent = missionStatusAccent(mission.statusEnum)
     val criteria = mission.acceptanceCriteria
     val checked = mission.acceptanceChecked
-    Surface(
+    val progress = MissionProgress.fraction(checked.size, criteria.size)
+    GroupCard(
         onClick = onClick,
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        tonalElevation = 1.dp,
     ) {
         Row(modifier = Modifier.height(IntrinsicSize.Min)) {
             Box(
                 modifier = Modifier
-                    .width(4.dp)
+                    .width(3.dp)
                     .fillMaxHeight()
-                    .background(statusColor)
+                    .background(accent)
             )
             Column(
-                modifier = Modifier.padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.padding(Spacing.md),
+                verticalArrangement = Arrangement.spacedBy(Spacing.sm),
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -171,7 +197,7 @@ fun MissionCard(
                     StatusPill(status = mission.statusEnum)
                 }
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.md),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     if (criteria.isNotEmpty()) {
@@ -198,15 +224,16 @@ fun MissionCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                if (criteria.isNotEmpty()) {
+                if (progress != null) {
                     // 长任务最想知道“走到哪了”。0/6 只是数字，配一条细进度线扫一眼就能读懂。
+                    // 颜色用实心 accent 而不是容器色：浅色主题下后者几乎和轨道同亮度，等于没画。
                     LinearProgressIndicator(
-                        progress = { checked.size.toFloat() / criteria.size },
+                        progress = { progress },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(4.dp)
                             .clip(RoundedCornerShape(2.dp)),
-                        color = statusColor,
+                        color = accent,
                         trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                         gapSize = 0.dp,
                         drawStopIndicator = {},
@@ -238,6 +265,108 @@ fun StatBlock(
             text = label,
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/**
+ * 工作台顶部的状态摘要 —— 三个数字，一条。
+ *
+ * 之前是三块 `headlineMedium`（28sp）大数字撑满一整张 Hero 卡（约 92dp 高），而它回答的
+ * 只是“几条在跑、几条等验收、今天完成几条”。28sp 的体量让这块摘要抢走了任务列表的注意力，
+ * 也把“真正要做的事”挤到了首屏之外；同时三个数字分别染成 primary/secondary/tertiary，
+ * 像一排装饰性霓虹，和任务卡片上的状态色语义打架。
+ *
+ * 现在：16sp 的数字 + 11sp 的说明，三格横排，用极淡的竖线分隔，整条约 60dp。
+ * 数字仍带语气色（和任务卡片的 accent 同源），但体量退到“信息”而不是“海报”。
+ *
+ * @param onOpenReview 待验收条数 > 0 时传跳转；为 null 时这一格不可点，说明文字也回到中性灰，
+ *   不会出现“看起来能点、点下去没反应”的假可点。
+ */
+@Composable
+fun StatStrip(
+    active: Int,
+    review: Int,
+    doneToday: Int,
+    onOpenReview: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+) {
+    GroupCard(modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            StatCell(
+                value = active.toString(),
+                label = stringResource(R.string.workbench_stat_active),
+                accent = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.weight(1f),
+            )
+            StatCellDivider()
+            StatCell(
+                value = review.toString(),
+                label = stringResource(R.string.workbench_stat_review),
+                accent = MaterialTheme.colorScheme.tertiary,
+                onClick = onOpenReview,
+                modifier = Modifier.weight(1f),
+            )
+            StatCellDivider()
+            StatCell(
+                value = doneToday.toString(),
+                label = stringResource(R.string.workbench_stat_done_today),
+                accent = MaterialTheme.colorScheme.secondary,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun StatCellDivider() {
+    Box(
+        modifier = Modifier
+            .width(1.dp)
+            .height(28.dp)
+            .background(
+                MaterialTheme.colorScheme.outlineVariant.copy(alpha = Hairline.DIVIDER_ALPHA)
+            )
+    )
+}
+
+@Composable
+private fun StatCell(
+    value: String,
+    label: String,
+    accent: Color,
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+) {
+    Column(
+        modifier = modifier
+            .heightIn(min = 48.dp)
+            .then(
+                if (onClick != null) {
+                    Modifier.clickable(onClick = onClick)
+                } else {
+                    Modifier
+                }
+            )
+            .padding(vertical = Spacing.sm),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleMedium,
+            color = accent,
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            // 只有真能点的时候才把说明文字染成强调色，否则一律中性灰。
+            color = if (onClick != null) accent else MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }

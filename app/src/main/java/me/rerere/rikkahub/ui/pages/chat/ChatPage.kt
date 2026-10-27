@@ -962,7 +962,11 @@ private fun TopBar(
                             usedTokens = usedTokens,
                             color = LocalContentColor.current.copy(0.65f),
                             style = MaterialTheme.typography.labelSmall.copy(
-                                fontSize = 8.sp,
+                                // 8sp 在任何系统字号下都读不出来（Material 的 labelSmall 是 11sp，
+                                // 也是正文的最小档）。这里回到 11sp，同时把行高压到 12sp，
+                                // 顶栏高度不会因此变高。
+                                fontSize = 11.sp,
+                                lineHeight = 12.sp,
                             ),
                         )
                     }
