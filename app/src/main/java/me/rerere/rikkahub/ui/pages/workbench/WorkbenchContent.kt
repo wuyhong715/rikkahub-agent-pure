@@ -1,9 +1,7 @@
 package me.rerere.rikkahub.ui.pages.workbench
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -36,6 +34,8 @@ import me.rerere.rikkahub.subagent.SubAgentRun
 import me.rerere.rikkahub.subagent.SubAgentStatus
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.context.LocalNavController
+import me.rerere.rikkahub.ui.theme.SectionHeader
+import me.rerere.rikkahub.ui.theme.Spacing
 
 @Composable
 fun WorkbenchContent(
@@ -56,57 +56,39 @@ fun WorkbenchContent(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+            .padding(vertical = Spacing.md),
+        verticalArrangement = Arrangement.spacedBy(Spacing.sm),
     ) {
-        // ② Hero stats
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp),
-            shape = RoundedCornerShape(16.dp),
-            tonalElevation = 1.dp,
-        ) {
-            Row(modifier = Modifier.fillMaxWidth()) {
-                StatBlock(
-                    value = activeMissions.size.toString(),
-                    label = stringResource(R.string.workbench_stat_active),
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.weight(1f),
-                )
-                Box(modifier = Modifier.weight(1f)) {
-                    StatBlock(
-                        value = reviewMissions.size.toString(),
-                        label = stringResource(R.string.workbench_stat_review),
-                        color = MaterialTheme.colorScheme.tertiary,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable(enabled = reviewMissions.isNotEmpty()) {
-                                onNavigateDetail(reviewMissions.first().id)
-                            },
-                    )
-                }
-                StatBlock(
-                    value = doneToday.toString(),
-                    label = stringResource(R.string.workbench_stat_done_today),
-                    color = MaterialTheme.colorScheme.secondary,
-                    modifier = Modifier.weight(1f),
-                )
-            }
+        // ② 状态摘要：一行三格，不再用大号统计卡占掉首屏
+        val reviewTarget = reviewMissions.firstOrNull()
+        val openReview: (() -> Unit)? = if (reviewTarget != null) {
+            { onNavigateDetail(reviewTarget.id) }
+        } else {
+            null
+        }
+        // 一条任务都没有时不要摆一排 0：空态本身就够说明问题了，三个 0 只是噪音。
+        if (activeMissions.isNotEmpty() || reviewMissions.isNotEmpty() || doneToday > 0) {
+            StatStrip(
+                active = activeMissions.size,
+                review = reviewMissions.size,
+                doneToday = doneToday,
+                onOpenReview = openReview,
+                modifier = Modifier.padding(horizontal = Spacing.lg),
+            )
         }
 
         // ③ Active sub-agents
         if (activeSubAgents.isNotEmpty()) {
-            Text(
-                text = stringResource(R.string.workbench_active_subagents),
-                style = MaterialTheme.typography.titleSmall,
-                modifier = Modifier.padding(horizontal = 16.dp),
+            SectionHeader(
+                title = stringResource(R.string.workbench_active_subagents),
+                modifier = Modifier.padding(horizontal = Spacing.lg),
+                topGap = Spacing.sectionGap,
             )
             Row(
                 modifier = Modifier
                     .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    .padding(horizontal = Spacing.lg),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
             ) {
                 activeSubAgents.forEach { run ->
                     SubAgentCard(run = run)
@@ -119,9 +101,9 @@ fun WorkbenchContent(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 24.dp),
+                    .padding(horizontal = Spacing.lg, vertical = Spacing.xl),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(Spacing.sm),
             ) {
                 Icon(
                     imageVector = HugeIcons.Rocket01,
@@ -145,44 +127,44 @@ fun WorkbenchContent(
             }
         } else {
             if (activeMissions.isNotEmpty()) {
-                Text(
-                    text = stringResource(R.string.workbench_section_active),
-                    style = MaterialTheme.typography.titleSmall,
-                    modifier = Modifier.padding(horizontal = 16.dp),
+                SectionHeader(
+                    title = stringResource(R.string.workbench_section_active),
+                    modifier = Modifier.padding(horizontal = Spacing.lg),
+                    topGap = Spacing.sectionGap,
                 )
                 activeMissions.forEach { mission ->
                     MissionCard(
                         mission = mission,
                         onClick = { onNavigateDetail(mission.id) },
-                        modifier = Modifier.padding(horizontal = 16.dp),
+                        modifier = Modifier.padding(horizontal = Spacing.lg),
                     )
                 }
             }
             if (reviewMissions.isNotEmpty()) {
-                Text(
-                    text = stringResource(R.string.workbench_section_review),
-                    style = MaterialTheme.typography.titleSmall,
-                    modifier = Modifier.padding(horizontal = 16.dp),
+                SectionHeader(
+                    title = stringResource(R.string.workbench_section_review),
+                    modifier = Modifier.padding(horizontal = Spacing.lg),
+                    topGap = Spacing.sectionGap,
                 )
                 reviewMissions.forEach { mission ->
                     MissionCard(
                         mission = mission,
                         onClick = { onNavigateDetail(mission.id) },
-                        modifier = Modifier.padding(horizontal = 16.dp),
+                        modifier = Modifier.padding(horizontal = Spacing.lg),
                     )
                 }
             }
             if (recentDone.isNotEmpty()) {
-                Text(
-                    text = stringResource(R.string.workbench_section_recent_done),
-                    style = MaterialTheme.typography.titleSmall,
-                    modifier = Modifier.padding(horizontal = 16.dp),
+                SectionHeader(
+                    title = stringResource(R.string.workbench_section_recent_done),
+                    modifier = Modifier.padding(horizontal = Spacing.lg),
+                    topGap = Spacing.sectionGap,
                 )
                 recentDone.forEach { mission ->
                     MissionCard(
                         mission = mission,
                         onClick = { onNavigateDetail(mission.id) },
-                        modifier = Modifier.padding(horizontal = 16.dp),
+                        modifier = Modifier.padding(horizontal = Spacing.lg),
                     )
                 }
             }
@@ -190,7 +172,7 @@ fun WorkbenchContent(
 
         // ⑥ Quick entries
         CardGroup(
-            modifier = Modifier.padding(horizontal = 16.dp),
+            modifier = Modifier.padding(horizontal = Spacing.lg),
             title = { Text(text = stringResource(R.string.workbench_quick_title)) },
         ) {
             item(

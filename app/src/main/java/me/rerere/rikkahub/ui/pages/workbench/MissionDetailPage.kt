@@ -51,6 +51,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -76,6 +77,7 @@ import me.rerere.hugeicons.stroke.StopCircle
 import me.rerere.hugeicons.stroke.Refresh03
 import me.rerere.hugeicons.stroke.Tick02
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.mission.Artifact
 import me.rerere.rikkahub.data.mission.MissionEntity
 import me.rerere.rikkahub.data.mission.MissionExecutionState
@@ -102,6 +104,10 @@ import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.theme.CustomColors
+import me.rerere.rikkahub.ui.theme.GroupCard
+import me.rerere.rikkahub.ui.theme.Radius
+import me.rerere.rikkahub.ui.theme.SectionHeader
+import me.rerere.rikkahub.ui.theme.Spacing
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
 
@@ -251,14 +257,10 @@ fun MissionDetailPage(missionId: String) {
             // ① Hero card
             item {
                 mission?.let { m ->
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
-                        tonalElevation = 1.dp,
-                    ) {
+                    GroupCard(modifier = Modifier.fillMaxWidth()) {
                         Column(
-                            modifier = Modifier.padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.padding(Spacing.lg),
+                            verticalArrangement = Arrangement.spacedBy(Spacing.sm),
                         ) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -271,6 +273,41 @@ fun MissionDetailPage(missionId: String) {
                                     modifier = Modifier.weight(1f),
                                 )
                                 StatusPill(status = m.statusEnum)
+                            }
+                            // 首屏先回答“走到哪了”。验收进度原本只在下面第二章卡片里，
+                            // 描述一长就得滚屏；这里在标题下方给一条 4dp 的细线 + 计数。
+                            val heroCriteria = m.acceptanceCriteria
+                            val heroProgress = MissionProgress.fraction(
+                                m.acceptanceChecked.size,
+                                heroCriteria.size,
+                            )
+                            if (heroProgress != null) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                                ) {
+                                    LinearProgressIndicator(
+                                        progress = { heroProgress },
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(4.dp)
+                                            .clip(RoundedCornerShape(2.dp)),
+                                        color = missionStatusAccent(m.statusEnum),
+                                        trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                        gapSize = 0.dp,
+                                        drawStopIndicator = {},
+                                    )
+                                    Text(
+                                        text = stringResource(
+                                            R.string.mission_acceptance_progress,
+                                            m.acceptanceChecked.size,
+                                            heroCriteria.size,
+                                        ),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
                             }
                             if (m.description.isNotBlank()) {
                                 // 任务描述在 Moxw 里常常就是整段任务提示词（几千字），展开渲染会把
@@ -329,10 +366,22 @@ fun MissionDetailPage(missionId: String) {
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
-                            if (m.conversationId != null) {
+                            // 这一行原本是“图标 + 主色文字”却不可点：给了链接的外观却没有链接的行为。
+                            // 要么给行为要么别给外观——这里给行为：打开绑定的那个对话。
+                            val boundConversationId = m.conversationId
+                            if (boundConversationId != null) {
                                 Row(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(Radius.chip))
+                                        .clickable {
+                                            navController.navigate(Screen.Chat(id = boundConversationId))
+                                        }
+                                        // 变成链接之后，触控高度就得够：单行 16dp 图标 + 11sp 文字只有
+                                        // 约 20dp 高，撑到 48dp 才算一个能点的目标。
+                                        .heightIn(min = 48.dp)
+                                        .padding(vertical = Spacing.xs),
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
                                 ) {
                                     Icon(
                                         imageVector = HugeIcons.MessageAdd01,
@@ -455,14 +504,10 @@ fun MissionDetailPage(missionId: String) {
                 if (criteria.isNotEmpty()) {
                     item {
                         val checked = m.acceptanceChecked
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(16.dp),
-                            tonalElevation = 1.dp,
-                        ) {
+                        GroupCard(modifier = Modifier.fillMaxWidth()) {
                             Column(
-                                modifier = Modifier.padding(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.padding(Spacing.lg),
+                                verticalArrangement = Arrangement.spacedBy(Spacing.sm),
                             ) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
@@ -553,9 +598,9 @@ fun MissionDetailPage(missionId: String) {
             // ④ Artifacts (batch 1 — artifact library: open / share / expand)
             if (artifacts.isNotEmpty()) {
                 item {
-                    Text(
-                        text = stringResource(R.string.mission_artifacts_title),
-                        style = MaterialTheme.typography.titleSmall,
+                    SectionHeader(
+                        title = stringResource(R.string.mission_artifacts_title),
+                        topGap = Spacing.md,
                     )
                 }
                 // Keys are namespaced: an Artifact is a projection of an ARTIFACT event, so its
@@ -610,9 +655,9 @@ fun MissionDetailPage(missionId: String) {
             val timeline = events.sortedBy { it.createdAt }
             if (timeline.isNotEmpty()) {
                 item {
-                    Text(
-                        text = stringResource(R.string.mission_timeline_title),
-                        style = MaterialTheme.typography.titleSmall,
+                    SectionHeader(
+                        title = stringResource(R.string.mission_timeline_title),
+                        topGap = Spacing.md,
                     )
                 }
                 items(timeline, key = { "event:${it.id}" }) { event ->
