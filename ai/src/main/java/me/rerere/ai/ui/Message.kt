@@ -12,6 +12,22 @@ import kotlin.math.roundToInt
 import kotlin.time.Clock
 import kotlin.uuid.Uuid
 
+/**
+ * 一条**用户插话**（steer）的落点标记。
+ *
+ * 插话走 [me.rerere.rikkahub.runtime.tools.ConversationInjections] 的合成消息，在下一个模型
+ * 请求前被 drain；UI 上那行小字只描述「它会在什么时候被看到」，绝不表示「已经生效」：
+ * - [NEXT_STEP]：本轮还有下一次模型请求（任务轮 / 还有工具在跑），下一步就能看到。
+ * - [AFTER_TURN]：本回合可能不再请求模型，插话要等用户的下一条消息之前才 drain。
+ *
+ * 只用于展示，不参与模型请求的组装（模型看到的是注入的那段文本）。
+ */
+@Serializable
+enum class MessageInterject {
+    NEXT_STEP,
+    AFTER_TURN,
+}
+
 // 公共消息抽象, 具体的Provider实现会转换为API接口需要的DTO
 @Serializable
 data class UIMessage(
@@ -25,6 +41,8 @@ data class UIMessage(
     val modelId: Uuid? = null,
     val usage: TokenUsage? = null,
     val translation: String? = null,
+    // 用户插话的落点标记；null = 普通消息。随消息 JSON 持久化，旧数据缺省可读。
+    val interject: MessageInterject? = null,
     // 请求期间生成的内部消息；该标记仅在内存中使用
     @Transient
     val isSynthetic: Boolean = false,

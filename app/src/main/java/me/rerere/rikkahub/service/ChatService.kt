@@ -46,6 +46,7 @@ import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ProviderManager
 import me.rerere.ai.provider.TextGenerationParams
+import me.rerere.ai.ui.MessageInterject
 import me.rerere.ai.ui.ToolApprovalState
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
@@ -78,6 +79,7 @@ import me.rerere.rikkahub.data.ai.tools.AppPlaybookFile
 import me.rerere.rikkahub.data.ai.tools.HeadlessConversations
 import me.rerere.rikkahub.data.ai.tools.AppPlaybookRules
 import me.rerere.rikkahub.runtime.GenerationChunk
+import me.rerere.rikkahub.runtime.InterjectPolicy
 import me.rerere.rikkahub.runtime.GenerationLoop
 import me.rerere.rikkahub.runtime.LoopFact
 import me.rerere.rikkahub.data.ai.ModelRouter
@@ -1080,12 +1082,17 @@ class ChatService(
         dispatchNextQueuedMessage(conversationId)
     }
 
-    fun sendMessage(conversationId: Uuid, content: List<UIMessagePart>, answer: Boolean = true) {
+    fun sendMessage(
+        conversationId: Uuid,
+        content: List<UIMessagePart>,
+        answer: Boolean = true,
+        interject: MessageInterject? = null,
+    ) {
         if (content.isEmptyInputMessage()) return
         val session = getOrCreateSession(conversationId)
         synchronized(session) {
             if (session.messageQueue.state.value.messages.isEmpty()) session.messageQueue.resume()
-            session.messageQueue.enqueue(content, answer)
+            session.messageQueue.enqueue(content, answer, interject = interject)
             dispatchNextQueuedMessage(conversationId)
         }
     }
@@ -1094,35 +1101,49 @@ class ChatService(
      * 批 H — 运行中插话（steer）。
      *
      * 区别对待「排队」和「插话」：
-     * - 普通聊天里，生成中发的消息进 [MessageQueue]，等这一轮结束再当作新回合处理——符合预期。
-     * - **任务在跑**时，用户往往是想纠正方向（“别用 A 方案了，改用 B”），等这一轮结束再说
+     * - **正在生成**时，用户往往是想纠正方向（“别用 A 方案了，改用 B”），等这一轮结束再说
      *   就晚了：模型可能已经把错的方向做完了。这时把话通过 [ConversationInjections] 塞进
      *   本轮的下一个模型请求（合成 user 消息，不落库、不渲染），模型下一步就能看到；
      *   同时用 `answer = false` 把这条消息补进会话记录，保证用户自己也能在transcript里找到它，
      *   而且不会再触发一次多余的生成。
+     * - 未在生成时（或带图片/文件）返回 false，调用方按普通发送/排队处理。
      *
-     * 只对任务会话生效：给普通聊天自动改成「插话」会让「排队等回复」这个既有语义消失。
+     * 批 I 起不再限定任务会话：普通对话里的打断同样有意义。规则抽在
+     * [me.rerere.rikkahub.runtime.InterjectPolicy]（纯函数，有单测）：有会话 + 正在生成 + 纯文本。
      *
-     * @return true = 已作为插话投递；false = 没有可插话的运行中任务，调用方应按普通发送处理。
+     * @return true = 已作为插话投递；false = 没有正在生成的会话，调用方应按普通发送处理。
      */
     fun steer(conversationId: Uuid, text: String): Boolean {
-        if (text.isBlank()) return false
-        val missionId = MissionSessions.missionIdFor(conversationId.toString()) ?: return false
-        val session = sessions[conversationId] ?: return false
-        if (!session.isGenerating) return false
+        val session = sessions[conversationId]
+        val plainText = text.trim()
+        if (!InterjectPolicy.canInterject(
+                hasSession = session != null,
+                isGenerating = session?.isGenerating == true,
+                plainText = plainText,
+            )
+        ) return false
+        val live = session ?: return false
+
+        val inMission = MissionSessions.missionIdFor(conversationId.toString()) != null
+        // 本轮还有工具没跑完 → 工具结果回来后必然还有一次模型请求，插话下一步就能看到；
+        // 否则（普通对话的纯文字回答）本回合可能不再请求模型，只能承诺「本回合结束后生效」。
+        val hasUnfinishedToolWork = live.state.value.currentMessages.any { message ->
+            message.parts.any { part -> part is UIMessagePart.Tool && (!part.isExecuted || part.isPending) }
+        }
+        val stage = InterjectPolicy.stage(inMission, hasUnfinishedToolWork)
 
         ConversationInjections.push(
             conversationId,
-            buildString {
-                appendLine("[用户插话 · 立即生效] 用户在你执行本轮任务的过程中补充了指令：")
-                appendLine(text.trim())
-                appendLine("从下一步开始按这个调整方向；已经完成且仍然有效的部分不要重做。")
-                appendLine("（这条指令已记录在会话里，本轮结束后仍然有效。）")
-            }.trimEnd(),
+            InterjectPolicy.injectionText(plainText, inMission),
         )
         // 补进 transcript：answer = false 只落消息、不再起一轮生成。
-        sendMessage(conversationId, listOf(UIMessagePart.Text(text.trim())), answer = false)
-        Log.i(TAG, "steer: injected into mission $missionId")
+        sendMessage(
+            conversationId = conversationId,
+            content = listOf(UIMessagePart.Text(plainText)),
+            answer = false,
+            interject = stage,
+        )
+        Log.i(TAG, "steer: injected into conversation $conversationId (mission=$inMission, stage=$stage)")
         return true
     }
 
@@ -1191,6 +1212,7 @@ class ChatService(
                     messageNodes = currentConversation.messageNodes + UIMessage(
                         role = MessageRole.USER,
                         parts = processedContent,
+                        interject = queued.interject,
                     ).toMessageNode(),
                 )
                 saveConversation(conversationId, withUser)

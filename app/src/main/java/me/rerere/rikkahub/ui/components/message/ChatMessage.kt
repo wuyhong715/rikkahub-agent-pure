@@ -75,6 +75,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.provider.Model
+import me.rerere.ai.ui.MessageInterject
 import me.rerere.ai.ui.ToolApprovalState
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessageAnnotation
@@ -215,6 +216,22 @@ fun ChatMessage(
                     onClickCitation = {}
                 )
             }
+        }
+
+        // 批 I — 插话落点标记。只说「什么时候被看到」，不说「已生效」：合成消息是在下一个
+        // 模型请求前才 drain 的，UI 无从得知模型是否已经读过它。
+        message.interject?.let { stage ->
+            Text(
+                text = stringResource(
+                    when (stage) {
+                        MessageInterject.NEXT_STEP -> R.string.chat_interject_next_step
+                        MessageInterject.AFTER_TURN -> R.string.chat_interject_after_turn
+                    }
+                ),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                modifier = Modifier.padding(start = 4.dp),
+            )
         }
 
         val showActions = if (lastMessage) {

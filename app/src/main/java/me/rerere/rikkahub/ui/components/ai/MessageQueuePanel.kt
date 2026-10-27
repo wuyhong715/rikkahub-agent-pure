@@ -44,7 +44,10 @@ internal fun MessageQueuePanel(
     onResume: () -> Unit,
 ) {
     var editing by remember { mutableStateOf<QueuedMessage?>(null) }
-    if (state.messages.isNotEmpty()) {
+    // 插话（steer）的 transcript 副本也用队列投递，但它已经通过 ConversationInjections
+    // 送进本轮的下一个模型请求了 —— 面板里再显示一条「待发送」会让人以为它还在等。
+    val visibleMessages = remember(state.messages) { state.messages.filter { it.interject == null } }
+    if (visibleMessages.isNotEmpty()) {
         Surface(
             shape = MaterialTheme.shapes.large,
             color = MaterialTheme.colorScheme.surfaceContainer,
@@ -58,7 +61,7 @@ internal fun MessageQueuePanel(
                         text = stringResource(
                             if (state.paused) R.string.chat_page_queue_paused_count
                             else R.string.chat_page_queue_pending_count,
-                            state.messages.size,
+                            visibleMessages.size,
                         ),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -72,7 +75,7 @@ internal fun MessageQueuePanel(
                 }
                 LazyColumn(modifier = Modifier.heightIn(max = 180.dp)) {
                     itemsIndexed(
-                        state.messages,
+                        visibleMessages,
                         key = { index, message -> "${message.id}:$index" }) { index, message ->
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
