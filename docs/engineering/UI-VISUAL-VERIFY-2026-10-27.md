@@ -14,10 +14,10 @@
 | 新逻辑单测 | ✅ 通过（本机可执行） | `MissionStatusTone` + `MissionProgress` 用 stub enum 编译并跑通全部断言（§3.4） |
 | **tokens 文件真编译** | ✅ **通过（真实 Compose 编译器 + 真实 Material3 jar）** | `UiVisual.kt` 用 `kotlin-compiler-embeddable` + `kotlin-compose-compiler-plugin` + gradle 缓存里的 compose/material3 jar 编译出 4 个 class，无类型错误（§3.6） |
 | Gradle 编译 / `testMoxwDebugUnitTest` | ❌ 本机不可执行 | aarch64 rootfs + x86-64 `aapt2`/`aidl`，且 `material3/material-color-utilities` 子模块未初始化为本地必需（§2） |
-| 远程 CI 编译 | ⏸ 未执行 | 需要 push 分支（本轮未获授权），见 §5 |
-| 实机视觉回归 | ⏸ 未执行 | 设备锁屏且 `take_screenshot` 无授权通道；安装新包会覆盖正在使用的客户端，需要单独授权（§5） |
+| 远程 CI 编译 | ✅ **通过** | PR #436 的 Actions `build`：`assembleMoxwRelease` 成功，产出 `apk-moxw`（194.7MB）；`testMoxwReleaseUnitTest` 全绿，**`MissionStatusToneTest` 6 例 0 失败 0 跳过**（§7） |
+| 实机视觉回归 | ⏸ 用户明确表示不需要 | 用户 2026-10-27 19:5x 回复「不用真机对比」；因此本轮交付不含实机前后截图（§5.2） |
 
-**因此准确的说法是：`UiVisual.kt`（视觉 tokens）做过真实编译；其余 4 个改动文件的“编译通过”只到解析级；整包 Gradle 编译、单元测试全量运行、实机视觉回归都还没有做。**
+**因此本轮的最强证据是 CI：整包 `assembleMoxwRelease` + `testMoxwReleaseUnitTest` 在 GitHub Actions 的 x86-64 runner 上真跑通过（PR #436）。唯一没做的是实机目视回归——用户明确表示不需要。**
 
 ---
 
@@ -175,7 +175,7 @@ java -cp "$KC:$SNT:$REFLECT:$CO:$AN" \
 
 ## 5. 要做但需要授权的两步
 
-### 5.1 远程 CI（编译 + 单测）
+### 5.1 远程 CI（编译 + 单测）—— ✅ 已完成
 
 ```bash
 # 在 /workspace/wt-ui-visual 内
@@ -188,7 +188,7 @@ gh pr create --base moxw --title "feat(ui): 成套视觉优化" --body-file /tmp
 - 回滚：`git push origin --delete feat/ui-visual-polish-moxw` + 关闭 PR；`moxw` 分支不受影响。
 - 预期产出：Actions `build` 在 x86-64 runner 上真跑 `assembleMoxwRelease` + `testMoxwDebugUnitTest`，把 `MissionStatusToneTest` 真正跑一遍。
 
-### 5.2 实机视觉回归
+### 5.2 实机视觉回归 —— 用户明确不需要（2026-10-27 19:52「不用真机对比」）
 
 - 方式 A：CI 产物 `app-moxw-release.apk` 手动安装（**覆盖**当前 `com.moxw.agent` 0.8.0，用户数据保留在 app 私有目录，但版本回退麻烦）。
 - 方式 B：只在授权时段内装、截完图再装回旧包（需要旧包 apk）。
@@ -212,3 +212,34 @@ gh pr create --base moxw --title "feat(ui): 成套视觉优化" --body-file /tmp
 - `ui/pages/workbench/MissionDetailPage.kt`（Hero 内联验收进度、绑定对话可点、卡片统一 `GroupCard`、两处 `SectionHeader`）
 - `ui/pages/chat/ChatPage.kt`（顶栏副标题 8sp → 11sp）
 - `ui/pages/chat/ChatDrawer.kt`（助手卡与底部入口之间加发丝分隔线）
+
+
+---
+
+## 7. CI 实际结果（PR #436，run 40498880974 / 40498858611）
+
+```
+$ curl .../commits/17438fab7…/check-runs
+assemble moxw + unit tests   completed  success   (run 40498880974, job 122171226356)
+assemble moxw + unit tests   completed  success   (run 40498858611, job 122171151303)
+
+$ curl .../actions/runs/40498880974/artifacts
+apk-moxw             194,688,783 B
+unit-test-report-moxw    642,097 B
+room-schemas-moxw         95,456 B
+```
+
+单测报告里查本轮新增的用例（下载 artifact 后 grep）：
+
+```
+Test results - me.rerere.rikkahub.ui.pages.workbench.MissionStatusToneTest
+  summary: 6 tests, 0 failures, 0 skipped, 0.004s, 100% successful
+  blocked is the only attention tone           1 0 0 0s 100%
+  each status keeps its documented tone        1 0 0 …
+```
+
+也就是说：
+
+- `WorkbenchComponents.kt` / `WorkbenchContent.kt` / `MissionDetailPage.kt` / `ChatPage.kt` / `ChatDrawer.kt` 的 Compose 代码**真编译通过**（含 `GroupCard` 的 `Surface(onClick, border)`、`StatStrip` 的 lambda 分支、`Screen.Chat` 导航参数）；
+- `MissionStatusToneTest` 在真实 test task（`testMoxwReleaseUnitTest`）里跑过，不是“写了没跑”；
+- 整包 release APK 能产出，说明资源/Manifest/依赖图都没被这轮改动破坏。
