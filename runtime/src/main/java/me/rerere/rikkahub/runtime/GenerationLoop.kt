@@ -27,6 +27,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import me.rerere.ai.core.MessageRole
+import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.Tool
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.Provider
@@ -49,6 +50,7 @@ import me.rerere.rikkahub.runtime.limits.ToolRuntimeLimits
 import me.rerere.rikkahub.runtime.tools.ContentRouter
 import me.rerere.rikkahub.runtime.tools.ConversationInjections
 import me.rerere.rikkahub.runtime.tools.MEMORY_TOOL_NAME
+import me.rerere.rikkahub.runtime.tools.ParallelReadPrefetch
 import me.rerere.rikkahub.runtime.tools.ToolExecutionRetryPolicy
 import me.rerere.rikkahub.runtime.tools.ToolOutputRules
 import me.rerere.rikkahub.runtime.tools.ToolResultBudget
@@ -861,6 +863,25 @@ class GenerationLoop(
 
             // Handle tools (execute approved tools, handle denied tools)
             val executedTools = arrayListOf<UIMessagePart.Tool>()
+            // Parallel read prefetch. A step that opens with several independent reads (the
+            // shape a model produces when it investigates anything) used to await them one by
+            // one, paying N × T for work with no ordering between it. Run that leading run
+            // together and let the loop below reuse the outputs instead of executing again.
+            // Skipped when a PreToolUse gate is installed: it may veto a call for mission
+            // policy, and a vetoed call must not have run speculatively.
+            val prefetchedReads: Map<String, List<UIMessagePart>> = if (beforeToolGate == null) {
+                ParallelReadPrefetch.run(
+                    calls = toolsToProcess,
+                    tools = toolsInternal,
+                    remainingBudgetMs = {
+                        ToolRuntimeLimits.turnBudgetMs -
+                            (android.os.SystemClock.elapsedRealtime() - turnStartMs)
+                    },
+                    allowCall = { name -> host.headlessRefusal(name, conversationId) == null },
+                )
+            } else {
+                emptyMap()
+            }
             toolsToProcess.forEach { tool ->
                 when (tool.approvalState) {
                     is ToolApprovalState.Denied -> {
@@ -1166,7 +1187,13 @@ class GenerationLoop(
                             // wall-clock envelope instead of even attempting.
                             val remainingMs = ToolRuntimeLimits.turnBudgetMs -
                                 (android.os.SystemClock.elapsedRealtime() - turnStartMs)
-                            val result = if (remainingMs <= 0L) {
+                            // The prefetch already ran this call (only for the leading run of
+                            // idempotent reads); reuse its output rather than paying for the
+                            // same read twice. Output transforms below still apply.
+                            val prefetched = prefetchedReads[tool.toolCallId]
+                            val result = if (prefetched != null) {
+                                prefetched
+                            } else if (remainingMs <= 0L) {
                                 Log.w(TAG, "generateText: ${toolDef.name} skipped — wall-clock budget already exceeded")
                                 listOf(UIMessagePart.Text(json.encodeToString(buildJsonObject {
                                     put("error", JsonPrimitive("tool_cancelled_wall_clock"))
@@ -1472,10 +1499,14 @@ class GenerationLoop(
             textToolCallParsing = settings.parseTextToolCalls,
             // Per-conversation thinking-depth override (a sub-agent run's `reasoning_level`),
             // pinned for exactly the run's lifetime; otherwise the model's own level, and
-            // finally the assistant's legacy level (migration fallback).
-            reasoningLevel = conversationId?.let { ConversationReasoningOverrides.get(it) }
-                ?: model.reasoningLevel
-                ?: assistant.reasoningLevel,
+            // finally the assistant's legacy level (migration fallback). AUTO on a tool
+            // follow-up turn is narrowed here — see resolveReasoningLevel.
+            reasoningLevel = resolveReasoningLevel(
+                conversationId = conversationId,
+                model = model,
+                assistant = assistant,
+                messages = messages,
+            ),
             customHeaders = buildList {
                 addAll(assistant.customHeaders)
                 addAll(model.customHeaders)
@@ -1752,6 +1783,37 @@ class GenerationLoop(
         } finally {
             processingStatus.value = null
         }
+    }
+
+    /**
+     * Thinking depth for one model request.
+     *
+     * Resolution order is unchanged: per-run override → the model's own level → the
+     * assistant's level. What is new is the last step: when the result is [ReasoningLevel.AUTO]
+     * and this request is a **tool follow-up** — the model is about to read the output of
+     * calls it already made, not to plan the task — AUTO is narrowed to
+     * [ReasoningLevel.OFF].
+     *
+     * AUTO means "the provider decides", and providers size their default for reasoning about
+     * a problem. On a follow-up the remaining work is usually "look at this output and emit
+     * the next call"; the measured cost of that thinking on a flash model was 20–960 tokens
+     * per round, i.e. one to seventeen seconds at ~55 tok/s, and it changes nothing about the
+     * next action. A turn whose previous calls *failed* is excluded: there the model genuinely
+     * has to re-plan, so the provider's default depth stays.
+     *
+     * An explicit level (LOW…HIGH, or OFF) is never overridden — that is the user's choice and
+     * this function must not silently second-guess it.
+     */
+    private fun resolveReasoningLevel(
+        conversationId: Uuid?,
+        model: Model,
+        assistant: LoopAssistant,
+        messages: List<UIMessage>,
+    ): ReasoningLevel {
+        val configured = conversationId?.let { ConversationReasoningOverrides.get(it) }
+            ?: model.reasoningLevel
+            ?: assistant.reasoningLevel
+        return ReasoningDepthPolicy.forRequest(configured, messages)
     }
 
     /**
