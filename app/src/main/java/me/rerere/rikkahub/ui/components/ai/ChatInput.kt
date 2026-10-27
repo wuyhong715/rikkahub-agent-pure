@@ -76,6 +76,7 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
 import androidx.compose.ui.window.DialogProperties
@@ -372,6 +373,19 @@ fun ChatInput(
                                     onUpdateSearchService = onUpdateSearchService,
                                 )
 
+                                // 生成中草稿非空时，发送键回到“发送”语义（消息可以排队），这时停止就必须
+                                // 有自己常驻的入口，否则用户只能先清空草稿才能中断生成。
+                                if (loading && !state.isEmpty()) {
+                                    ActionIconButton(onClick = onCancelClick, size = 36.dp) {
+                                        Icon(
+                                            imageVector = HugeIcons.Cancel01,
+                                            contentDescription = stringResource(R.string.stop),
+                                            tint = MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                    }
+                                }
+
                                 // One slot, two faces: the send arrow while there is something to send, the
                                 // microphone when the draft is empty and speech input is available. While
                                 // recording the microphone stays (the transcript itself would otherwise
@@ -652,11 +666,12 @@ private fun SendButton(
 @Composable
 private fun ActionIconButton(
     onClick: () -> Unit,
+    size: Dp = 30.dp,
     content: @Composable () -> Unit,
 ) {
     Surface(
         onClick = onClick,
-        modifier = Modifier.size(30.dp),
+        modifier = Modifier.size(size),
         shape = CircleShape,
         tonalElevation = 0.dp,
         color = Color.Transparent,

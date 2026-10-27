@@ -173,346 +173,350 @@ fun CreateMissionSheet(
     val selectedWorkspace = workspaces.firstOrNull { it.id == workspaceId }
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(
-            modifier = Modifier
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp)
-                .padding(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Text(
-                text = stringResource(R.string.mission_create_title),
-                style = MaterialTheme.typography.titleLarge,
-            )
-            OutlinedTextField(
-                value = title,
-                onValueChange = { title = it },
-                label = { Text(text = stringResource(R.string.mission_create_field_title)) },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-            )
-            OutlinedTextField(
-                value = description,
-                onValueChange = { description = it },
-                label = { Text(text = stringResource(R.string.mission_create_field_description)) },
-                modifier = Modifier.fillMaxWidth(),
-                minLines = 2,
-            )
-            Text(
-                text = stringResource(R.string.mission_create_acceptance),
-                style = MaterialTheme.typography.titleSmall,
-            )
-            criteria.forEachIndexed { index, value ->
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    OutlinedTextField(
-                        value = value,
-                        onValueChange = { criteria[index] = it },
-                        label = {
-                            Text(text = stringResource(R.string.mission_create_acceptance_hint, index + 1))
-                        },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                    )
-                    IconButton(onClick = { criteria.removeAt(index) }) {
-                        Icon(HugeIcons.Cancel01, contentDescription = null)
+        // 表单已经不短：标题 / 描述 / 验收标准 × N / 执行助手 / 工作区 / 工作流 / 启动方式 / 限额。
+        // 原来「创建」跟着内容一起滚，手机上必须滚到底才看得见；改成内容区自己滚、主操作固定在底部。
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.mission_create_title),
+                    style = MaterialTheme.typography.titleLarge,
+                )
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text(text = stringResource(R.string.mission_create_field_title)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                )
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = { description = it },
+                    label = { Text(text = stringResource(R.string.mission_create_field_description)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2,
+                )
+                Text(
+                    text = stringResource(R.string.mission_create_acceptance),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                criteria.forEachIndexed { index, value ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        OutlinedTextField(
+                            value = value,
+                            onValueChange = { criteria[index] = it },
+                            label = {
+                                Text(text = stringResource(R.string.mission_create_acceptance_hint, index + 1))
+                            },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                        )
+                        IconButton(onClick = { criteria.removeAt(index) }) {
+                            Icon(HugeIcons.Cancel01, contentDescription = null)
+                        }
                     }
                 }
-            }
-            TextButton(onClick = { criteria.add("") }) {
-                Icon(HugeIcons.Add01, contentDescription = null)
-                Text(
-                    text = stringResource(R.string.mission_create_add_acceptance),
-                    modifier = Modifier.padding(start = 4.dp),
-                )
-            }
-
-            // 执行助手
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { showAssistantSheet = true }
-                    .padding(vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(
-                    text = stringResource(R.string.mission_create_assistant),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                Text(
-                    text = selectedAssistant?.name?.ifEmpty { null }
-                        ?: stringResource(R.string.mission_create_assistant_default),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            // 工作区
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(enabled = workspaceSheetAssistant != null) {
-                        showWorkspaceSheet = true
-                    }
-                    .padding(vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(
-                    text = stringResource(R.string.mission_create_workspace),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                Text(
-                    text = selectedWorkspace?.name
-                        ?: stringResource(R.string.mission_create_workspace_none),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            // 工作流程（批 C）— `workflows/ 下的 .md` in the selected workspace, or "auto"
-            Text(
-                text = stringResource(R.string.mission_create_workflow_title),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                FilterChip(
-                    selected = workflowPath == null,
-                    onClick = { workflowPath = null },
-                    label = { Text(text = stringResource(R.string.mission_create_workflow_auto)) },
-                )
-                workflowNames.forEach { name ->
-                    val path = MissionWorkflowDocs.pathOf(name)
-                    FilterChip(
-                        selected = workflowPath == path,
-                        onClick = { workflowPath = path },
-                        label = { Text(text = name.removeSuffix(".md")) },
+                TextButton(onClick = { criteria.add("") }) {
+                    Icon(HugeIcons.Add01, contentDescription = null)
+                    Text(
+                        text = stringResource(R.string.mission_create_add_acceptance),
+                        modifier = Modifier.padding(start = 4.dp),
                     )
                 }
-            }
-            if (workspaceId != null && workflowNames.isEmpty()) {
-                Text(
-                    text = stringResource(R.string.mission_create_workflow_empty),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
 
-            // 开始方式（批 B）
-            Text(
-                text = stringResource(R.string.mission_start_title),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                val modes = listOf(
-                    MissionStartMode.IMMEDIATE to R.string.mission_start_immediate,
-                    MissionStartMode.SCHEDULED to R.string.mission_start_scheduled,
-                    MissionStartMode.TRIGGER to R.string.mission_start_trigger,
-                )
-                modes.forEach { (mode, labelRes) ->
-                    FilterChip(
-                        selected = startMode == mode,
-                        onClick = { startMode = mode },
-                        label = { Text(text = stringResource(labelRes)) },
-                    )
-                }
-            }
-
-            // 定时：HH:mm + 周一..周日（空 = 每天）
-            if (startMode == MissionStartMode.SCHEDULED) {
+                // 执行助手
                 Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showAssistantSheet = true }
+                        .padding(vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    OutlinedTextField(
-                        value = scheduleHour,
-                        onValueChange = { scheduleHour = it.filter(Char::isDigit).take(2) },
-                        label = { Text(text = stringResource(R.string.mission_start_hour)) },
-                        isError = scheduleHour.isNotEmpty() && !scheduleHourValid,
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    Text(
+                        text = stringResource(R.string.mission_create_assistant),
+                        style = MaterialTheme.typography.bodyMedium,
                     )
                     Text(
-                        text = ":",
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    OutlinedTextField(
-                        value = scheduleMinute,
-                        onValueChange = { scheduleMinute = it.filter(Char::isDigit).take(2) },
-                        label = { Text(text = stringResource(R.string.mission_start_minute)) },
-                        isError = scheduleMinute.isNotEmpty() && !scheduleMinuteValid,
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        text = selectedAssistant?.name?.ifEmpty { null }
+                            ?: stringResource(R.string.mission_create_assistant_default),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+
+                // 工作区
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(enabled = workspaceSheetAssistant != null) {
+                            showWorkspaceSheet = true
+                        }
+                        .padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = stringResource(R.string.mission_create_workspace),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Text(
+                        text = selectedWorkspace?.name
+                            ?: stringResource(R.string.mission_create_workspace_none),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
+                // 工作流程（批 C）— `workflows/ 下的 .md` in the selected workspace, or "auto"
+                Text(
+                    text = stringResource(R.string.mission_create_workflow_title),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    (1..7).forEach { day ->
+                    FilterChip(
+                        selected = workflowPath == null,
+                        onClick = { workflowPath = null },
+                        label = { Text(text = stringResource(R.string.mission_create_workflow_auto)) },
+                    )
+                    workflowNames.forEach { name ->
+                        val path = MissionWorkflowDocs.pathOf(name)
                         FilterChip(
-                            selected = day in scheduleDays,
-                            onClick = {
-                                if (day in scheduleDays) scheduleDays.remove(day) else scheduleDays.add(day)
-                            },
-                            label = { Text(text = stringResource(dayLabelRes(day))) },
+                            selected = workflowPath == path,
+                            onClick = { workflowPath = path },
+                            label = { Text(text = name.removeSuffix(".md")) },
                         )
                     }
                 }
-                Text(
-                    text = stringResource(R.string.mission_start_days_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+                if (workspaceId != null && workflowNames.isEmpty()) {
+                    Text(
+                        text = stringResource(R.string.mission_create_workflow_empty),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
 
-            // 触发：事件类型
-            if (startMode == MissionStartMode.TRIGGER) {
+                // 开始方式（批 B）
+                Text(
+                    text = stringResource(R.string.mission_start_title),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    triggerOptions.forEach { (key, labelRes) ->
+                    val modes = listOf(
+                        MissionStartMode.IMMEDIATE to R.string.mission_start_immediate,
+                        MissionStartMode.SCHEDULED to R.string.mission_start_scheduled,
+                        MissionStartMode.TRIGGER to R.string.mission_start_trigger,
+                    )
+                    modes.forEach { (mode, labelRes) ->
                         FilterChip(
-                            selected = triggerKind == key,
-                            onClick = { triggerKind = key },
+                            selected = startMode == mode,
+                            onClick = { startMode = mode },
                             label = { Text(text = stringResource(labelRes)) },
                         )
                     }
                 }
-            }
 
-            // 非立即模式：冷却秒数 + 每日上限
-            if (startMode != MissionStartMode.IMMEDIATE) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    OutlinedTextField(
-                        value = cooldownText,
-                        onValueChange = { cooldownText = it.filter(Char::isDigit) },
-                        label = { Text(text = stringResource(R.string.mission_start_cooldown)) },
-                        placeholder = { Text(text = "60") },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    )
-                    OutlinedTextField(
-                        value = maxRunsText,
-                        onValueChange = { maxRunsText = it.filter(Char::isDigit) },
-                        label = { Text(text = stringResource(R.string.mission_start_max_runs)) },
-                        placeholder = { Text(text = "24") },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    )
-                }
-            }
-
-            // 审批模式
-            Text(
-                text = stringResource(R.string.mission_create_approval_mode),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                val options = listOf<Pair<String?, Int>>(
-                    null to R.string.mission_approval_default,
-                    "AUTO" to R.string.mission_approval_auto,
-                    "SEMI" to R.string.mission_approval_semi,
-                    "MANUAL" to R.string.mission_approval_manual,
-                )
-                options.forEach { (value, labelRes) ->
-                    FilterChip(
-                        selected = approvalMode == value,
-                        onClick = { approvalMode = value },
-                        label = { Text(text = stringResource(labelRes)) },
-                    )
-                }
-            }
-
-            // 高级选项
-            TextButton(onClick = { advancedExpanded = !advancedExpanded }) {
-                Text(text = stringResource(R.string.mission_create_advanced))
-            }
-            if (advancedExpanded) {
-                Text(
-                    text = stringResource(R.string.mission_create_advanced_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                OutlinedTextField(
-                    value = maxResumeRounds,
-                    onValueChange = { maxResumeRounds = it.filter(Char::isDigit) },
-                    label = { Text(text = stringResource(R.string.mission_create_max_resume_rounds)) },
-                    placeholder = { Text(text = "5") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                )
-                OutlinedTextField(
-                    value = stallRounds,
-                    onValueChange = { stallRounds = it.filter(Char::isDigit) },
-                    label = { Text(text = stringResource(R.string.mission_create_stall_rounds)) },
-                    placeholder = { Text(text = "2") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                )
-                OutlinedTextField(
-                    value = tokenBudget,
-                    onValueChange = { tokenBudget = it.filter(Char::isDigit) },
-                    label = { Text(text = stringResource(R.string.mission_create_token_budget)) },
-                    placeholder = { Text(text = "500000") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = stringResource(R.string.mission_limits_confirm),
-                            style = MaterialTheme.typography.bodyMedium,
+                // 定时：HH:mm + 周一..周日（空 = 每天）
+                if (startMode == MissionStartMode.SCHEDULED) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        OutlinedTextField(
+                            value = scheduleHour,
+                            onValueChange = { scheduleHour = it.filter(Char::isDigit).take(2) },
+                            label = { Text(text = stringResource(R.string.mission_start_hour)) },
+                            isError = scheduleHour.isNotEmpty() && !scheduleHourValid,
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         )
                         Text(
-                            text = stringResource(R.string.mission_limits_confirm_desc),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            text = ":",
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        OutlinedTextField(
+                            value = scheduleMinute,
+                            onValueChange = { scheduleMinute = it.filter(Char::isDigit).take(2) },
+                            label = { Text(text = stringResource(R.string.mission_start_minute)) },
+                            isError = scheduleMinute.isNotEmpty() && !scheduleMinuteValid,
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         )
                     }
-                    Switch(
-                        checked = requireConfirmation,
-                        onCheckedChange = { requireConfirmation = it },
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        (1..7).forEach { day ->
+                            FilterChip(
+                                selected = day in scheduleDays,
+                                onClick = {
+                                    if (day in scheduleDays) scheduleDays.remove(day) else scheduleDays.add(day)
+                                },
+                                label = { Text(text = stringResource(dayLabelRes(day))) },
+                            )
+                        }
+                    }
+                    Text(
+                        text = stringResource(R.string.mission_start_days_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+
+                // 触发：事件类型
+                if (startMode == MissionStartMode.TRIGGER) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        triggerOptions.forEach { (key, labelRes) ->
+                            FilterChip(
+                                selected = triggerKind == key,
+                                onClick = { triggerKind = key },
+                                label = { Text(text = stringResource(labelRes)) },
+                            )
+                        }
+                    }
+                }
+
+                // 非立即模式：冷却秒数 + 每日上限
+                if (startMode != MissionStartMode.IMMEDIATE) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        OutlinedTextField(
+                            value = cooldownText,
+                            onValueChange = { cooldownText = it.filter(Char::isDigit) },
+                            label = { Text(text = stringResource(R.string.mission_start_cooldown)) },
+                            placeholder = { Text(text = "60") },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        )
+                        OutlinedTextField(
+                            value = maxRunsText,
+                            onValueChange = { maxRunsText = it.filter(Char::isDigit) },
+                            label = { Text(text = stringResource(R.string.mission_start_max_runs)) },
+                            placeholder = { Text(text = "24") },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        )
+                    }
+                }
+
+                // 审批模式
+                Text(
+                    text = stringResource(R.string.mission_create_approval_mode),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    val options = listOf<Pair<String?, Int>>(
+                        null to R.string.mission_approval_default,
+                        "AUTO" to R.string.mission_approval_auto,
+                        "SEMI" to R.string.mission_approval_semi,
+                        "MANUAL" to R.string.mission_approval_manual,
+                    )
+                    options.forEach { (value, labelRes) ->
+                        FilterChip(
+                            selected = approvalMode == value,
+                            onClick = { approvalMode = value },
+                            label = { Text(text = stringResource(labelRes)) },
+                        )
+                    }
+                }
+
+                // 高级选项
+                TextButton(onClick = { advancedExpanded = !advancedExpanded }) {
+                    Text(text = stringResource(R.string.mission_create_advanced))
+                }
+                if (advancedExpanded) {
+                    Text(
+                        text = stringResource(R.string.mission_create_advanced_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    OutlinedTextField(
+                        value = maxResumeRounds,
+                        onValueChange = { maxResumeRounds = it.filter(Char::isDigit) },
+                        label = { Text(text = stringResource(R.string.mission_create_max_resume_rounds)) },
+                        placeholder = { Text(text = "5") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    )
+                    OutlinedTextField(
+                        value = stallRounds,
+                        onValueChange = { stallRounds = it.filter(Char::isDigit) },
+                        label = { Text(text = stringResource(R.string.mission_create_stall_rounds)) },
+                        placeholder = { Text(text = "2") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    )
+                    OutlinedTextField(
+                        value = tokenBudget,
+                        onValueChange = { tokenBudget = it.filter(Char::isDigit) },
+                        label = { Text(text = stringResource(R.string.mission_create_token_budget)) },
+                        placeholder = { Text(text = "500000") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.mission_limits_confirm),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Text(
+                                text = stringResource(R.string.mission_limits_confirm_desc),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = requireConfirmation,
+                            onCheckedChange = { requireConfirmation = it },
+                        )
+                    }
             }
 
+            // 主操作固定在底部：表单再长也不用来回滚动找「创建」。
             Button(
                 onClick = {
                     val trigger: TriggerSpec? = when (startMode) {
@@ -548,7 +552,10 @@ fun CreateMissionSheet(
                     onDismiss()
                 },
                 enabled = createEnabled,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(top = 8.dp, bottom = 24.dp),
             ) {
                 Text(text = stringResource(R.string.mission_create_confirm))
             }

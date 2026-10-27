@@ -3309,6 +3309,10 @@ HARDLINE protections still apply: rm -rf /, mkfs, shutdown / reboot, dd to block
   <string name="mission_note_hint">Note content</string>
   <string name="mission_note_save">Save</string>
   <string name="mission_created_at">Created %1$s</string>
+  <string name="mission_detail_description_expand">Show more</string>
+  <string name="chat_drawer_nav_assistant">Assistant</string>
+  <string name="chat_drawer_nav_more">More</string>
+  <string name="mission_detail_description_collapse">Show less</string>
   <string name="mission_updated_at">Updated %1$s</string>
   <string name="mission_artifact_copied">Path copied</string>
   <string name="mission_status_active">Active</string>
