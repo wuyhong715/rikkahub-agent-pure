@@ -368,6 +368,38 @@ fun SettingPreferencesNetworkPage(vm: SettingVM = koinViewModel()) {
                 CardGroup(
                     modifier = Modifier.padding(horizontal = 8.dp),
                     title = {
+                        Text(stringResource(R.string.setting_page_preferences_network_hf_mirror_group))
+                    },
+                ) {
+                    item(
+                        onClick = {
+                            vm.updateSettings { current ->
+                                current.copy(
+                                    networkSetting = current.networkSetting.copy(
+                                        huggingFaceMirror = !current.networkSetting.huggingFaceMirror,
+                                    ),
+                                )
+                            }
+                        },
+                        headlineContent = {
+                            Text(stringResource(R.string.setting_page_preferences_network_hf_mirror))
+                        },
+                        supportingContent = {
+                            Text(stringResource(R.string.setting_page_preferences_network_hf_mirror_desc))
+                        },
+                        trailingContent = {
+                            Switch(
+                                checked = settings.networkSetting.huggingFaceMirror,
+                                onCheckedChange = null,
+                            )
+                        },
+                    )
+                }
+            }
+            item {
+                CardGroup(
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                    title = {
                         Text(stringResource(R.string.setting_page_preferences_network_user_agent))
                     },
                 ) {

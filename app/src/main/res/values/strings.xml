@@ -149,6 +149,10 @@
   <string name="assistant_page_embedding_suggested">Available to download</string>
   <string name="assistant_page_embedding_download">Download</string>
   <string name="assistant_page_embedding_downloading">Downloading %1$d%%</string>
+  <string name="assistant_page_embedding_downloading_speed">Downloading %1$d%% · %2$s</string>
+  <string name="assistant_page_embedding_downloading_bytes">Downloaded %1$s</string>
+  <string name="assistant_page_embedding_download_retrying">Connection lost — retrying (%1$d/%2$d) via %3$s</string>
+  <string name="assistant_page_embedding_download_retry">Retry</string>
   <string name="assistant_page_embedding_source_local">Local model</string>
   <string name="assistant_page_embedding_source_cloud">Cloud model</string>
   <string name="assistant_page_embedding_cloud_notice">Indexed text is sent to the provider to be turned into vectors.</string>
@@ -1096,6 +1100,9 @@
   <string name="setting_page_preferences_network_proxy">Proxy</string>
   <string name="setting_page_preferences_network_proxy_desc">Supports HTTP and SOCKS5 proxy URLs. Leave blank to use system settings.</string>
   <string name="setting_page_preferences_network_proxy_invalid">Enter a valid proxy URL with a host and port.</string>
+  <string name="setting_page_preferences_network_hf_mirror_group">Model downloads</string>
+  <string name="setting_page_preferences_network_hf_mirror">HuggingFace mirror</string>
+  <string name="setting_page_preferences_network_hf_mirror_desc">When huggingface.co fails, resume the download from hf-mirror.com instead. Only public model files are fetched from the mirror.</string>
   <string name="setting_page_preferences_network_auto_retry">Automatic retry</string>
   <string name="setting_page_preferences_network_auto_retry_desc">Retry model requests up to 3 times when network errors occur.</string>
   <string name="setting_page_preferences_network_first_output_timeout">First-output timeout</string>

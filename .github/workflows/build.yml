@@ -187,9 +187,11 @@ jobs:
           # the embedder's handle lifecycle, the cold-memory rules, the compaction planner, the
           # token estimator and every tool-result budget rule) that nothing else runs: module
           # tests are flavour-independent and are never reached through :app, so each module is
-          # named explicitly. :runtime was extracted in P4 with 19 test files and had been
+          # named explicitly. :local-llm joined for the same reason - its ModelInstall tests are
+          # the only thing pinning the download retry/resume rules, and they were unreachable
+          # from every task CI did run. :runtime was extracted in P4 with 19 test files and had been
           # missing from this list since, which left the harness's pure logic ungated.
-          ./gradlew ":app:assemble${F}Release" ":app:test${F}ReleaseUnitTest" :ai:testDebugUnitTest :llama-cpp:testDebugUnitTest :runtime:testDebugUnitTest $FLAGS --stacktrace
+          ./gradlew ":app:assemble${F}Release" ":app:test${F}ReleaseUnitTest" :ai:testDebugUnitTest :local-llm:testDebugUnitTest :llama-cpp:testDebugUnitTest :runtime:testDebugUnitTest $FLAGS --stacktrace
 
       - name: Show ${{ matrix.flavor }} APK sizes
         run: ls -la app/build/outputs/apk/${{ matrix.flavor }}/release/*.apk || true
