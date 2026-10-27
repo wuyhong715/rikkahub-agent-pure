@@ -476,7 +476,18 @@ class SettingLocalLlmViewModel(
     }
 
     private suspend fun collectDownloadProgress(url: String, fileName: String, target: java.io.File) {
-        collectInstallProgress(fileName, ModelInstall.download(httpClient, url, target))
+        collectInstallProgress(
+            fileName,
+            ModelInstall.download(
+                client = httpClient,
+                url = url,
+                target = target,
+                // Chat-model downloads go through the same policy as embedding models: the
+                // mirror is what makes a 4 GB download possible on a network that resets
+                // huggingface.co.
+                mirrorEnabled = settingsStore.settingsFlow.value.networkSetting.huggingFaceMirror,
+            ),
+        )
     }
 
     /**
@@ -496,6 +507,16 @@ class SettingLocalLlmViewModel(
                     val pct = if (total != null && total > 0)
                         ((p.bytesRead * 100) / total).toInt() else 0
                     _downloadProgress.value = Progress(pct, p.bytesRead, total)
+                }
+                is ModelInstall.Progress.Retrying -> {
+                    // Automatic and silent here on purpose: the flow resumes on its own, and
+                    // clearing [_downloadProgress] would make the Install button flash back to
+                    // its idle state mid-download. The embedding page spells the retry out; this
+                    // one keeps a live byte count on screen.
+                    android.util.Log.i(
+                        "SettingLocalLlm",
+                        "download retry ${p.attempt}/${p.maxAttempts} via ${p.host}: ${p.reason}",
+                    )
                 }
                 is ModelInstall.Progress.Done -> {
                     _downloadProgress.value = null

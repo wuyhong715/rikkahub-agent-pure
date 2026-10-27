@@ -38,12 +38,34 @@ class EmbeddingModelViewModel(
     private val settingsStore: SettingsStore,
 ) : ViewModel() {
 
+    /**
+     * One in-flight download, as the card under the hero renders it.
+     *
+     * [percent] is nullable on purpose. The old card computed `bytes / total` and fell back to
+     * `0` when the server sent no `Content-Length` (chunked responses, some CDNs, a 206 without
+     * `Content-Range`), so a perfectly healthy transfer showed 0% from start to finish - the
+     * "progress bar stuck" report that had nothing to do with the network. `null` here means
+     * "unknown", which the card draws as an indeterminate bar plus the byte count it does know.
+     *
+     * [bytesPerSecond] and [retry] are what turn a silent stall into an explanation: speed shows
+     * whether anything is still arriving, and the retry line says which host is being tried and
+     * why the previous one went away.
+     */
     data class Download(
         val fileName: String,
-        val percent: Int,
+        val percent: Int?,
         val bytesRead: Long,
         val totalBytes: Long?,
-    )
+        val bytesPerSecond: Long = 0L,
+        val retry: Retry? = null,
+    ) {
+        data class Retry(
+            val attempt: Int,
+            val maxAttempts: Int,
+            val host: String,
+            val reason: String,
+        )
+    }
 
     private val _download = MutableStateFlow<Download?>(null)
     val download: StateFlow<Download?> = _download.asStateFlow()
@@ -137,6 +159,26 @@ class EmbeddingModelViewModel(
 
     private var job: Job? = null
 
+    /**
+     * What the last attempt asked for, so the error card's Retry can re-run it instead of making
+     * the user go back and find the row they tapped.
+     */
+    private data class LastRequest(
+        val fileName: String,
+        val sizeBytes: Long,
+        val url: String,
+        val target: File,
+        val onInstalled: () -> Unit,
+    )
+
+    private var lastRequest: LastRequest? = null
+
+    // Speed sampling: bytes and clock at the previous tick, smoothed so a single slow read does
+    // not make the figure jump between "12 MB/s" and "300 KB/s".
+    private var sampleAtNanos = 0L
+    private var sampleBytes = 0L
+    private var smoothedBytesPerSecond = 0L
+
     /** Re-reads the directory. Called when the picker opens - the user may have just installed. */
     fun refresh() {
         _installed.value = EmbeddingModelFiles.installedFiles(context)
@@ -221,23 +263,78 @@ class EmbeddingModelViewModel(
     ) {
         if (job?.isActive == true) return
         _error.value = null
-        _download.value = Download(fileName, 0, 0L, sizeBytes)
+        lastRequest = LastRequest(fileName, sizeBytes, url, target, onInstalled)
+        sampleAtNanos = 0L
+        sampleBytes = 0L
+        smoothedBytesPerSecond = 0L
+        // A known length from the catalogue even before the server says anything: a curated entry
+        // always declares its size, so the first frames show a real percentage rather than 0%.
+        val catalogueSize = sizeBytes.takeIf { it > 0 }
+        _download.value = Download(
+            fileName = fileName,
+            // 0% only when there is a length to be 0% of; otherwise the card starts out
+            // indeterminate instead of claiming a percentage it cannot know.
+            percent = if (catalogueSize != null) 0 else null,
+            bytesRead = 0L,
+            totalBytes = catalogueSize,
+        )
         job = viewModelScope.launch {
             try {
-                ModelInstall.download(httpClient, url, target).collect { progress ->
+                ModelInstall.download(
+                    client = httpClient,
+                    url = url,
+                    target = target,
+                    // The mirror is used on failure only; see ModelDownloadPolicy.
+                    mirrorEnabled = settingsStore.settingsFlow.value.networkSetting.huggingFaceMirror,
+                ).collect { progress ->
                     when (progress) {
-                        is ModelInstall.Progress.Started ->
-                            _download.value = Download(fileName, 0, 0L, progress.totalBytes)
+                        is ModelInstall.Progress.Started -> {
+                            val total = progress.totalBytes ?: sizeBytes.takeIf { it > 0 }
+                            _download.value = Download(
+                                fileName = fileName,
+                                percent = if (total != null) 0 else null,
+                                bytesRead = 0L,
+                                totalBytes = total,
+                            )
+                        }
 
                         is ModelInstall.Progress.Tick -> {
-                            val total = progress.totalBytes
-                            val percent =
-                                if (total != null && total > 0) {
-                                    ((progress.bytesRead * 100) / total).toInt()
-                                } else {
-                                    0
-                                }
-                            _download.value = Download(fileName, percent, progress.bytesRead, total)
+                            // A server that declares no length is common enough (chunked, some
+                            // mirrors) that the catalogue size is the better answer when we have
+                            // one; only when neither exists does the bar go indeterminate.
+                            val total = progress.totalBytes ?: sizeBytes.takeIf { it > 0 }
+                            val percent = total
+                                ?.takeIf { it > 0 }
+                                ?.let { ((progress.bytesRead * 100) / it).toInt().coerceIn(0, 100) }
+                            _download.value = Download(
+                                fileName = fileName,
+                                percent = percent,
+                                bytesRead = progress.bytesRead,
+                                totalBytes = total,
+                                bytesPerSecond = sampleSpeed(progress.bytesRead),
+                                retry = _download.value?.retry,
+                            )
+                        }
+
+                        is ModelInstall.Progress.Retrying -> {
+                            // Keep the bytes already on disk and the percentage they represent:
+                            // the next attempt resumes from there, so the bar must not snap back
+                            // to zero while the mirror is being dialled.
+                            val current = _download.value
+                            sampleAtNanos = 0L
+                            _download.value = Download(
+                                fileName = fileName,
+                                percent = current?.percent,
+                                bytesRead = current?.bytesRead ?: 0L,
+                                totalBytes = current?.totalBytes ?: sizeBytes.takeIf { it > 0 },
+                                bytesPerSecond = 0L,
+                                retry = Download.Retry(
+                                    attempt = progress.attempt,
+                                    maxAttempts = progress.maxAttempts,
+                                    host = progress.host,
+                                    reason = progress.reason,
+                                ),
+                            )
                         }
 
                         is ModelInstall.Progress.Done -> {
@@ -267,5 +364,46 @@ class EmbeddingModelViewModel(
                 _error.value = t.message ?: t::class.java.simpleName
             }
         }
+    }
+
+    /**
+     * Re-runs the last attempt - the error card's button.
+     *
+     * A download that ran out of automatic retries kept its `.partial`, so this resumes rather
+     * than starting the multi-hundred-megabyte file again.
+     */
+    fun retryLast() {
+        val last = lastRequest ?: return
+        downloadInto(
+            fileName = last.fileName,
+            sizeBytes = last.sizeBytes,
+            url = last.url,
+            target = last.target,
+            onInstalled = last.onInstalled,
+        )
+    }
+
+    /**
+     * Bytes per second since the previous sample, exponentially smoothed.
+     *
+     * Deliberately computed from ticks rather than from a timer: a bar that shows "0 B/s" while
+     * bytes are arriving is the same lie as a bar that shows none.
+     */
+    private fun sampleSpeed(bytesRead: Long): Long {
+        val now = System.nanoTime()
+        if (sampleAtNanos == 0L || bytesRead < sampleBytes) {
+            sampleAtNanos = now
+            sampleBytes = bytesRead
+            return smoothedBytesPerSecond
+        }
+        val elapsed = now - sampleAtNanos
+        if (elapsed < 200_000_000L) return smoothedBytesPerSecond
+        val instant = ((bytesRead - sampleBytes) * 1_000_000_000L) / elapsed
+        smoothedBytesPerSecond =
+            if (smoothedBytesPerSecond == 0L) instant
+            else (smoothedBytesPerSecond * 6 + instant * 4) / 10
+        sampleAtNanos = now
+        sampleBytes = bytesRead
+        return smoothedBytesPerSecond
     }
 }

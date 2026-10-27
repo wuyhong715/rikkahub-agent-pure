@@ -277,21 +277,60 @@ fun SettingEmbeddingPage() {
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
+                        // Three states, because they say three different things: a retry in
+                        // progress (connection died, another host is being tried), a known
+                        // percentage, and a transfer whose total the server never declared - the
+                        // last one used to render as a stuck 0%.
+                        // Held in locals so the null checks below narrow without relying on
+                        // smart casts through a data-class property.
+                        val retryNow = inFlight.retry
+                        val percentNow = inFlight.percent
                         Text(
-                            text = stringResource(
-                                R.string.assistant_page_embedding_downloading,
-                                inFlight.percent,
-                            ),
+                            text = when {
+                                retryNow != null -> stringResource(
+                                    R.string.assistant_page_embedding_download_retrying,
+                                    retryNow.attempt,
+                                    retryNow.maxAttempts,
+                                    retryNow.host,
+                                )
+                                percentNow != null -> stringResource(
+                                    R.string.assistant_page_embedding_downloading_speed,
+                                    percentNow,
+                                    formatModelSpeed(inFlight.bytesPerSecond),
+                                )
+                                else -> stringResource(
+                                    R.string.assistant_page_embedding_downloading_bytes,
+                                    formatModelBytes(inFlight.bytesRead),
+                                )
+                            },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 4.dp),
                         )
-                        LinearProgressIndicator(
-                            progress = { inFlight.percent / 100f },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 8.dp),
-                        )
+                        retryNow?.reason?.takeIf { it.isNotBlank() }?.let { reason ->
+                            Text(
+                                text = reason,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(top = 2.dp),
+                            )
+                        }
+                        if (percentNow != null) {
+                            LinearProgressIndicator(
+                                progress = { percentNow / 100f },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 8.dp),
+                            )
+                        } else {
+                            LinearProgressIndicator(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 8.dp),
+                            )
+                        }
                         TextButton(
                             onClick = { embeddingVm.cancel() },
                             modifier = Modifier.align(Alignment.End),
@@ -307,12 +346,21 @@ fun SettingEmbeddingPage() {
                         containerColor = MaterialTheme.colorScheme.errorContainer,
                     ),
                 ) {
-                    Text(
-                        text = message,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onErrorContainer,
-                        modifier = Modifier.padding(16.dp),
-                    )
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = message,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                        )
+                        // The bytes already on disk are kept, so retrying resumes rather than
+                        // starting a multi-hundred-megabyte file over.
+                        TextButton(
+                            onClick = { embeddingVm.retryLast() },
+                            modifier = Modifier.align(Alignment.End),
+                        ) {
+                            Text(stringResource(R.string.assistant_page_embedding_download_retry))
+                        }
+                    }
                 }
             }
 
@@ -1040,6 +1088,15 @@ private fun laneLabel(focus: EmbeddingFocus): String = stringResource(
         R.string.assistant_page_embedding_lane_multilingual
     }
 )
+
+private fun formatModelSpeed(bytesPerSecond: Long): String {
+    val kb = bytesPerSecond / 1_000.0
+    return when {
+        bytesPerSecond <= 0L -> "0 KB/s"
+        kb >= 1000.0 -> String.format(Locale.US, "%.1f MB/s", kb / 1000.0)
+        else -> String.format(Locale.US, "%.0f KB/s", kb)
+    }
+}
 
 private fun formatModelBytes(bytes: Long): String {
     val mb = bytes / 1_000_000.0

@@ -1369,6 +1369,17 @@ data class NetworkSetting(
      * for it. This is a per-gap budget, not a cap on the whole reply.
      */
     val streamStallTimeoutSeconds: Int = 120,
+    /**
+     * Whether a model download may fall back to `hf-mirror.com` when huggingface.co fails.
+     *
+     * On by default because the failure it fixes is the common one for mainland networks - the
+     * connection is reset mid-transfer, and asking the same host again just gets reset again.
+     * `hf-mirror.com` serves the same repository paths, so only the host changes. It is a
+     * third-party host, which is why this is a setting and not hard-coded into the downloader:
+     * turning it off means model files are only ever fetched from the URL the user's model points
+     * at.
+     */
+    val huggingFaceMirror: Boolean = true,
 ) {
     companion object {
         /**

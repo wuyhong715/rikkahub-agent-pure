@@ -2416,6 +2416,9 @@ HARDLINE 保护仍然生效：rm -rf /、mkfs、shutdown / reboot、向块设备
   <string name="setting_page_preferences_network_proxy">代理</string>
   <string name="setting_page_preferences_network_proxy_desc">支持 HTTP 和 SOCKS5 代理 URL。留空以使用系统设置。</string>
   <string name="setting_page_preferences_network_proxy_invalid">请输入包含主机和端口的有效代理 URL。</string>
+  <string name="setting_page_preferences_network_hf_mirror_group">模型下载</string>
+  <string name="setting_page_preferences_network_hf_mirror">HuggingFace 镜像</string>
+  <string name="setting_page_preferences_network_hf_mirror_desc">直连 huggingface.co 失败时，改用 hf-mirror.com 续传下载（只下载公开的模型文件）。国内网络常出现「连接被重置」，开启后一般能一次装完。</string>
   <string name="setting_page_preferences_network_auto_retry">自动重试</string>
   <string name="setting_page_preferences_network_auto_retry_desc">发生网络错误时自动重试模型请求，最多重试 3 次。</string>
   <string name="setting_page_preferences_network_first_output_timeout">首字节超时</string>
@@ -2702,6 +2705,10 @@ HARDLINE 保护仍然生效：rm -rf /、mkfs、shutdown / reboot、向块设备
   <string name="assistant_page_embedding_suggested">可下载的模型</string>
   <string name="assistant_page_embedding_download">下载</string>
   <string name="assistant_page_embedding_downloading">下载中 %1$d%%</string>
+  <string name="assistant_page_embedding_downloading_speed">下载中 %1$d%% · %2$s</string>
+  <string name="assistant_page_embedding_downloading_bytes">已下载 %1$s</string>
+  <string name="assistant_page_embedding_download_retrying">连接中断，正在重试（%1$d/%2$d）→ %3$s</string>
+  <string name="assistant_page_embedding_download_retry">重试</string>
   <string name="assistant_page_embedding_source_local">本地模型</string>
   <string name="assistant_page_embedding_source_cloud">云端模型</string>
   <string name="assistant_page_embedding_cloud_notice">索引内容会发送到该服务商来生成向量。</string>

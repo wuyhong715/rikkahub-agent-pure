@@ -7,7 +7,10 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.Response
+import okhttp3.ResponseBody.Companion.asResponseBody
 import okhttp3.ResponseBody.Companion.toResponseBody
+import okio.buffer
+import okio.source
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -55,6 +58,20 @@ private class FailingInputStream(private val goodBytes: ByteArray) : InputStream
             return goodBytes.size
         }
         throw IOException("simulated connection drop")
+    }
+}
+
+/** Delivers [bytes], then throws instead of returning EOF - a socket reset part-way through a
+ *  body, as opposed to a clean early close (which is a short read, tested separately). */
+private class ResetAfter(private val bytes: ByteArray) : InputStream() {
+    private var pos = 0
+    override fun read(): Int = throw UnsupportedOperationException("not used by the download loop")
+    override fun read(b: ByteArray, off: Int, len: Int): Int {
+        if (pos >= bytes.size) throw IOException("Connection reset by peer")
+        val n = minOf(len, bytes.size - pos)
+        System.arraycopy(bytes, pos, b, off, n)
+        pos += n
+        return n
     }
 }
 
@@ -158,6 +175,13 @@ class ModelInstallTest {
         val blob = "https://huggingface.co/foo/bar/blob/dev/model.litertlm"
         val expected = "https://huggingface.co/foo/bar/resolve/dev/model.litertlm"
         assertEquals(expected, ModelInstall.normalizeHuggingFaceUrl(blob))
+    }
+
+    @Test fun `normalizeHuggingFaceUrl rewrites a blob path on the mirror too`() {
+        assertEquals(
+            "https://hf-mirror.com/org/repo/resolve/main/model.gguf",
+            ModelInstall.normalizeHuggingFaceUrl("https://hf-mirror.com/org/repo/blob/main/model.gguf"),
+        )
     }
 
     @Test fun `normalizeHuggingFaceUrl passes through non-huggingface URLs unchanged`() {
@@ -426,7 +450,9 @@ class ModelInstallTest {
         val client = clientReturning(truncated, declaredContentLength = fullContent.size.toLong())
         val target = File(tempFolder.newFolder(), "model.gguf")
 
-        val events = ModelInstall.download(client, "https://example.com/model.gguf", target).toList()
+        val events = ModelInstall.download(
+            client, "https://example.com/model.gguf", target, retryDelayMillis = { 0L },
+        ).toList()
 
         val failed = events.last() as ModelInstall.Progress.Failed
         assertTrue("expected an IOException, got ${failed.cause}", failed.cause is IOException)
@@ -515,5 +541,201 @@ class ModelInstallTest {
         } finally {
             folder.delete()
         }
+    }
+
+    // download() resilience: reset / resume / mirror -------------------------------
+
+    @Test
+    fun `a reset mid-transfer resumes from the bytes already on disk instead of starting over`() =
+        runBlocking {
+            // The reported failure: the socket is reset part-way through a large file. Before the
+            // retry loop existed this ended the download, and the next tap re-fetched everything.
+            // Attempt two must ask for `Range: bytes=<partial>-`.
+            val content = ggufBytes(5000)
+            val target = File(tempFolder.newFolder(), "model.gguf")
+            val ranges = mutableListOf<String?>()
+            val client = OkHttpClient.Builder()
+                .addInterceptor(Interceptor { chain ->
+                    val request = chain.request()
+                    val range = request.header("Range")
+                    ranges += range
+                    if (range == null) {
+                        Response.Builder()
+                            .request(request)
+                            .protocol(Protocol.HTTP_1_1)
+                            .code(200)
+                            .message("OK")
+                            .header("Content-Length", content.size.toString())
+                            .body(
+                                ResetAfter(content.copyOfRange(0, 2000))
+                                    .source()
+                                    .buffer()
+                                    .asResponseBody(
+                                        "application/octet-stream".toMediaType(),
+                                        content.size.toLong(),
+                                    )
+                            )
+                            .build()
+                    } else {
+                        Response.Builder()
+                            .request(request)
+                            .protocol(Protocol.HTTP_1_1)
+                            .code(206)
+                            .message("Partial Content")
+                            .header("Content-Range", "bytes 2000-${content.size - 1}/${content.size}")
+                            .header("Content-Length", (content.size - 2000).toString())
+                            .body(
+                                content.copyOfRange(2000, content.size)
+                                    .toResponseBody("application/octet-stream".toMediaType())
+                            )
+                            .build()
+                    }
+                })
+                .build()
+
+            val events = ModelInstall.download(
+                client, "https://example.com/model.gguf", target, retryDelayMillis = { 0L },
+            ).toList()
+
+            assertTrue("expected Done, got ${events.last()}", events.last() is ModelInstall.Progress.Done)
+            assertEquals(listOf(null, "bytes=2000-"), ranges)
+            assertArrayEquals(content, target.readBytes())
+            assertTrue(events.any { it is ModelInstall.Progress.Retrying })
+        }
+
+    @Test
+    fun `a huggingface URL falls back to the mirror host when the direct host fails`() = runBlocking {
+        val content = ggufBytes(100)
+        val target = File(tempFolder.newFolder(), "model.gguf")
+        val hosts = mutableListOf<String>()
+        val client = OkHttpClient.Builder()
+            .addInterceptor(Interceptor { chain ->
+                val host = chain.request().url.host
+                hosts += host
+                if (host == ModelDownloadPolicy.PRIMARY_HOST) {
+                    throw IOException("Connection reset by peer")
+                }
+                Response.Builder()
+                    .request(chain.request())
+                    .protocol(Protocol.HTTP_1_1)
+                    .code(200)
+                    .message("OK")
+                    .header("Content-Length", content.size.toString())
+                    .body(content.toResponseBody("application/octet-stream".toMediaType()))
+                    .build()
+            })
+            .build()
+
+        val events = ModelInstall.download(
+            client,
+            "https://huggingface.co/org/repo/resolve/main/model.gguf",
+            target,
+            retryDelayMillis = { 0L },
+        ).toList()
+
+        assertTrue("expected Done, got ${events.last()}", events.last() is ModelInstall.Progress.Done)
+        assertEquals(listOf(ModelDownloadPolicy.PRIMARY_HOST, ModelDownloadPolicy.MIRROR_HOST), hosts)
+        val retry = events.filterIsInstance<ModelInstall.Progress.Retrying>().single()
+        assertEquals(ModelDownloadPolicy.MIRROR_HOST, retry.host)
+        assertEquals(2, retry.attempt)
+    }
+
+    @Test
+    fun `turning the mirror off keeps a failing download on the host the user named`() = runBlocking {
+        val target = File(tempFolder.newFolder(), "model.gguf")
+        val hosts = mutableListOf<String>()
+        val client = OkHttpClient.Builder()
+            .addInterceptor(Interceptor { chain ->
+                hosts += chain.request().url.host
+                throw IOException("Connection reset by peer")
+            })
+            .build()
+
+        val events = ModelInstall.download(
+            client,
+            "https://huggingface.co/org/repo/resolve/main/model.gguf",
+            target,
+            mirrorEnabled = false,
+            retryDelayMillis = { 0L },
+        ).toList()
+
+        assertEquals(
+            List(ModelDownloadPolicy.MAX_ATTEMPTS) { ModelDownloadPolicy.PRIMARY_HOST },
+            hosts,
+        )
+        val failed = events.last() as ModelInstall.Progress.Failed
+        assertTrue("expected an IOException, got ${failed.cause}", failed.cause is IOException)
+        assertTrue(
+            "the message must say the attempts are spent, not just echo the socket error: " +
+                "${failed.cause.message}",
+            failed.cause.message.orEmpty().contains("${ModelDownloadPolicy.MAX_ATTEMPTS} attempts"),
+        )
+        assertFalse("a failed download must not be registered", target.exists())
+    }
+
+    @Test
+    fun `a 404 stops after one request instead of spending every attempt`() = runBlocking {
+        val target = File(tempFolder.newFolder(), "model.gguf")
+        var calls = 0
+        val client = OkHttpClient.Builder()
+            .addInterceptor(Interceptor { chain ->
+                calls++
+                Response.Builder()
+                    .request(chain.request())
+                    .protocol(Protocol.HTTP_1_1)
+                    .code(404)
+                    .message("Not Found")
+                    .body(ByteArray(0).toResponseBody("text/plain".toMediaType()))
+                    .build()
+            })
+            .build()
+
+        val events = ModelInstall.download(
+            client,
+            "https://huggingface.co/org/repo/resolve/main/model.gguf",
+            target,
+            retryDelayMillis = { 0L },
+        ).toList()
+
+        assertEquals("a 404 will answer 404 again; one request is enough", 1, calls)
+        assertTrue(events.last() is ModelInstall.Progress.Failed)
+        assertTrue(events.none { it is ModelInstall.Progress.Retrying })
+    }
+
+    @Test
+    fun `a 503 is treated as transient and retried`() = runBlocking {
+        val content = ggufBytes(64)
+        val target = File(tempFolder.newFolder(), "model.gguf")
+        var calls = 0
+        val client = OkHttpClient.Builder()
+            .addInterceptor(Interceptor { chain ->
+                calls++
+                if (calls == 1) {
+                    Response.Builder()
+                        .request(chain.request())
+                        .protocol(Protocol.HTTP_1_1)
+                        .code(503)
+                        .message("Service Unavailable")
+                        .body(ByteArray(0).toResponseBody("text/plain".toMediaType()))
+                        .build()
+                } else {
+                    Response.Builder()
+                        .request(chain.request())
+                        .protocol(Protocol.HTTP_1_1)
+                        .code(200)
+                        .message("OK")
+                        .header("Content-Length", content.size.toString())
+                        .body(content.toResponseBody("application/octet-stream".toMediaType()))
+                        .build()
+                }
+            })
+            .build()
+
+        val events = ModelInstall.download(
+            client, "https://example.com/model.gguf", target, retryDelayMillis = { 0L },
+        ).toList()
+
+        assertTrue("expected Done, got ${events.last()}", events.last() is ModelInstall.Progress.Done)
+        assertEquals(2, calls)
     }
 }
