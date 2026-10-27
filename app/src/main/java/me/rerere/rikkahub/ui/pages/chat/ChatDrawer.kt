@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -97,7 +98,6 @@ import me.rerere.rikkahub.data.model.Folder
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.ui.components.ai.AssistantPicker
 import me.rerere.rikkahub.ui.components.ui.BackupReminderCard
-import me.rerere.rikkahub.ui.components.ui.Tooltip
 import me.rerere.rikkahub.ui.components.ui.AssistantAvatar
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.ui.components.ui.SEAM_SHADOW_WIDTH
@@ -470,7 +470,7 @@ fun ChatDrawerContent(
                             ) {
                                 DrawerAction(
                                     icon = { Icon(HugeIcons.LookTop, null) },
-                                    label = { Text(stringResource(R.string.assistant_page_title)) },
+                                    label = stringResource(R.string.chat_drawer_nav_assistant),
                                     contentDescription = stringResource(R.string.assistant_page_title),
                                     onClick = { navController.navigate(Screen.Assistant) },
                                 )
@@ -478,7 +478,7 @@ fun ChatDrawerContent(
                                 Box {
                                     DrawerAction(
                                         icon = { Icon(HugeIcons.Sparkles, null) },
-                                        label = { Text(stringResource(R.string.menu)) },
+                                        label = stringResource(R.string.chat_drawer_nav_more),
                                         contentDescription = stringResource(R.string.menu),
                                         onClick = { showMenuPopup = true },
                                     )
@@ -515,21 +515,21 @@ fun ChatDrawerContent(
 
                                 DrawerAction(
                                     icon = { Icon(HugeIcons.InLove, null) },
-                                    label = { Text(stringResource(R.string.favorite_page_title)) },
+                                    label = stringResource(R.string.favorite_page_title),
                                     contentDescription = stringResource(R.string.favorite_page_title),
                                     onClick = { navController.navigate(Screen.Favorite) },
                                 )
 
                                 DrawerAction(
                                     icon = { Icon(HugeIcons.ChartColumn, null) },
-                                    label = { Text(stringResource(R.string.chat_drawer_statistics)) },
+                                    label = stringResource(R.string.chat_drawer_statistics),
                                     contentDescription = stringResource(R.string.chat_drawer_statistics),
                                     onClick = { navController.navigate(Screen.Stats) },
                                 )
 
                                 DrawerAction(
                                     icon = { Icon(HugeIcons.Settings03, null) },
-                                    label = { Text(stringResource(R.string.settings)) },
+                                    label = stringResource(R.string.settings),
                                     contentDescription = stringResource(R.string.settings),
                                     onClick = { navController.navigate(Screen.Setting) },
                                 )
@@ -1035,32 +1035,36 @@ private fun DrawerIconButton(
 private fun DrawerAction(
     modifier: Modifier = Modifier,
     icon: @Composable () -> Unit,
-    label: @Composable () -> Unit,
+    label: String,
     contentDescription: String? = null,
     onClick: () -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
     val darkTheme = LocalDarkMode.current
-    Surface(
-        onClick = onClick,
-        modifier = modifier.semantics(mergeDescendants = true) {
-            if (contentDescription != null) {
-                this.contentDescription = contentDescription
+    // 圆形图标 + 常驻文字的“dock”样式：这排入口是全局导航，只有图标时两个齿轮
+    // （助手设置 / 设置）分辨不出来，长按才出标签等于没有标签。
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick)
+            .semantics(mergeDescendants = true) {
+                this.contentDescription = contentDescription ?: label
             }
-        },
-        shape = CircleShape,
-        color = if (darkTheme) scheme.surfaceContainerHighest else scheme.surface,
-        contentColor = scheme.onSurface,
-        shadowElevation = 2.dp,
-        border = BorderStroke(
-            width = 1.dp,
-            color = scheme.outlineVariant.copy(alpha = if (darkTheme) 0.35f else 0.55f),
-        ),
+            .padding(vertical = 4.dp)
+            .widthIn(min = 56.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Tooltip(
-            tooltip = {
-                label()
-            }
+        Surface(
+            modifier = Modifier.size(42.dp),
+            shape = CircleShape,
+            color = if (darkTheme) scheme.surfaceContainerHighest else scheme.surface,
+            contentColor = scheme.onSurface,
+            shadowElevation = 2.dp,
+            border = BorderStroke(
+                width = 1.dp,
+                color = scheme.outlineVariant.copy(alpha = if (darkTheme) 0.35f else 0.55f),
+            ),
         ) {
             Box(
                 modifier = Modifier
@@ -1070,6 +1074,13 @@ private fun DrawerAction(
                 icon()
             }
         }
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = scheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 

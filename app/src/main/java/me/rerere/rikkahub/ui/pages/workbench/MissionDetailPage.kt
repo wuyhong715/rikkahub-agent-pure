@@ -47,6 +47,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -272,11 +273,43 @@ fun MissionDetailPage(missionId: String) {
                                 StatusPill(status = m.statusEnum)
                             }
                             if (m.description.isNotBlank()) {
+                                // 任务描述在 Moxw 里常常就是整段任务提示词（几千字），展开渲染会把
+                                // 状态、进度和运行控制整个挤出首屏。默认折叠三行，只有真的溢出时才
+                                // 提供“展开”，短描述不会多出一个没用的按钮。
+                                var descriptionExpanded by rememberSaveable(m.id) { mutableStateOf(false) }
+                                var descriptionOverflows by remember(m.id) { mutableStateOf(false) }
+                                val descriptionLayout =
+                                    MissionDescriptionCollapse.layout(descriptionExpanded, descriptionOverflows)
                                 Text(
                                     text = m.description,
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = descriptionLayout.maxLines,
+                                    overflow = TextOverflow.Ellipsis,
+                                    onTextLayout = { result ->
+                                        if (!descriptionExpanded) {
+                                            descriptionOverflows = result.hasVisualOverflow
+                                        }
+                                    },
                                 )
+                                if (descriptionLayout.showToggle) {
+                                    TextButton(
+                                        onClick = { descriptionExpanded = !descriptionExpanded },
+                                        contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp),
+                                        modifier = Modifier.heightIn(min = 40.dp),
+                                    ) {
+                                        Text(
+                                            text = stringResource(
+                                                if (descriptionExpanded) {
+                                                    R.string.mission_detail_description_collapse
+                                                } else {
+                                                    R.string.mission_detail_description_expand
+                                                }
+                                            ),
+                                            style = MaterialTheme.typography.labelLarge,
+                                        )
+                                    }
+                                }
                             }
                             // 批 C/D — which playbook this mission follows. Always shown (a null path is a
                             // real mode: the model picks a document on each launch).

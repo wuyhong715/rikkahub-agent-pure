@@ -31,6 +31,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
@@ -195,6 +196,20 @@ fun MissionCard(
                         text = relativeTime(mission.updatedAt),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (criteria.isNotEmpty()) {
+                    // 长任务最想知道“走到哪了”。0/6 只是数字，配一条细进度线扫一眼就能读懂。
+                    LinearProgressIndicator(
+                        progress = { checked.size.toFloat() / criteria.size },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(2.dp)),
+                        color = statusColor,
+                        trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        gapSize = 0.dp,
+                        drawStopIndicator = {},
                     )
                 }
             }

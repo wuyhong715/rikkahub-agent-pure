@@ -3024,6 +3024,10 @@ HARDLINE 保护仍然生效：rm -rf /、mkfs、shutdown / reboot、向块设备
   <string name="mission_note_hint">记录内容</string>
   <string name="mission_note_save">保存</string>
   <string name="mission_created_at">创建于 %1$s</string>
+  <string name="mission_detail_description_expand">展开全部</string>
+  <string name="chat_drawer_nav_assistant">助手</string>
+  <string name="chat_drawer_nav_more">更多</string>
+  <string name="mission_detail_description_collapse">收起</string>
   <string name="mission_updated_at">更新于 %1$s</string>
   <string name="mission_artifact_copied">路径已复制</string>
   <string name="mission_status_active">进行中</string>
