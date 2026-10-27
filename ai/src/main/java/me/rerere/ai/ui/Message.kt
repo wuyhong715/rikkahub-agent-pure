@@ -28,6 +28,44 @@ enum class MessageInterject {
     AFTER_TURN,
 }
 
+/**
+ * 一条消息「是谁说的」。
+ *
+ * [USER] / [ASSISTANT] 是推导出来的缺省身份（见 [UIMessage.speaker]）；其余值表示这条消息是
+ * App 自己写进会话的（任务简报、交接、返工指令、系统通知、交付报告、子 agent 汇总）。
+ *
+ * **不改 `role`**：App 消息在协议里仍然是 `USER`（模型的输入契约不变），只有这个字段表达 App
+ * 身份。把 role 改成 ASSISTANT 会让模型对着自己说话。
+ */
+@Serializable
+enum class MessageOrigin {
+    USER,
+    ASSISTANT,
+    /** 任务首轮简报（MissionLauncher Create）。 */
+    APP_BRIEF,
+    /** 任务续轮交接 / 从检查点恢复。 */
+    APP_HANDOFF,
+    /** 用户打回或验收失败后的返工指令。 */
+    APP_REWORK,
+    /** 定时 / 事件触发的系统通知。 */
+    APP_NOTICE,
+    /** 任务交付报告。 */
+    APP_REPORT,
+    /** 子 agent 结果汇总。 */
+    SUBAGENT_SUMMARY;
+
+    /** 是否是「App 说的话」（不是用户，也不是模型）。 */
+    val isApp: Boolean get() = this != USER && this != ASSISTANT
+}
+
+/**
+ * 消息的实际发声者：显式声明的 [UIMessage.origin] 优先，否则按 role 推导。
+ *
+ * 用计算属性而不是给 role 加值：旧消息零迁移，assistant 消息也不会被误标成 USER。
+ */
+val UIMessage.speaker: MessageOrigin
+    get() = origin ?: if (role == MessageRole.USER) MessageOrigin.USER else MessageOrigin.ASSISTANT
+
 // 公共消息抽象, 具体的Provider实现会转换为API接口需要的DTO
 @Serializable
 data class UIMessage(
@@ -43,6 +81,8 @@ data class UIMessage(
     val translation: String? = null,
     // 用户插话的落点标记；null = 普通消息。随消息 JSON 持久化，旧数据缺省可读。
     val interject: MessageInterject? = null,
+    // 发声者（只在 App 写消息时显式给出）；null = 按 role 推导。随消息 JSON 持久化。
+    val origin: MessageOrigin? = null,
     // 请求期间生成的内部消息；该标记仅在内存中使用
     @Transient
     val isSynthetic: Boolean = false,

@@ -141,6 +141,18 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
                         },
                     )
                     item(
+                        headlineContent = { Text(stringResource(R.string.setting_display_page_show_app_speaker_title)) },
+                        supportingContent = { Text(stringResource(R.string.setting_display_page_show_app_speaker_desc)) },
+                        trailingContent = {
+                            Switch(
+                                checked = displaySetting.showAppSpeaker,
+                                onCheckedChange = {
+                                    updateDisplaySetting(displaySetting.copy(showAppSpeaker = it))
+                                }
+                            )
+                        },
+                    )
+                    item(
                         headlineContent = { Text(stringResource(R.string.setting_display_page_show_assistant_bubble_title)) },
                         supportingContent = { Text(stringResource(R.string.setting_display_page_show_assistant_bubble_desc)) },
                         trailingContent = {

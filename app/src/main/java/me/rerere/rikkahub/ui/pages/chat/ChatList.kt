@@ -89,6 +89,7 @@ import dev.chrisbanes.haze.hazeSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import me.rerere.ai.ui.speaker
 import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
@@ -707,7 +708,8 @@ private fun ChatListPreview(
                 key = { _, item -> "${item.second.id}:${item.first}" },
             ) { _, (originalIndex, node) ->
                 val message = node.currentMessage
-                val isUser = message.role == me.rerere.ai.core.MessageRole.USER
+                // App 写进会话的消息 role 仍是 USER，但视觉上不是用户自己说的话。
+                val isUser = message.role == me.rerere.ai.core.MessageRole.USER && !message.speaker.isApp
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()

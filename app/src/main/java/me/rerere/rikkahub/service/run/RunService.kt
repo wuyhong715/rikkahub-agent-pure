@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.service.run
 
 import kotlinx.coroutines.flow.Flow
+import me.rerere.ai.ui.MessageOrigin
 import me.rerere.rikkahub.data.agentrun.AgentRunKind
 import me.rerere.rikkahub.data.runevent.RunEventEntity
 import kotlin.uuid.Uuid
@@ -91,6 +92,12 @@ data class RunRequest(
     val kind: AgentRunKind = AgentRunKind.Cron,
     /** Per-kind domain id for the ledger; defaults to `run:<conversationId>`. */
     val domainId: String? = null,
+    /**
+     * 这条 prompt 由谁写入会话。null = 用户/普通调用方（旧行为）。
+     *
+     * 只影响消息的 `origin`（渲染与可交互性），**不影响 role**：模型看到的仍是一条 user 消息。
+     */
+    val promptOrigin: MessageOrigin? = null,
     /** Set when this run was dispatched by another run (P6 orchestration). */
     val parentRunId: String? = null,
     /**

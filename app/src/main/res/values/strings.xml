@@ -388,6 +388,10 @@
   <string name="chain_of_thought_show_more_steps">Show %d more steps</string>
   <string name="chat_input_placeholder">Chat with AI</string>
   <string name="chat_input_hint_1">Say something…</string>
+  <string name="app_speaker_name">Moxw</string>
+  <string name="chat_app_speaker_badge">App</string>
+  <string name="setting_display_page_show_app_speaker_title">App message bubble</string>
+  <string name="setting_display_page_show_app_speaker_desc">Show messages the app writes into the conversation (mission briefs, handoffs, rework) as Moxw bubbles instead of plain text.</string>
   <string name="chat_input_interject_hint">Generating · send = steer (applies on the next step)</string>
   <string name="chat_interject_next_step">Steer · applies on the next step</string>
   <string name="chat_interject_after_turn">Steer · applies after this turn</string>

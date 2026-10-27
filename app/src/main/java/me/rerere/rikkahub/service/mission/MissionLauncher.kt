@@ -2,6 +2,7 @@ package me.rerere.rikkahub.service.mission
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import me.rerere.ai.ui.MessageOrigin
 import me.rerere.rikkahub.data.agentrun.AgentRunKind
 import me.rerere.rikkahub.data.ai.tools.ConversationSystemAddendum
 import me.rerere.rikkahub.data.mission.AcceptanceCheckSpec
@@ -125,6 +126,11 @@ class MissionLauncher(
         missionId: String,
         source: LaunchSource,
         continuePrompt: String? = null,
+        /**
+         * 这一轮 prompt 的身份（App 气泡）。null 时按 [source] 推导：Create → APP_BRIEF、
+         * Trigger → APP_NOTICE、Continue → APP_HANDOFF；返工轮由督导显式传 APP_REWORK。
+         */
+        promptOrigin: MessageOrigin? = null,
     ): LaunchOutcome {
         return try {
             val mission = missionRepository.getById(missionId)
@@ -260,6 +266,11 @@ class MissionLauncher(
                     conversationId = conversationUuid,
                     headless = headless,
                     timeoutMs = timePlan.timeoutMs,
+                    promptOrigin = promptOrigin ?: when (source) {
+                        LaunchSource.Create -> MessageOrigin.APP_BRIEF
+                        is LaunchSource.Trigger -> MessageOrigin.APP_NOTICE
+                        is LaunchSource.Continue -> MessageOrigin.APP_HANDOFF
+                    },
                 )
             )
 

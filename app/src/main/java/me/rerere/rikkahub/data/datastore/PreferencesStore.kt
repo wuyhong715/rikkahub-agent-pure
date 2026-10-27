@@ -1410,6 +1410,13 @@ data class DisplaySetting(
     val userNickname: String = "",
     val useAppIconStyleLoadingIndicator: Boolean = true,
     val showUserAvatar: Boolean = true,
+    /**
+     * App 自己写进会话的消息（任务简报/交接/返工/通知）渲染成第三方气泡：Moxw 头像 +
+     * tertiary 气泡 + 左侧竖条。关掉后退回普通消息气泡（但 origin 仍然存在）。
+     */
+    val showAppSpeaker: Boolean = true,
+    /** App 气泡上显示的名字。 */
+    val appSpeakerName: String = "Moxw",
     val showAssistantBubble: Boolean = false,
     val bubbleOpacity: Float = 1.0f,
     val showModelIcon: Boolean = true,
