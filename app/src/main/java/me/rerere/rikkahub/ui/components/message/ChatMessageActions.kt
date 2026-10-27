@@ -40,6 +40,7 @@ import me.rerere.ai.core.MessageRole
 import me.rerere.ai.provider.Model
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.ui.speaker
 import kotlinx.datetime.LocalDateTime
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Copy01
@@ -79,6 +80,8 @@ fun ColumnScope.ChatMessageActionButtons(
 ) {
     val context = LocalContext.current
     val settings = LocalSettings.current
+    // App 写进会话的消息：只保留「复制」，不给编辑 / 重新生成 / 分支 / 朗读 / 翻译。
+    val isAppMessage = message.speaker.isApp
     var isPendingDelete by remember { mutableStateOf(false) }
     var showTranslateDialog by remember { mutableStateOf(false) }
     var showRegenerateConfirm by remember { mutableStateOf(false) }
@@ -107,7 +110,7 @@ fun ColumnScope.ChatMessageActionButtons(
             tint = actionIconColor
         )
 
-        Icon(
+        if (!isAppMessage) Icon(
             imageVector = HugeIcons.Refresh03,
             contentDescription = stringResource(R.string.regenerate),
             modifier = Modifier
@@ -160,7 +163,7 @@ fun ColumnScope.ChatMessageActionButtons(
             )
 
             // Translation button
-            if (onTranslate != null) {
+            if (onTranslate != null && !isAppMessage) {
                 Icon(
                     imageVector = HugeIcons.Translate,
                     contentDescription = stringResource(R.string.translate),
@@ -197,7 +200,7 @@ fun ColumnScope.ChatMessageActionButtons(
             tint = actionIconColor
         )
 
-        ChatMessageBranchSelector(
+        if (!isAppMessage) ChatMessageBranchSelector(
             node = node,
             onUpdate = onUpdate,
         )
@@ -261,7 +264,9 @@ fun ChatMessageActionsSheet(
     isFavorite: Boolean = false,
     onToggleFavorite: (() -> Unit)? = null,
     onWebViewPreview: () -> Unit,
-    onDismissRequest: () -> Unit
+    onDismissRequest: () -> Unit,
+    /** App 消息只留复制 / 选择复制 / 分享 / 删除，不给编辑与分支。 */
+    speakerIsApp: Boolean = false,
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
@@ -333,8 +338,8 @@ fun ChatMessageActionsSheet(
                 }
             }
 
-            // Edit
-            Card(
+            // Edit（App 消息不可编辑）
+            if (!speakerIsApp) Card(
                 onClick = {
                     onDismissRequest()
                     onEdit()
@@ -387,8 +392,8 @@ fun ChatMessageActionsSheet(
                 }
             }
 
-            // Create a Fork
-            Card(
+            // Create a Fork（App 消息不参与分支）
+            if (!speakerIsApp) Card(
                 onClick = {
                     onDismissRequest()
                     onFork()

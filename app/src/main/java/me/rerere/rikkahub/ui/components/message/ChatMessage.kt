@@ -11,11 +11,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -81,6 +84,7 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessageAnnotation
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.isEmptyUIMessage
+import me.rerere.ai.ui.speaker
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowDown01
 import me.rerere.hugeicons.stroke.ArrowUp01
@@ -157,6 +161,8 @@ fun ChatMessage(
     val message = displayMessage
     val actionMessage = node.messages.getOrNull(node.selectIndex) ?: node.messages.last()
     val settings = LocalSettings.current.displaySetting
+    // App 写进会话的消息在协议里仍是 USER（不改 role），身份只由 origin 表达。
+    val isAppSpeaker = message.speaker.isApp
     val chatFontFamily = LocalChatFontFamily.current ?: rememberChatFontFamily(settings)
     val textStyle = LocalTextStyle.current.copy(
         fontSize = LocalTextStyle.current.fontSize * settings.fontSizeRatio,
@@ -170,7 +176,7 @@ fun ChatMessage(
     val colorScheme = MaterialTheme.colorScheme
     Column(
         modifier = modifier.fillMaxWidth(),
-        horizontalAlignment = if (message.role == MessageRole.USER) Alignment.End else Alignment.Start,
+        horizontalAlignment = if (isAppSpeaker || message.role != MessageRole.USER) Alignment.Start else Alignment.End,
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         if (!message.parts.isEmptyUIMessage()) {
@@ -187,6 +193,11 @@ fun ChatMessage(
                     loading = loading,
                     modifier = Modifier.weight(1f)
                 )
+                ChatMessageAppAvatar(
+                    message = message,
+                    name = settings.appSpeakerName,
+                    modifier = Modifier.weight(1f),
+                )
                 ChatMessageUserAvatar(
                     message = message,
                     avatar = settings.userAvatar,
@@ -196,19 +207,29 @@ fun ChatMessage(
             }
         }
         ProvideTextStyle(textStyle) {
-            MessagePartsBlock(
-                assistant = assistant,
-                role = message.role,
-                parts = message.parts,
-                annotations = message.annotations,
-                loading = loading,
-                generationActive = generationActive,
-                model = model,
-                onToolApproval = onToolApproval,
-                onToolAnswer = onToolAnswer,
-                onRerunTool = onRerunTool,
-                onUserMessageClick = if (message.role == MessageRole.USER) onEdit else null,
-            )
+            val partsBlock: @Composable () -> Unit = {
+                MessagePartsBlock(
+                    assistant = assistant,
+                    role = message.role,
+                    parts = message.parts,
+                    annotations = message.annotations,
+                    loading = loading,
+                    generationActive = generationActive,
+                    model = model,
+                    onToolApproval = onToolApproval,
+                    onToolAnswer = onToolAnswer,
+                    onRerunTool = onRerunTool,
+                    appSpeaker = isAppSpeaker,
+                    // App 消息不可编辑：点了会跳进用户消息的编辑态。
+                    onUserMessageClick = if (message.role == MessageRole.USER && !isAppSpeaker) onEdit else null,
+                )
+            }
+            if (isAppSpeaker && settings.showAppSpeaker) {
+                AppSpeakerBubble { partsBlock() }
+            } else {
+                // 关掉「App 气泡」后仍不能退化成用户气泡（那是谎报作者），只去掉装饰。
+                partsBlock()
+            }
 
             message.translation?.let { translation ->
                 CollapsibleTranslationText(
@@ -311,7 +332,8 @@ fun ChatMessage(
             },
             onDismissRequest = {
                 showActionsSheet = false
-            }
+            },
+            speakerIsApp = actionMessage.speaker.isApp,
         )
     }
 
@@ -339,6 +361,8 @@ private fun MessagePartsBlock(
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
     onRerunTool: (suspend (toolCallId: String) -> me.rerere.rikkahub.service.ChatService.RerunToolResult)? = null,
     onUserMessageClick: (() -> Unit)? = null,
+    // App 说的话：走模型侧的排版，但气泡由外层 [AppSpeakerBubble] 提供，不再套用户气泡。
+    appSpeaker: Boolean = false,
 ) {
     val context = LocalContext.current
     val contentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
@@ -466,7 +490,7 @@ private fun MessagePartsBlock(
                         val renderedAsWebviewCard =
                             role != MessageRole.USER && SkillWebviewCardOrNull(part)
                         val textContent = @Composable {
-                            if (role == MessageRole.USER) {
+                            if (role == MessageRole.USER && !appSpeaker) {
                                 // Long pasted prompts collapse to a preview. The chevron
                                 // expands in place; tapping the bubble still edits.
                                 UserMessageBubble(
@@ -498,7 +522,7 @@ private fun MessagePartsBlock(
                                     ),
                                     showAssistantBubble = settings.displaySetting.showAssistantBubble,
                                 )
-                                if (settings.displaySetting.showAssistantBubble || onPhoto) {
+                                if (!appSpeaker && (settings.displaySetting.showAssistantBubble || onPhoto)) {
                                     Surface(
                                         // 流式期间关掉高度动画：内容每个 token 都在长，
                                         // 动画每帧都要重测+插值，和自动跟随滚动抢帧。
@@ -850,6 +874,44 @@ private fun UserMessageBubble(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * App 气泡（第三档，只在第三档出现）：tertiary 容器色 + 左侧 3dp 实心竖条 +
+ * 不对称圆角（左上角收紧，其余 16dp）。
+ *
+ * 竖条用 `tertiary` 实心而不是用容器色描一条细线：浅色主题下容器色几乎和底色一样，
+ * 细线看不见（M100 的教训）。
+ */
+@Composable
+private fun AppSpeakerBubble(
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    val bubbleOpacity = LocalSettings.current.displaySetting.bubbleOpacity
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(IntrinsicSize.Min)
+            .animateContentSize(),
+    ) {
+        Box(
+            modifier = Modifier
+                .width(3.dp)
+                .fillMaxHeight()
+                .clip(RoundedCornerShape(topStart = 4.dp, bottomStart = 4.dp))
+                .background(MaterialTheme.colorScheme.tertiary),
+        )
+        Surface(
+            modifier = Modifier.weight(1f),
+            shape = RoundedCornerShape(topStart = 4.dp, topEnd = 16.dp, bottomEnd = 16.dp, bottomStart = 16.dp),
+            color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = bubbleOpacity),
+        ) {
+            Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                content()
             }
         }
     }

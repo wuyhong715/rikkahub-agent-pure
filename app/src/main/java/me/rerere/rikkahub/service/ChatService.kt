@@ -47,6 +47,7 @@ import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ProviderManager
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.ui.MessageInterject
+import me.rerere.ai.ui.MessageOrigin
 import me.rerere.ai.ui.ToolApprovalState
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
@@ -1087,12 +1088,13 @@ class ChatService(
         content: List<UIMessagePart>,
         answer: Boolean = true,
         interject: MessageInterject? = null,
+        origin: MessageOrigin? = null,
     ) {
         if (content.isEmptyInputMessage()) return
         val session = getOrCreateSession(conversationId)
         synchronized(session) {
             if (session.messageQueue.state.value.messages.isEmpty()) session.messageQueue.resume()
-            session.messageQueue.enqueue(content, answer, interject = interject)
+            session.messageQueue.enqueue(content, answer, interject = interject, origin = origin)
             dispatchNextQueuedMessage(conversationId)
         }
     }
@@ -1213,6 +1215,7 @@ class ChatService(
                         role = MessageRole.USER,
                         parts = processedContent,
                         interject = queued.interject,
+                        origin = queued.origin,
                     ).toMessageNode(),
                 )
                 saveConversation(conversationId, withUser)

@@ -11,6 +11,7 @@ import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.rikkahub.data.agentrun.AgentRunKind
+import me.rerere.ai.ui.MessageOrigin
 import me.rerere.rikkahub.data.mission.MissionEntity
 import me.rerere.rikkahub.data.mission.MissionExecutionState
 import me.rerere.rikkahub.data.mission.MissionHookSpec
@@ -734,6 +735,8 @@ class MissionSupervisor(
             missionId = mission.id,
             source = LaunchSource.Continue(reworkRound),
             continuePrompt = prompt,
+            // 返工轮：这是 App 因为用户打回 / 验收失败写进会话的指令，不是用户新说的话。
+            promptOrigin = MessageOrigin.APP_REWORK,
         )
         if (!launch.ok) {
             // 返工没起来：姿态回滚，否则任务卡在 RUNNING 且再也不会被督导拾起。
@@ -819,6 +822,8 @@ class MissionSupervisor(
             missionId = mission.id,
             source = LaunchSource.Continue(reworkRound),
             continuePrompt = prompt,
+            // 返工轮：这是 App 因为用户打回 / 验收失败写进会话的指令，不是用户新说的话。
+            promptOrigin = MessageOrigin.APP_REWORK,
         )
         if (!launch.ok) {
             // 返工没起来：姿态回滚，否则任务卡在 RUNNING 且再也不会被督导拾起。

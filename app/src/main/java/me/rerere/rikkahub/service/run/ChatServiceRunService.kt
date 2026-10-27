@@ -8,6 +8,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import me.rerere.ai.core.MessageRole
+import me.rerere.ai.ui.MessageOrigin
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.agentrun.AgentRunKind
 import me.rerere.rikkahub.data.agentrun.AgentRunRepository
@@ -193,6 +194,7 @@ class ChatServiceRunService(
                             .joinToString("\n\n")
                     )
                 ),
+                origin = request.promptOrigin,
             )
         }
 
@@ -421,6 +423,8 @@ class ChatServiceRunService(
             chatService.sendMessage(
                 conversationId = conversationId,
                 content = listOf(UIMessagePart.Text(RESUME_INSTRUCTION)),
+                // 恢复执行是 App 接手的一轮，不是用户新发的话。
+                origin = MessageOrigin.APP_HANDOFF,
             )
         }.onFailure {
             runCatching { Log.w(TAG, "resume: sendMessage failed for run $runId", it) }
