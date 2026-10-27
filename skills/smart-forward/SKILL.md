@@ -1,6 +1,6 @@
 ---
 name: smart-forward
-description: Catch a notification from one app and forward its content to a contact in another (typically Telegram), with a one-line summary the recipient can act on. Useful for sharing OTPs, package tracking updates, news alerts, or "did you see this" moments.
+description: Przechwytuje powiadomienie z jednej aplikacji i przekazuje jego treść kontaktowi w innej (typowo Telegram), z jednolinijkowym podsumowaniem, na które odbiorca może zareagować. Przydatne do udostępniania kodów OTP, śledzenia paczek, alertów informacyjnych lub momentów 'widziałeś to'.
 allowed-tools: list_recent_notifications notification_action_click launch_app read_window_tree find_node click_node set_text take_screenshot telegram_send_message global_action
 ---
 

@@ -5,7 +5,7 @@
     {
       "name": "auto-reply",
       "title": "Auto-reply",
-      "description": "Reply to a contact's notifications via the messaging app on screen.",
+      "description": "Odpowiadaj na powiadomienia kontaktów za pomocą aplikacji do przesyłania wiadomości na ekranie.",
       "category": "automation",
       "license": "Apache-2.0",
       "size_kb": 4,
@@ -16,7 +16,7 @@
     {
       "name": "morning-briefing",
       "title": "Morning Briefing",
-      "description": "Reads weather, calendar, and unread email at wake-up.",
+      "description": "Odczytuje pogodę, kalendarz i nieprzeczytane e-maile po przebudzeniu.",
       "category": "productivity",
       "license": "Apache-2.0",
       "size_kb": 4,
@@ -27,7 +27,7 @@
     {
       "name": "smart-forward",
       "title": "Smart Forward",
-      "description": "Catch a notification, summarise, forward to another contact.",
+      "description": "Odbierz powiadomienie, podsumuj, prześlij do innego kontaktu.",
       "category": "automation",
       "license": "Apache-2.0",
       "size_kb": 4,
@@ -38,7 +38,7 @@
     {
       "name": "notification-summarise-and-act",
       "title": "Notification Summary",
-      "description": "Read recent notifications, group by app, summarise, suggest actions.",
+      "description": "Przeczytaj ostatnie powiadomienia, zgrupuj je według aplikacji, podsumuj i zasugeruj działania.",
       "category": "productivity",
       "license": "Apache-2.0",
       "size_kb": 5,
@@ -49,7 +49,7 @@
     {
       "name": "openclaw-converter",
       "title": "OpenClaw Converter",
-      "description": "Convert OpenClaw skills from ClawHub or raw markdown into RikkaHub-compatible skills.",
+      "description": "Skonwertuj umiejętności OpenClaw z ClawHub lub czystego markdownu na umiejętności kompatybilne z RikkaHub.",
       "category": "utility",
       "license": "Apache-2.0",
       "size_kb": 12,
@@ -60,7 +60,7 @@
     {
       "name": "calculate-hash",
       "title": "Calculate Hash",
-      "description": "Compute the SHA-1 hash of a given text via the WebView's WebCrypto API.",
+      "description": "Oblicz skrót SHA-1 danego tekstu za pomocą interfejsu WebCrypto API w elemencie WebView.",
       "category": "demo",
       "license": "Apache-2.0",
       "size_kb": 12,
@@ -71,7 +71,7 @@
     {
       "name": "interactive-map",
       "title": "Interactive Map",
-      "description": "Embed a Google Maps view for a location. Returns a webview URL.",
+      "description": "Osadza widok map Google dla wybranej lokalizacji. Zwraca adres URL widoku internetowego.",
       "category": "demo",
       "license": "Apache-2.0",
       "size_kb": 15,
@@ -82,7 +82,7 @@
     {
       "name": "kitchen-adventure",
       "title": "Kitchen Adventure",
-      "description": "Text-based RPG where every kitchen appliance is a sentient character. Pure prompt skill.",
+      "description": "Tekstowe RPG, w którym każde urządzenie kuchenne jest czującą postacią. Czyste umiejętności pisania promptów.",
       "category": "demo",
       "license": "Apache-2.0",
       "size_kb": 8,
@@ -93,7 +93,7 @@
     {
       "name": "mood-tracker",
       "title": "Mood Tracker",
-      "description": "Log daily 1-10 mood scores and view trend dashboards. Stores in WebView localStorage.",
+      "description": "Codziennie zapisuj ocenę nastroju w skali 1-10 i przeglądaj wykresy trendów. Dane są przechowywane w pamięci lokalnej WebView.",
       "category": "demo",
       "license": "Apache-2.0",
       "size_kb": 36,
@@ -104,7 +104,7 @@
     {
       "name": "qr-code",
       "title": "QR Code",
-      "description": "Generate a 512x512 QR code PNG for any URL. Requires internet (cdnjs qrcode.js).",
+      "description": "Wygeneruj kod QR w formacie PNG o rozdzielczości 512x512 dla dowolnego URL. Wymaga połączenia z internetem (cdnjs qrcode.js).",
       "category": "demo",
       "license": "Apache-2.0",
       "size_kb": 35,
@@ -115,7 +115,7 @@
     {
       "name": "query-wikipedia",
       "title": "Query Wikipedia",
-      "description": "Fuzzy-search Wikipedia for a topic and return the introduction plus infobox.",
+      "description": "Wyszukaj w Wikipedii temat za pomocą wyszukiwania przybliżonego i zwróć wstęp oraz infoboks.",
       "category": "demo",
       "license": "Apache-2.0",
       "size_kb": 12,
@@ -126,7 +126,7 @@
     {
       "name": "text-spinner",
       "title": "Text Spinner",
-      "description": "Render a 3D-spinning text label inside a webview embed.",
+      "description": "Wygeneruj obracający się w 3D napis wewnątrz osadzonego widoku strony (webview).",
       "category": "demo",
       "license": "Apache-2.0",
       "size_kb": 23,
@@ -137,7 +137,7 @@
     {
       "name": "virtual-piano",
       "title": "Virtual Piano",
-      "description": "Playable 88-key piano with sampled note audio. Bundles ~7.7 MB of MP3 samples.",
+      "description": "Grywalne 88-klawiszowe pianino z samplowanymi dźwiękami. Zawiera ok. 7,7 MB próbek MP3.",
       "category": "demo",
       "license": "Apache-2.0",
       "size_kb": 39,

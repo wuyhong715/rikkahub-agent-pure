@@ -1,6 +1,6 @@
 ---
 name: kitchen-adventure
-description: Act as a dungeon master for a text-based adventure set in a world where everyone is a sentient kitchen appliance. Trigger when user says "start kitchen adventure".
+description: Wciel się w mistrza gry w tekstowej przygodzie osadzonej w świecie, gdzie wszyscy są czującymi sprzętami kuchennymi. Uruchamiane gdy użytkownik powie 'start kitchen adventure'.
 license: Apache-2.0
 metadata:
   upstream: https://github.com/google-ai-edge/gallery

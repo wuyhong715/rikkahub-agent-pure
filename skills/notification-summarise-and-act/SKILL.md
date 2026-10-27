@@ -1,6 +1,6 @@
 ---
 name: notification-summarise-and-act
-description: Read the recent / active notification stream, group by app, summarise what's actually happening, and propose specific next actions. Used when the user asks "what's going on" or returns to their phone after a few hours.
+description: Czyta strumień ostatnich/aktywnych powiadomień, grupuje według aplikacji, podsumowuje co się faktycznie dzieje i proponuje konkretne kolejne kroki. Używane gdy użytkownik pyta 'co się dzieje' lub wraca do telefonu po kilku godzinach.
 allowed-tools: list_recent_notifications list_active_notifications dismiss_notification notification_action_click launch_app read_window_tree get_time_info
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: morning-briefing
-description: Compose the user's morning summary — current weather, today's calendar, unread email count, scheduled jobs ahead, and any battery/storage warnings. Output one short paragraph so the user can read it in 10 seconds.
+description: Tworzy poranne podsumowanie użytkownika - aktualna pogoda, dzisiejszy kalendarz, liczba nieprzeczytanych maili, zaplanowane zadania i ostrzeżenia o baterii/pamięci. Wyświetla jeden krótki akapit, aby użytkownik mógł przeczytać go w 10 sekund.
 allowed-tools: get_time_info get_battery_status get_storage_info list_active_notifications list_recent_notifications get_jobs_history list_call_log get_location launch_app read_window_tree
 ---
 

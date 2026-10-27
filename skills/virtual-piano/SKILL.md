@@ -1,8 +1,8 @@
 ---
 name: virtual-piano
-description: Show a playable 88-key virtual piano with synthesized note audio inside a webview.
+description: Pokazuje grywalne wirtualne pianino z 88 klawiszami i syntezowanym dźwiękiem nut wewnątrz webview.
 license: Apache-2.0
-compatibility: Requires the JS skills tool (run_js) to be enabled.
+compatibility: Wymaga włączonego narzędzia JS skills (run_js).
 metadata:
   upstream: https://github.com/google-ai-edge/gallery
 ---
