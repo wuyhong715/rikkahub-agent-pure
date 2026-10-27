@@ -245,6 +245,9 @@
   <string name="chain_of_thought_show_more_steps">再显示 %d 步</string>
   <string name="chat_input_placeholder">输入消息与AI聊天</string>
   <string name="chat_input_hint_1">说点什么？</string>
+  <string name="chat_input_interject_hint">生成中 · 发送 = 插话（下一步生效）</string>
+  <string name="chat_interject_next_step">插话 · 下一步生效</string>
+  <string name="chat_interject_after_turn">插话 · 本回合结束后生效</string>
   <string name="chat_input_hint_2">从哪开始？</string>
   <string name="chat_input_hint_3">继续吧</string>
   <string name="chat_input_hint_4">在想什么？</string>
