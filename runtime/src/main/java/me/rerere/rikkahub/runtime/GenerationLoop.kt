@@ -50,6 +50,7 @@ import me.rerere.rikkahub.runtime.limits.ToolRuntimeLimits
 import me.rerere.rikkahub.runtime.tools.ContentRouter
 import me.rerere.rikkahub.runtime.tools.ConversationInjections
 import me.rerere.rikkahub.runtime.tools.MEMORY_TOOL_NAME
+import me.rerere.rikkahub.runtime.tools.MicroCompaction
 import me.rerere.rikkahub.runtime.tools.ParallelReadPrefetch
 import me.rerere.rikkahub.runtime.tools.ToolExecutionRetryPolicy
 import me.rerere.rikkahub.runtime.tools.ToolOutputRules
@@ -551,6 +552,10 @@ class GenerationLoop(
 
         val turnStartMs = android.os.SystemClock.elapsedRealtime()
         var loopGuardTripCount = 0
+        // Spill results for micro-compaction, keyed by toolCallId. The projection runs once per
+        // model request inside this turn; without the memo every step would rewrite the same
+        // file for every old result.
+        val microCompactionSpills = HashMap<String, String?>()
 
         for (stepIndex in 0 until maxSteps) {
             // Wall-clock cap: any single user turn that has been running longer than the
@@ -664,6 +669,7 @@ class GenerationLoop(
                         systemAddendum = systemAddendum,
                         messages = messages,
                         injectedNotices = injections,
+                        microCompactionSpills = microCompactionSpills,
                         onUpdateMessages = {
                             messages = outputTransform(it)
                             emit(
@@ -1411,6 +1417,11 @@ class GenerationLoop(
          * sends exactly what it sent before.
          */
         injectedNotices: List<String> = emptyList(),
+        /**
+         * Per-turn spill cache for micro-compaction, shared across the steps of one turn so
+         * the same tool result is written to disk once rather than once per model request.
+         */
+        microCompactionSpills: MutableMap<String, String?> = HashMap(),
     ) {
         val internalMessages = inputTransform(buildList {
             // Conversation-level system prompt override (upstream): when the assistant
@@ -1458,9 +1469,26 @@ class GenerationLoop(
             // prompt caching instead of trimming one message at a time).
             // A compacted view is [summary] + rawTail, and the summary is the only record of
             // everything before the tail. The positional limit must not be able to drop it.
+            //
+            // Micro-compaction sits here, on the request only: the payload of tool results the
+            // model has finished with is replaced by a one-line pointer long before the
+            // window-level compaction would fire. The conversation keeps the real output, so
+            // the chat renders it and the next request re-derives the same projection.
             addAll(
-                messages.limitContextPreservingLeadingSynthetic(assistant.contextMessageLimit)
-                    .ageOldToolImages()
+                MicroCompaction.project(
+                    messages.limitContextPreservingLeadingSynthetic(assistant.contextMessageLimit)
+                        .ageOldToolImages(),
+                    spill = { toolCallId, fullText ->
+                        // One write per call per turn: the projection runs again on every
+                        // step, and the spill file name is deterministic per call.
+                        if (microCompactionSpills.containsKey(toolCallId)) {
+                            microCompactionSpills[toolCallId]
+                        } else {
+                            host.spillToolOutput(toolCallId, fullText)
+                                .also { microCompactionSpills[toolCallId] = it }
+                        }
+                    },
+                )
             )
             // Cross-model continuation: when the previous model's generation failed
             // mid-stream and routing switched to this model, append a synthetic user
