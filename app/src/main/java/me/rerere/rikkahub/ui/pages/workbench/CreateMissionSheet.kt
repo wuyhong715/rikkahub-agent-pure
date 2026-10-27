@@ -514,6 +514,7 @@ fun CreateMissionSheet(
                             onCheckedChange = { requireConfirmation = it },
                         )
                     }
+                }
             }
 
             // 主操作固定在底部：表单再长也不用来回滚动找「创建」。
