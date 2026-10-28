@@ -468,6 +468,30 @@ val dataSourceModule = module {
             missionLauncher = get(),
         )
     }
+    // 批 4 — 任务往源对话回声。落点走 ChatService 的 answer=false 通道（只落消息、不生成）。
+    single {
+        val chatService = get<me.rerere.rikkahub.service.ChatService>()
+        me.rerere.rikkahub.service.mission.MissionConversationEcho(
+            post = { conversationId, text ->
+                chatService.sendMessage(
+                    conversationId = kotlin.uuid.Uuid.parse(conversationId),
+                    content = listOf(me.rerere.ai.ui.UIMessagePart.Text(text)),
+                    answer = false,
+                    origin = me.rerere.ai.ui.MessageOrigin.APP_REPORT,
+                )
+            },
+        )
+    }
+    // 批 4 — 建任务的共用路径：工作台创建表与会话内「开始任务」都走这里。
+    single {
+        me.rerere.rikkahub.ui.pages.workbench.MissionDraftExecutor(
+            missionRepository = get(),
+            missionCreation = get(),
+            missionLauncher = get(),
+            conversationRepository = get(),
+            echo = get(),
+        )
+    }
     // 批 A — mission supervisor (兜底督导): subscribes to run-finished journal events and
     // runs the boot orphan scan (started from RikkaHubApp). Probes bridge to the real
     // repositories; notify bridges to NotificationUtil on a dedicated channel ("任务",
@@ -552,6 +576,11 @@ val dataSourceModule = module {
             onMissionIdle = { missionId ->
                 me.rerere.rikkahub.service.mission.MissionForegroundService
                     .stop(appContext, missionId)
+            },
+            // 批 4 — 任务落定时往源对话回一句话（没有来源的任务在 echo 内部直接返回）。
+            onSettled = { mission, status, summary ->
+                get<me.rerere.rikkahub.service.mission.MissionConversationEcho>()
+                    .onSettled(mission, status, summary)
             },
         )
     }

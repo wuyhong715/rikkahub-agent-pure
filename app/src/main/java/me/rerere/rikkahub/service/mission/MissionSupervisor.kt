@@ -161,6 +161,11 @@ class MissionSupervisor(
      * 只摘掉自己这一条：别的任务还在跑时，前台服务必须继续活着。
      */
     private val onMissionIdle: (missionId: String) -> Unit = {},
+    /**
+     * 批 4 — 任务落定（REVIEW / DONE / BLOCKED）时的出口，DI 接 [MissionConversationEcho]：
+     * 从对话发起的任务，要往那个对话回一句话。null = 不回声（老任务 / 工作台创建）。
+     */
+    private val onSettled: (suspend (mission: MissionEntity, status: MissionStatus, summary: String?) -> Unit)? = null,
 ) {
 
     /** run id → ledger status name; null when the run is unknown to the ledger. */
@@ -485,6 +490,7 @@ class MissionSupervisor(
                 title = "awaiting_review",
                 detail = summary,
             )
+            echoSettled(mission, MissionStatus.REVIEW, summary)
             notify("任务待确认：${mission.title}", summary)
             markIdle(mission.id)
             return
@@ -493,6 +499,7 @@ class MissionSupervisor(
         missionRepository.transition(mission.id, MissionStatus.DONE, note = "mission_report(done)")
         missionRepository.updateExecutionState(mission.id, MissionExecutionState.IDLE)
         markIdle(mission.id)
+        echoSettled(mission, MissionStatus.DONE, summary)
         notify("任务完成：${mission.title}", summary)
     }
 
@@ -520,11 +527,23 @@ class MissionSupervisor(
                     missionRepository.updateExecutionState(mission.id, MissionExecutionState.IDLE)
                 }
                 markIdle(mission.id)
+                echoSettled(mission, MissionStatus.REVIEW, reason)
                 notify("任务待确认：${mission.title}", reason)
                 return false
             }
         }
         return true
+    }
+
+    /**
+     * 状态落定后顺手回声。
+     *
+     * 包一层 runCatching：往对话里投消息是「顺带的礼貌」，它的失败（会话被删、库忙）绝不能
+     * 让任务本身的收尾失败。
+     */
+    private suspend fun echoSettled(mission: MissionEntity, status: MissionStatus, summary: String?) {
+        val sink = onSettled ?: return
+        runCatching { sink(mission, status, summary) }
     }
 
     /** 批 H — 任务收尾：熄灭前台服务里属于它的那一条（不影响别的任务）。 */
@@ -577,6 +596,7 @@ class MissionSupervisor(
         missionRepository.transition(mission.id, MissionStatus.BLOCKED, note = reason)
         missionRepository.updateExecutionState(mission.id, MissionExecutionState.BLOCKED)
         markIdle(mission.id)
+        echoSettled(mission, MissionStatus.BLOCKED, reason)
         notify("任务已停下：${mission.title}", reason)
     }
 
@@ -643,6 +663,7 @@ class MissionSupervisor(
             missionRepository.transition(mission.id, MissionStatus.REVIEW, note = reason)
             missionRepository.updateExecutionState(mission.id, MissionExecutionState.IDLE)
         }
+        echoSettled(mission, MissionStatus.REVIEW, reason)
         runCatching {
             runEventRepository.emit(
                 type = RunEventType.NOTE,
@@ -722,6 +743,7 @@ class MissionSupervisor(
             missionRepository.transition(mission.id, MissionStatus.REVIEW, note = reason)
             missionRepository.updateExecutionState(mission.id, MissionExecutionState.IDLE)
             markIdle(mission.id)
+            echoSettled(mission, MissionStatus.REVIEW, reason)
             notify("任务待确认：${mission.title}", "$reason\n\n${failed.joinToString("\n") { it.describe() }}")
             return false
         }
@@ -806,6 +828,7 @@ class MissionSupervisor(
             missionRepository.transition(mission.id, MissionStatus.REVIEW, note = reason)
             missionRepository.updateExecutionState(mission.id, MissionExecutionState.IDLE)
             markIdle(mission.id)
+            echoSettled(mission, MissionStatus.REVIEW, reason)
             notify("任务待确认：${mission.title}", "$reason\n\n${outcome.describe()}")
             return false
         }

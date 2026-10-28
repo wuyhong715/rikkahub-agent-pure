@@ -131,6 +131,14 @@ class MissionLauncher(
          * Trigger → APP_NOTICE、Continue → APP_HANDOFF；返工轮由督导显式传 APP_REWORK。
          */
         promptOrigin: MessageOrigin? = null,
+        /**
+         * 批 4 — 源对话摘要（[me.rerere.rikkahub.data.mission.ConversationBrief] 的输出）。
+         *
+         * **只用于 Create 轮**：那是任务唯一一次「刚出生、还不知道自己从哪来」的时刻。后续轮次
+         * 靠 `task-state.md` 与执行会话自己的 transcript 就够，重复注入等于每轮多付一次 token，
+         * 还会让模型以为对话里又发生了新的事。
+         */
+        firstRoundBrief: String? = null,
     ): LaunchOutcome {
         return try {
             val mission = missionRepository.getById(missionId)
@@ -266,6 +274,10 @@ class MissionLauncher(
                     conversationId = conversationUuid,
                     headless = headless,
                     timeoutMs = timePlan.timeoutMs,
+                    // 首轮专用前缀：摘要拼在简报前面（RunService 用 "\n\n" 接起来），
+                    // 后续轮次与续跑一律不重复注入。
+                    promptPrefix = firstRoundBrief
+                        ?.takeIf { it.isNotBlank() && source is LaunchSource.Create },
                     promptOrigin = promptOrigin ?: when (source) {
                         LaunchSource.Create -> MessageOrigin.APP_BRIEF
                         is LaunchSource.Trigger -> MessageOrigin.APP_NOTICE

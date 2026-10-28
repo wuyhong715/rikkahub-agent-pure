@@ -3350,6 +3350,9 @@ HARDLINE protections still apply: rm -rf /, mkfs, shutdown / reboot, dd to block
   <string name="mission_action_send_review">Send to review</string>
   <string name="mission_action_complete">Complete</string>
   <string name="mission_create_title">New mission</string>
+  <string name="mission_create_source_hint">This task starts from this conversation: it gets a short summary of the last few messages, and reports back here when it starts, waits for review, finishes or gets blocked.</string>
+  <string name="mission_start_from_chat">Start task</string>
+  <string name="mission_start_from_message">Start task from this message</string>
   <string name="mission_create_field_title">Title</string>
   <string name="mission_create_field_description">Description (optional)</string>
   <string name="mission_create_acceptance">Goals</string>
