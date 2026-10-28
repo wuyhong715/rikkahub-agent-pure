@@ -44,7 +44,28 @@ data class ToolUIContext(
     val content: JsonElement?,
     /** 该工具调用是否在生成中 */
     val loading: Boolean,
+    /**
+     * 模型看到的是**缩短后**的结果 (超预算被截断, 全文落在 `/tool_outputs/` 里)。
+     *
+     * 不是"输出很长"的同义词: 只有在预算真的生效、body 被 head+tail 替换时才为 true。
+     * 界面必须说出来 —— 否则用户以为模型读过整份文件, 而它只看到开头和结尾。
+     */
+    val truncated: Boolean = false,
 )
+
+/**
+ * 工具结果是 [me.rerere.rikkahub.runtime] 的 `ToolResultEnvelope` 重建出来的截断信封。
+ *
+ * 键名是跨模块契约 (`ToolResultEnvelope.TRUNCATED_KEY`), 不能靠 `internal` 常量共享, 所以字面量
+ * 落在这里 —— 两处必须一起改。注意 `truncated` 可能是字符串 "true" (JSON 文本被再次解析前的形态),
+ * 所以比较 content 而不是布尔值。
+ */
+internal fun JsonElement?.isTruncationEnvelope(): Boolean =
+    this?.jsonObjectOrNull?.get("truncated")?.jsonPrimitiveOrNull?.contentOrNull == "true"
+
+/** 截断信封里的一行说明 (全文在哪、怎么读), 用于详情页。 */
+internal fun JsonElement?.truncationNotice(): String? =
+    this?.jsonObjectOrNull?.get("notice")?.jsonPrimitiveOrNull?.contentOrNull?.takeIf { it.isNotBlank() }
 
 /**
  * 单个工具的 UI 渲染器
@@ -161,6 +182,20 @@ fun DefaultToolPreview(
                 language = "json",
                 style = TextStyle(fontSize = 10.sp, lineHeight = 12.sp)
             )
+        }
+        // 截断说明放在结果前面: 用户先知道"这是预览", 再看内容, 才不会把预览当成全文。
+        context.content.truncationNotice()?.let { notice ->
+            FormItem(
+                label = {
+                    Text(stringResource(R.string.chat_message_tool_call_result))
+                }
+            ) {
+                Text(
+                    text = notice,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
         if (context.tool.output.isNotEmpty()) {
             FormItem(

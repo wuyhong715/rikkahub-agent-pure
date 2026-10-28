@@ -263,6 +263,25 @@ internal fun buildTruncationNotice(
     hasShellAccess: Boolean,
     body: String,
 ): String = buildString {
+    append(buildTruncationHeader(kind, originalTokens, resultTokens, totalChars, fileName, hasShellAccess))
+    appendLine()
+    append(body)
+}
+
+/**
+ * The notice without the body — what a JSON-preserving result carries under its `notice` key.
+ *
+ * Split out because [ToolResultEnvelope.rebuild] needs exactly this text and nothing else: the
+ * body goes back into the field it came from, so appending it here would duplicate the payload.
+ */
+internal fun buildTruncationHeader(
+    kind: ContentKind,
+    originalTokens: Int,
+    resultTokens: Int,
+    totalChars: Int,
+    fileName: String?,
+    hasShellAccess: Boolean,
+): String = buildString {
     appendLine("[Tool output truncated: $kind · $originalTokens → $resultTokens tokens · $totalChars characters total]")
     if (fileName != null) {
         appendLine("Full output saved as: $fileName")
@@ -273,6 +292,4 @@ internal fun buildTruncationNotice(
     } else {
         appendLine("The full output could not be saved to disk; the text below is all that remains.")
     }
-    appendLine()
-    append(body)
-}
+}.trimEnd()

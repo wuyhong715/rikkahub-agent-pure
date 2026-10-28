@@ -40,6 +40,7 @@ import me.rerere.rikkahub.data.ai.DefaultAssistantPrompt
 import me.rerere.rikkahub.data.ai.mcp.McpServerConfig
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_LIBRARY_IMAGE_PROMPT
 import me.rerere.rikkahub.data.gemini.DENIED_MODEL_IDS
+import me.rerere.rikkahub.data.ai.prompts.CompressPromptDefaults
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_COMPRESS_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_OCR_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_SUGGESTION_PROMPT
@@ -515,7 +516,13 @@ class SettingsStore(
                 embeddingSignature = preferences[EMBEDDING_SIGNATURE] ?: 0,
                 libraryImagePrompt = preferences[LIBRARY_IMAGE_PROMPT] ?: DEFAULT_LIBRARY_IMAGE_PROMPT,
                 compressModelId = preferences[COMPRESS_MODEL]?.let { runCatching { Uuid.parse(it) }.getOrNull() } ?: DEFAULT_AUTO_MODEL_ID,
-                compressPrompt = preferences[COMPRESS_PROMPT] ?: DEFAULT_COMPRESS_PROMPT,
+                // The prompt is written on every settings save, so an untouched default would
+                // otherwise stay frozen at whatever shipped the first time the user ran the app.
+                // Upgrade only when it still matches a default we shipped; a user's own wording is
+                // left alone.
+                compressPrompt = CompressPromptDefaults.upgrade(
+                    preferences[COMPRESS_PROMPT] ?: DEFAULT_COMPRESS_PROMPT
+                ),
                 assistantId = preferences[SELECT_ASSISTANT]?.let { runCatching { Uuid.parse(it) }.getOrNull() }
                     ?: DEFAULT_ASSISTANT_ID,
                 enableAutoCompaction = preferences[ENABLE_AUTO_COMPACTION] ?: true,
