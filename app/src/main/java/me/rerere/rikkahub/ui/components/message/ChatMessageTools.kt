@@ -61,6 +61,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.message.tools.ToolUIContext
 import me.rerere.rikkahub.ui.components.message.tools.ToolUIRegistry
 import me.rerere.rikkahub.ui.components.message.tools.ToolResultImage
+import me.rerere.rikkahub.ui.components.message.tools.isTruncationEnvelope
 import me.rerere.rikkahub.ui.components.ui.MoxwSheet
 import me.rerere.rikkahub.ui.components.ui.ChainOfThoughtScope
 import me.rerere.rikkahub.ui.components.ui.DotLoading
