@@ -888,17 +888,19 @@ export const ConversationSidebar = React.memo(
 
     return (
       <Sidebar collapsible="offcanvas" variant="sidebar">
-        <SidebarHeader>
-          <div className="flex items-center gap-3 rounded-lg px-2.5 py-2.5">
+        <SidebarHeader className="border-b border-sidebar-border/70 pb-3">
+          <div className="flex items-center gap-2.5 px-2 pt-1">
             <UIAvatar
-              size="default"
+              size="sm"
               name={userName}
               avatar={userAvatar}
-              className="ring-1 ring-sidebar-border/70"
+              className="ring-1 ring-sidebar-border"
             />
             <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-medium leading-none">{userName}</div>
-              <div className="mt-1 truncate text-xs text-muted-foreground">
+              <div className="truncate text-[13px] font-medium leading-4 tracking-[-0.01em]">
+                {userName}
+              </div>
+              <div className="mt-0.5 truncate text-[11px] leading-4 text-muted-foreground">
                 {t("conversation_sidebar.welcome_back")}
               </div>
             </div>
@@ -907,13 +909,15 @@ export const ConversationSidebar = React.memo(
         <SidebarContent className="min-h-0">
           <SidebarGroup>
             <div className="space-y-1">
+              {/* 新对话是侧栏唯一的「主操作」：给一个描边 + 强调色文字，
+                  而不是和普通行一样的灰按钮——那样它会被当成又一个列表项。 */}
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
-                className="w-full justify-start"
+                className="h-9 w-full justify-start gap-2 rounded-[10px] border-sidebar-border bg-transparent text-[13px] font-medium text-foreground shadow-none hover:bg-sidebar-accent hover:text-foreground"
                 onClick={onCreateConversation}
               >
-                <Plus className="size-4" />
+                <Plus className="size-4 text-primary" />
                 {t("conversation_sidebar.new_conversation")}
               </Button>
 
@@ -963,7 +967,7 @@ export const ConversationSidebar = React.memo(
                   if (listItem.type === "pinned-header") {
                     return (
                       <SidebarMenuItem key="pinned_header">
-                        <div className="flex items-center gap-1.5 px-2 py-1.5 text-xs font-semibold text-primary">
+                        <div className="flex items-center gap-1.5 px-2 pt-3 pb-1 text-[11px] font-medium tracking-[0.06em] text-primary/80">
                           <Pin className="size-3" />
                           {t("conversation_sidebar.pinned")}
                         </div>
@@ -973,7 +977,7 @@ export const ConversationSidebar = React.memo(
                   if (listItem.type === "date-header") {
                     return (
                       <SidebarMenuItem key={`date_${listItem.date}`}>
-                        <div className="px-2 py-1.5 text-xs font-semibold text-primary">
+                        <div className="px-2 pt-3 pb-1 text-[11px] font-medium tracking-[0.06em] text-muted-foreground/80">
                           {listItem.label}
                         </div>
                       </SidebarMenuItem>

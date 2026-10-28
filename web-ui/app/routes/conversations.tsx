@@ -49,6 +49,7 @@ import {
 } from "~/types";
 import { MessageSquare } from "lucide-react";
 import Logo from "~/components/logo";
+import { UIAvatar } from "~/components/ui/ui-avatar";
 import type { PanelImperativeHandle } from "react-resizable-panels";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -633,11 +634,26 @@ const ConversationTimeline = React.memo(
             />
           )}
           {!detailLoading && !detailError && activeId && selectedNodeMessages.length === 0 && (
-            <ConversationEmptyState
-              icon={<MessageSquare className="size-10" />}
-              title={t("conversations.empty_state.no_message_title")}
-              description={t("conversations.empty_state.no_message_description")}
-            />
+            /* 空会话不是「暂无消息」四个字：头像 + 名字 + 一句引导，
+               底下一圈很淡的径向光把视线收到输入框方向。 */
+            <div className="relative flex flex-1 flex-col items-center justify-center px-6 py-16 text-center">
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-x-0 top-1/3 -z-10 h-64 bg-[radial-gradient(ellipse_at_center,color-mix(in_oklch,var(--primary)_12%,transparent),transparent_70%)]"
+              />
+              <UIAvatar
+                size="lg"
+                name={getAssistantDisplayName(assistant?.name)}
+                avatar={assistant?.avatar ?? null}
+                className="mb-4 ring-1 ring-border/70"
+              />
+              <h2 className="text-lg font-medium tracking-[-0.01em]">
+                {t(`conversations.greeting.${greetingKeyForHour(new Date().getHours())}`)}
+              </h2>
+              <p className="mt-1.5 max-w-sm text-sm leading-relaxed text-muted-foreground">
+                {t("conversations.empty_state.no_message_description")}
+              </p>
+            </div>
           )}
           {!detailLoading &&
             !detailError &&
@@ -649,7 +665,9 @@ const ConversationTimeline = React.memo(
                 <div
                   key={message.id}
                   id={getConversationMessageAnchorId(message.id)}
-                  className="scroll-mt-24"
+                  // 新消息淡入并上浮 6px：流式输出时只有「新的一整条」有入场，
+                  // 已有消息的内容增长仍然走帧内重排，不会每条 token 都触发一次动画。
+                  className="animate-in scroll-mt-24 fade-in slide-in-from-bottom-1.5 duration-200 ease-out"
                 >
                   <ChatMessage
                     node={node}
@@ -690,6 +708,14 @@ const ConversationTimeline = React.memo(
     );
   },
 );
+
+/** 按小时选一句问候，作为空会话的标题。 */
+function greetingKeyForHour(hour: number): "morning" | "afternoon" | "evening" | "night" {
+  if (hour >= 5 && hour < 12) return "morning";
+  if (hour >= 12 && hour < 18) return "afternoon";
+  if (hour >= 18 && hour < 23) return "evening";
+  return "night";
+}
 
 export function meta() {
   return [
@@ -746,6 +772,18 @@ function ConversationsPageInner() {
     autoSelectFirst: !isHomeRoute,
     folderId: selectedFolderId,
   });
+  // 正文滚起来之后，顶栏加一条描边 + 一点背景不透明度，标题下面就有一条「内容从这里开始」的分界；
+  // 回到顶部则完全去掉，顶栏和正文重新连成一片。
+  const [headerElevated, setHeaderElevated] = React.useState(false);
+  React.useEffect(() => {
+    const container = document.getElementById("conversationScrollTarget");
+    if (!container) return;
+    const onScroll = () => setHeaderElevated(container.scrollTop > 8);
+    onScroll();
+    container.addEventListener("scroll", onScroll, { passive: true });
+    return () => container.removeEventListener("scroll", onScroll);
+  }, [activeId]);
+
 
   const [homeDraftId, setHomeDraftId] = React.useState(() => createHomeDraftId());
   const [editingSession, setEditingSession] = React.useState<EditingSession | null>(null);
@@ -1156,17 +1194,36 @@ function ConversationsPageInner() {
         onMoveToFolder={handleMoveConversationToFolder}
       />
       <SidebarInset className="flex min-h-svh flex-col overflow-hidden">
-        <div className="flex items-center gap-2 border-b px-4 py-3">
-          <SidebarTrigger />
+        {/* 顶栏：一条发丝分隔线 + 半透明背景。标题是「当前这段对话的名字」，
+            元信息（助手 / 模型 / 供应商）退到第二行并且用等宽数字，扫一眼就知道在看什么。 */}
+        <div
+          className={cn(
+            "sticky top-0 z-10 flex items-center gap-2 border-b px-4 backdrop-blur-md transition-[background-color,border-color,padding] duration-200",
+            headerElevated
+              ? "border-border bg-background/85 py-2"
+              : "border-transparent bg-background/60 py-3",
+          )}
+        >
+          <SidebarTrigger className="text-muted-foreground hover:text-foreground" />
           <div className="min-w-0 flex-1">
-            <div className="truncate text-sm text-muted-foreground">
+            <div className="truncate text-[13px] font-medium leading-5 tracking-[-0.01em] text-foreground">
               {activeConversation
                 ? activeConversation.title
                 : t("conversations.header.select_conversation")}
             </div>
             {currentModel && currentProvider ? (
-              <div className="truncate text-xs text-muted-foreground/80">
-                {`${getAssistantDisplayName(currentAssistant?.name)} / ${getModelDisplayName(currentModel.displayName, currentModel.modelId)} (${currentProvider.name})`}
+              <div className="mt-0.5 flex min-w-0 items-center gap-1.5 truncate text-[11px] leading-4 text-muted-foreground tabular-nums">
+                <span className="truncate">{getAssistantDisplayName(currentAssistant?.name)}</span>
+                <span aria-hidden className="text-border">
+                  /
+                </span>
+                <span className="truncate">
+                  {getModelDisplayName(currentModel.displayName, currentModel.modelId)}
+                </span>
+                <span aria-hidden className="text-border">
+                  ·
+                </span>
+                <span className="shrink-0 opacity-80">{currentProvider.name}</span>
               </div>
             ) : null}
           </div>

@@ -4,7 +4,9 @@ import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.LocalOverscrollFactory
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialExpressiveTheme
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MotionScheme
 import androidx.compose.material3.dynamicDarkColorScheme
@@ -17,6 +19,7 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
@@ -32,6 +35,22 @@ val LocalExtendColors = compositionLocalOf { ExtendLightColors }
 val LocalDarkMode = compositionLocalOf { false }
 
 private val AMOLED_DARK_BACKGROUND = Color(0xFF000000)
+
+/**
+ * 形状阶梯：三档圆角，全应用统一从这里取。
+ *
+ * 旧的默认阶梯是 4/8/12/16/28，中等组件（卡片、输入条、弹层按钮）挤在 12 与 16 之间，
+ * 同一屏能同时出现四种「差不多」的圆角。这里改成 6/10/16/20/28：
+ * 小控件更硬朗（6/10），大容器更松弛（20/28），中间留出 16 这一档给卡片与输入区，
+ * 视觉上能一眼分出「按钮 / 容器 / 弹层」三层，而不是一层层递增的模糊地带。
+ */
+private val RikkaShapes = Shapes(
+    extraSmall = RoundedCornerShape(6.dp),
+    small = RoundedCornerShape(10.dp),
+    medium = RoundedCornerShape(14.dp),
+    large = RoundedCornerShape(20.dp),
+    extraLarge = RoundedCornerShape(28.dp),
+)
 
 @Serializable
 enum class ColorMode {
@@ -105,8 +124,11 @@ fun RikkahubTheme(
         MaterialExpressiveTheme(
             colorScheme = colorSchemeConverted,
             typography = Typography,
+            shapes = RikkaShapes,
             content = content,
-            motionScheme = MotionScheme.expressive()
+            // 标准动效而不是 expressive：这是长时间挂着、要一直盯着看的界面，
+            // 弹性回弹的位移在反复出现的列表/消息上会变成噪音。
+            motionScheme = MotionScheme.standard()
         )
     }
 }

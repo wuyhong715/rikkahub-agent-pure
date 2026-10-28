@@ -5,6 +5,7 @@ import androidx.compose.runtime.Composable
 import me.rerere.rikkahub.ui.theme.presets.AutumnThemePreset
 import me.rerere.rikkahub.ui.theme.presets.BlackThemePreset
 import me.rerere.rikkahub.ui.theme.presets.ClaudeThemePreset
+import me.rerere.rikkahub.ui.theme.presets.InkThemePreset
 import me.rerere.rikkahub.ui.theme.presets.MinimalThemePreset
 import me.rerere.rikkahub.ui.theme.presets.OceanThemePreset
 import me.rerere.rikkahub.ui.theme.presets.SakuraThemePreset
@@ -23,6 +24,8 @@ data class PresetTheme(
 
 val PresetThemes by lazy {
     listOf(
+        // 墨（Ink）是默认主题：新建安装从它开始（PreferencesStore 取 PresetThemes[0]）。
+        InkThemePreset,
         SakuraThemePreset,
         OceanThemePreset,
         SpringThemePreset,
@@ -34,7 +37,7 @@ val PresetThemes by lazy {
 }
 
 fun findPresetTheme(id: String): PresetTheme {
-    return PresetThemes.find { it.id == id } ?: SakuraThemePreset
+    return PresetThemes.find { it.id == id } ?: InkThemePreset
 }
 
 fun findThemeById(id: String, customThemes: List<CustomTheme>): PresetTheme? {

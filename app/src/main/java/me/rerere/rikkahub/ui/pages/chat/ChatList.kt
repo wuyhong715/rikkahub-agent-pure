@@ -23,7 +23,10 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.LocalOverscrollFactory
+import androidx.compose.foundation.layout.FlowRow
+import me.rerere.rikkahub.ui.components.ui.Greeting
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -343,12 +346,26 @@ private fun ChatListNormal(
                         .bounceOverscroll(state, enabled = bounceEnabled)
                         .hazeSource(state = hazeState),
                 ) {
+            // 空会话：不是一片空白 + 一个居中的输入框，而是一张「开场」卡片。
+            // 只在真正没有消息且不在生成中时出现，因此不会和首条消息的入场动画打架。
+            if (displayGroups.isEmpty() && !loading) {
+                item(key = "ChatEmptyHero") {
+                    ChatEmptyHero(
+                        assistant = assistant,
+                        suggestions = conversation.chatSuggestions,
+                        onClickSuggestion = onClickSuggestion,
+                    )
+                }
+            }
+
             items(
                 items = displayGroups,
                 key = { it.id },
             ) { group ->
                 val node = group.terminalNode
-                Column {
+                // animateItem：新消息从下方淡入并顶开旧内容，而不是「啪」地出现；
+                // 自动压缩把多条消息合成一组时，也是同一套位移，不会跳动。
+                Column(modifier = Modifier.animateItem()) {
                     ListSelectableItem(
                         key = group.id,
                         onSelectChange = {
@@ -778,12 +795,20 @@ private fun ChatSuggestionsRow(
                     .clickable {
                         onClickSuggestion(suggestion)
                     }
-                    .background(MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp))
-                    .padding(vertical = 4.dp, horizontal = 8.dp),
+                    // 建议胶囊：底色 + 一条发丝描边。只靠 surfaceColorAtElevation 的浅灰，
+                    // 在浅色主题下几乎和背景同色，看不出这是一个可以点的东西。
+                    .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                    .border(
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                        shape = RoundedCornerShape(50),
+                    )
+                    .padding(vertical = 6.dp, horizontal = 12.dp),
             ) {
                 Text(
                     text = suggestion,
-                    style = MaterialTheme.typography.bodySmall
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
@@ -888,6 +913,79 @@ private fun BoxScope.MessageJumper(
                     modifier = Modifier
                         .padding(4.dp)
                 )
+            }
+        }
+    }
+}
+
+/**
+ * 空会话的「开场」：助手头像 + 问候 + 一句提示 +（若有）建议胶囊。
+ *
+ * 为什么放在列表里而不是叠在列表上：它是列表的第 0 项，所以首条消息出现时会被自然顶上去，
+ * 不需要额外的显隐状态机；上面留 72dp，视觉上大致落在屏幕中上部，又不会被输入条压住。
+ */
+@Composable
+private fun ChatEmptyHero(
+    assistant: me.rerere.rikkahub.data.model.Assistant?,
+    suggestions: List<String>,
+    onClickSuggestion: (String) -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 72.dp, bottom = 8.dp)
+            .padding(horizontal = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        assistant?.let { current ->
+            me.rerere.rikkahub.ui.components.ui.AssistantAvatar(
+                assistant = current,
+                modifier = Modifier.size(56.dp),
+            )
+        }
+        Greeting(style = MaterialTheme.typography.headlineSmall)
+        if (assistant != null && assistant.name.isNotBlank()) {
+            Text(
+                text = assistant.name,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Text(
+            text = stringResource(R.string.chat_empty_hero_hint),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+        )
+        if (suggestions.isNotEmpty()) {
+            FlowRow(
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                suggestions.take(4).forEach { suggestion ->
+                    Surface(
+                        onClick = { onClickSuggestion(suggestion) },
+                        shape = RoundedCornerShape(50),
+                        color = MaterialTheme.colorScheme.surfaceContainerLow,
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                        ),
+                    ) {
+                        Text(
+                            text = suggestion,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                        )
+                    }
+                }
             }
         }
     }

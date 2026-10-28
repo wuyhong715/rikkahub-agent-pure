@@ -240,9 +240,11 @@ fun ChatInput(
         state.textContent.text.contains('\n')
     // Animate the corner along with the layout change below, so the pill does not snap between
     // its 28dp and 16dp radii while the bar is growing.
+    // 圆角：收起时是一颗胶囊（26dp），展开后是一张卡片（20dp）。两者都向 Shape 曲线靠，
+    // 用同一条 240ms 的形变时长，和气泡、顶栏的形变保持同一个节奏。
     val containerCorner by animateDpAsState(
-        targetValue = if (expanded) 16.dp else 28.dp,
-        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
+        targetValue = if (expanded) 20.dp else 26.dp,
+        animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing),
         label = "chatInputCorner",
     )
     val containerShape = RoundedCornerShape(containerCorner)
@@ -347,6 +349,20 @@ fun ChatInput(
                                     onUpdateChatModel = onUpdateChatModel,
                                     onUpdateModelReasoningLevel = onUpdateModelReasoningLevel,
                                 )
+
+                                // 全屏编辑归到左侧「范围」组：左边是「这次要发什么」（附件、模型、编辑），
+                                // 右边是「发出去」（搜索、发送）。之前它和搜索、发送挤在右侧，三颗按钮
+                                // 视觉重量一样，主操作反而分不出来。
+                                if (expanded) {
+                                    ActionIconButton(onClick = { isFullScreen = true }) {
+                                        Icon(
+                                            imageVector = HugeIcons.Fullscreen,
+                                            contentDescription = stringResource(R.string.text_area_fullscreen_edit),
+                                            modifier = Modifier.size(18.dp),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                }
                             }
                         },
                         center = {
@@ -367,17 +383,6 @@ fun ChatInput(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                             ) {
-                                // Full screen only once the bar is open. The collapsed pill has no room,
-                                // and a double-tap on the field would steal word selection.
-                                if (expanded) {
-                                    ActionIconButton(onClick = { isFullScreen = true }) {
-                                        Icon(
-                                            imageVector = HugeIcons.Fullscreen,
-                                            contentDescription = stringResource(R.string.text_area_fullscreen_edit),
-                                        )
-                                    }
-                                }
-
                                 SearchPickerButton(
                                     enableSearch = enableSearch,
                                     settings = settings,
@@ -649,20 +654,33 @@ private fun SendButton(
         empty -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
         else -> MaterialTheme.colorScheme.onPrimary
     }
+    // 有内容可发时，圆盘从 26dp 长到 32dp、图标从 88% 弹回 100%。
+    // 这是整个输入条里唯一会「变大」的东西——它就是要被看见的那一个。
+    val armed = showStop || !empty
+    val discSize by animateDpAsState(
+        targetValue = if (armed) 32.dp else 26.dp,
+        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+        label = "sendDiscSize",
+    )
+    val iconScale by animateFloatAsState(
+        targetValue = if (armed) 1f else 0.88f,
+        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+        label = "sendIconScale",
+    )
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
-            .size(36.dp)
+            .size(40.dp)
             .testTag("chat_send_button")
             .clip(CircleShape)
             .combinedClickable(
-                enabled = showStop || !empty,
+                enabled = armed,
                 onClick = onClick,
                 onLongClick = onLongClick,
             )
     ) {
         Surface(
-            modifier = Modifier.size(26.dp),
+            modifier = Modifier.size(discSize),
             shape = CircleShape,
             color = containerColor,
             content = {},
@@ -671,7 +689,12 @@ private fun SendButton(
             imageVector = if (showStop) HugeIcons.Cancel01 else HugeIcons.ArrowUp02,
             contentDescription = stringResource(if (showStop) R.string.stop else R.string.send),
             tint = contentColor,
-            modifier = Modifier.size(16.dp)
+            modifier = Modifier
+                .size(17.dp)
+                .graphicsLayer {
+                    scaleX = iconScale
+                    scaleY = iconScale
+                }
         )
     }
 }
@@ -679,7 +702,7 @@ private fun SendButton(
 @Composable
 private fun ActionIconButton(
     onClick: () -> Unit,
-    size: Dp = 30.dp,
+    size: Dp = 32.dp,
     content: @Composable () -> Unit,
 ) {
     Surface(

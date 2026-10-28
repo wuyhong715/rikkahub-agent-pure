@@ -525,9 +525,13 @@ export const ChatMessage = React.memo(({
   onFork,
   onToolApproval,
 }: ChatMessageProps) => {
+  const { t } = useTranslation();
   const isUser = message.role === "USER";
   const hasMessageContent = message.parts.some(hasRenderablePart);
-  const showActions = isLastMessage ? !loading : hasMessageContent;
+  // 历史消息的动作条默认收起（悬停或点「⋮」展开）：一屏十几条消息各挂一排图标，
+  // 读的时候视线会被这些按钮反复切断。最后一条常开，那是刚生成的、最可能要操作的。
+  const [actionsPinned, setActionsPinned] = React.useState(false);
+  const showActions = isLastMessage ? !loading : hasMessageContent && actionsPinned;
   const citationUrlMap = React.useMemo(() => buildCitationUrlMap(message.parts), [message.parts]);
   const handleClickCitation = React.useCallback(
     (citationId: string) => {
@@ -540,7 +544,10 @@ export const ChatMessage = React.memo(({
 
   return (
     <div
-      className={cn("flex flex-col gap-4", isUser ? "items-end" : "items-start")}
+      className={cn(
+        "group/message flex flex-col gap-2",
+        isUser ? "items-end" : "items-start",
+      )}
       data-message-role={message.role.toLowerCase()}
       data-message-loading={loading || undefined}
     >
@@ -558,7 +565,12 @@ export const ChatMessage = React.memo(({
             data-message-bubble
             className={cn(
               "flex flex-col gap-2 text-sm",
-              isUser ? "max-w-[85%] rounded-lg bg-muted px-4 py-3" : "w-full",
+              // 用户消息是唯一带底色的块。用它自己的一点青瓷色（secondary）而不是灰底：
+              // 灰底在一屏里和卡片、代码块混在一起，分不清哪句是自己说的。
+              // 圆角不对称——朝向头像的那个角收紧，代替一个占地方的「尾巴」。
+              isUser
+                ? "max-w-[85%] rounded-[18px] rounded-br-[6px] border border-primary/10 bg-secondary px-4 py-3 text-secondary-foreground"
+                : "w-full",
             )}
           >
             <MessageParts
@@ -571,20 +583,43 @@ export const ChatMessage = React.memo(({
         </div>
       </div>
 
-      {showActions && (
-        // Offset half the difference between the 24px button and its 14px icon.
-        <div data-message-actions className={isUser ? "-mr-1.25" : "-ml-1.25"}>
-          <ChatMessageActionsRow
-            node={node}
-            message={message}
-            loading={loading}
-            alignRight={isUser}
-            onEdit={onEdit}
-            onRegenerate={onRegenerate}
-            onSelectBranch={onSelectBranch}
-            onDelete={onDelete}
-            onFork={onFork}
-          />
+      {(showActions || (!isLastMessage && hasMessageContent)) && (
+        // 位移半格，让 24px 按钮与 14px 图标视觉对齐。
+        <div
+          data-message-actions
+          className={cn(
+            "flex items-center gap-0.5 transition-opacity duration-150",
+            isUser ? "-mr-1.25 justify-end" : "-ml-1.25",
+            // 未展开时只在悬停 / 键盘聚焦时出现，触屏用右边的「⋮」手动展开。
+            !showActions && "opacity-0 focus-within:opacity-100 group-hover/message:opacity-100",
+          )}
+        >
+          {showActions ? (
+            <ChatMessageActionsRow
+              node={node}
+              message={message}
+              loading={loading}
+              alignRight={isUser}
+              onEdit={onEdit}
+              onRegenerate={onRegenerate}
+              onSelectBranch={onSelectBranch}
+              onDelete={onDelete}
+              onFork={onFork}
+            />
+          ) : null}
+          {!isLastMessage && hasMessageContent && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label={actionsPinned ? t("chat_message.hide_actions") : t("chat_message.show_actions")}
+              title={actionsPinned ? t("chat_message.hide_actions") : t("chat_message.show_actions")}
+              className="size-6 rounded-full text-muted-foreground/70 hover:text-foreground"
+              onClick={() => setActionsPinned((open) => !open)}
+            >
+              <Ellipsis className="size-3.5" />
+            </Button>
+          )}
         </div>
       )}
 

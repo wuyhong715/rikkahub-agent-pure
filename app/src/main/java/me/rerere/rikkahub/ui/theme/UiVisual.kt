@@ -63,14 +63,17 @@ object Spacing {
  */
 object Radius {
 
-    /** 8dp — 小标签、内嵌块。 */
+    /** 8dp — 小标签、内嵌块、头像描边。 */
     val chip = 8.dp
+
+    /** 14dp — 输入框、下拉面板这类「有边界的控件」。与 M3 的 small/medium 对齐。 */
+    val field = 14.dp
 
     /** 16dp — 卡片、Hero、统计条。 */
     val card = 16.dp
 
-    /** 24dp — 底部弹层。 */
-    val sheet = 24.dp
+    /** 28dp — 底部弹层。比卡片大一档，肉眼能看出「浮在内容之上」。 */
+    val sheet = 28.dp
 }
 
 /**
@@ -159,8 +162,11 @@ fun SectionHeader(
     ) {
         Text(
             text = title,
-            style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            // 组标题用 labelLarge（14sp/字距 0.1sp）而不是 titleSmall：后者和卡片标题同为
+            // titleSmall 时，只有颜色不同，扫读时两组文本会互相抢。label 档天然更「标签化」，
+            // 中文下也不至于显得比正文还重。
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.9f),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f, fill = false),
