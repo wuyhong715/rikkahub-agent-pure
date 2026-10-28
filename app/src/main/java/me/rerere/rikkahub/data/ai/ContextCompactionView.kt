@@ -40,7 +40,8 @@ object ContextCompactionView {
      * Bounded by [CompactionAnchors.DEFAULT_BUDGET_TOKENS]; blank or synthetic user messages are
      * skipped so a compaction of a compaction does not anchor the previous summary.
      */
-    private fun userAnchors(conversation: Conversation, endExclusive: Int): String {        if (endExclusive <= 0) return ""
+    private fun userAnchors(conversation: Conversation, endExclusive: Int): String {
+        if (endExclusive <= 0) return ""
         val candidates = conversation.currentMessages
             .take(endExclusive)
             .mapIndexedNotNull { index, message ->
@@ -201,7 +202,10 @@ object ContextCompactionView {
 
         return view.copy(
             messages = ContextCompactionPresentation.stripDisplayTools(
-                listOf(summaryMessage(view.compaction)) +
+                // The regenerated request must carry the same prefix as a normal turn, anchors
+                // included: a prefix that differs between the two is a cache miss and, worse, a
+                // silently weaker context on exactly the turn the user asked to redo.
+                listOf(summaryMessage(view.compaction, userAnchors(conversation, view.rawTailStartIndex))) +
                     conversation.currentMessages.subList(view.rawTailStartIndex, endExclusive),
             ),
         )

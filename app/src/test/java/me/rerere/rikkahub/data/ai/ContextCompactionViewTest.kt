@@ -38,7 +38,16 @@ class ContextCompactionViewTest {
 
         val view = ContextCompactionView.build(conversation, compaction)
 
-        assertEquals(listOf("summary of one and two", "three", "four"), view.messages.map { it.toText() })
+        // The model prefix is now [summary + verbatim user anchors] as ONE message (a second
+        // message would need its own id, and a per-request id would change the request prefix on
+        // every turn — see summaryMessage), followed by the untouched raw tail.
+        assertEquals(3, view.messages.size)
+        assertEquals("summary of one and two", view.messages[0].parts[0].let { (it as UIMessagePart.Text).text })
+        val anchors = (view.messages[0].parts[1] as UIMessagePart.Text).text
+        assertTrue("the user's own words must survive the compaction", anchors.contains("1. one"))
+        assertTrue(anchors.contains("2. two"))
+        assertEquals(listOf("three", "four"), view.messages.drop(1).map { it.toText() })
+
         assertEquals(4, conversation.messageNodes.size)
         conversation.messageNodes.zip(nodes).forEach { (actual, original) ->
             assertSame(original, actual)
@@ -206,7 +215,12 @@ class ContextCompactionViewTest {
 
         assertEquals(compaction, view.compaction)
         assertEquals(1, view.rawTailStartIndex)
-        assertEquals(listOf("summary of one", "two", "three"), view.messages.map { it.toText() })
+        // The compacted region is only node[0] ("one"), so that is the only anchor.
+        assertEquals(3, view.messages.size)
+        val summaryMessage = view.messages[0].toText()
+        assertTrue(summaryMessage.startsWith("summary of one"))
+        assertTrue(summaryMessage.contains("1. one"))
+        assertEquals(listOf("two", "three"), view.messages.drop(1).map { it.toText() })
     }
 
     @Test
@@ -271,7 +285,14 @@ class ContextCompactionViewTest {
         val view = ContextCompactionView.buildForRange(conversation, compaction, endExclusive = 3)
 
         assertEquals(2, view!!.rawTailStartIndex)
-        assertEquals(listOf("summary of one and two", "three"), view.messages.map { it.toText() })
+        assertEquals(3, view.messages.size)
+        assertEquals("summary of one and two", view.messages[0].parts[0].let { (it as UIMessagePart.Text).text })
+        // Anchors cover the compacted region only: "one" and "two" (node 3 is the regenerated one).
+        val anchors = (view.messages[0].parts[1] as UIMessagePart.Text).text
+        assertTrue(anchors.contains("1. one"))
+        assertTrue(anchors.contains("2. two"))
+        assertFalse("the regenerated node is not part of the compacted region", anchors.contains("four"))
+        assertEquals(listOf("three"), view.messages.drop(1).map { it.toText() })
     }
 
     @Test
