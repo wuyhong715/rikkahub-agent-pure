@@ -149,8 +149,8 @@ fun ChatDrawerContent(
     val drawerVm: ChatDrawerVM = koinViewModel(viewModelStoreOwner = activity)
 
     val conversations = drawerVm.conversations.collectAsLazyPagingItems()
-    // 批 4 — 「任务」入口上的角标（进行中的任务数）。
-    val activeMissionCount by drawerVm.activeMissionCount.collectAsStateWithLifecycle()
+    // 批 4 — 「任务」入口上的角标：未结束的任务数（含待你处理的 BLOCKED / REVIEW）。
+    val missionBadge by drawerVm.missionBadge.collectAsStateWithLifecycle()
     val folders by drawerVm.folders.collectAsStateWithLifecycle()
     val selectedFolderId by drawerVm.selectedFolderId.collectAsStateWithLifecycle()
     val archiveFolderId by drawerVm.archiveFolderId.collectAsStateWithLifecycle()
@@ -544,9 +544,19 @@ fun ChatDrawerContent(
                                     modifier = Modifier.weight(1f),
                                     icon = { Icon(HugeIcons.Rocket01, null) },
                                     label = stringResource(R.string.chat_drawer_nav_missions),
-                                    contentDescription = stringResource(R.string.chat_drawer_nav_missions),
-                                    // 角标 = 还在进行中的任务数；没有任务时不画角标（0 不显示）。
-                                    badgeCount = activeMissionCount,
+                                    // 角标 = 未结束的任务数（ACTIVE + BLOCKED + REVIEW）；0 不画。
+                                    // 其中 BLOCKED / REVIEW 是等在用户这边的，角标会换成强调色。
+                                    contentDescription = if (missionBadge.open > 0) {
+                                        stringResource(
+                                            R.string.chat_drawer_nav_missions_badge_desc,
+                                            missionBadge.open,
+                                            missionBadge.needsUser,
+                                        )
+                                    } else {
+                                        stringResource(R.string.chat_drawer_nav_missions)
+                                    },
+                                    badgeCount = missionBadge.open,
+                                    badgeNeedsAttention = missionBadge.needsUser > 0,
                                     onClick = { navController.navigate(Screen.Workbench()) },
                                 )
 
@@ -1061,8 +1071,10 @@ private fun DrawerAction(
     icon: @Composable () -> Unit,
     label: String,
     contentDescription: String? = null,
-    /** 批 4 — 右上角角标（在跑任务数）；0 表示不画。 */
+    /** 批 4 — 右上角角标（未结束的任务数）；0 表示不画。 */
     badgeCount: Int = 0,
+    /** 角标里有没有「等你处理」的成分（BLOCKED / REVIEW）；有则染色强调。 */
+    badgeNeedsAttention: Boolean = false,
     onClick: () -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -1084,7 +1096,11 @@ private fun DrawerAction(
         BadgedBox(
             badge = {
                 if (badgeCount > 0) {
-                    Badge {
+                    // 有 BLOCKED / REVIEW 时换成强调色：数字仍是总数，颜色说明「其中有在等你的」。
+                    Badge(
+                        containerColor = if (badgeNeedsAttention) scheme.error else scheme.primary,
+                        contentColor = if (badgeNeedsAttention) scheme.onError else scheme.onPrimary,
+                    ) {
                         Text(text = if (badgeCount > 99) "99+" else badgeCount.toString())
                     }
                 }
