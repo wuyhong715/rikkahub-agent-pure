@@ -59,7 +59,10 @@ class SystemInjectionsTest {
         assertTrue(SystemInjections.CLIENT in migrated)
         assertTrue(SystemInjections.LIMITS in migrated)
         assertTrue(SystemInjections.RESEARCH in migrated)
-        assertEquals(10, migrated.size)
+        assertTrue(SystemInjections.CAPABILITIES in migrated)
+        assertTrue(SystemInjections.AUTONOMY in migrated)
+        assertTrue(SystemInjections.DISPATCH in migrated)
+        assertEquals(SystemInjections.ALL.size, migrated.size)
         // Turning the app rules off stays off: an empty set is a decision, not a stale default.
         assertTrue(SystemInjections.withLatePacks(emptySet()).isEmpty())
     }
