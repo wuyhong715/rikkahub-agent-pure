@@ -79,6 +79,7 @@ import me.rerere.hugeicons.stroke.Tick02
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.mission.Artifact
+import me.rerere.rikkahub.data.mission.MissionBudgetTiers
 import me.rerere.rikkahub.data.mission.MissionEntity
 import me.rerere.rikkahub.data.mission.MissionExecutionState
 import me.rerere.rikkahub.data.mission.MissionHook
@@ -1088,6 +1089,27 @@ private fun LimitsDialog(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                // 批 4 — 预算档位。档位由当前四个字段反查，所以手改任一数字就自动落回「自定义」；
+                // 点档位则把四个值写进输入框（stallRounds 不属于档位，保持用户原值）。
+                val currentLimits = limits.copy(
+                    maxResumeRounds = resumeValue ?: limits.maxResumeRounds,
+                    stallRounds = stallValue ?: limits.stallRounds,
+                    tokenBudget = tokensValue ?: limits.tokenBudget,
+                    roundTimeoutMinutes = roundTimeoutValue ?: limits.roundTimeoutMinutes,
+                    wrapUpMinutes = wrapUpValue ?: limits.wrapUpMinutes,
+                )
+                MissionBudgetTierPicker(
+                    selected = MissionBudgetTiers.match(currentLimits),
+                    onSelect = { picked ->
+                        if (picked != null) {
+                            resume = picked.maxResumeRounds.toString()
+                            tokens = picked.tokenBudget.toString()
+                            roundTimeout = picked.roundTimeoutMinutes.toString()
+                            wrapUp = picked.wrapUpMinutes.toString()
+                        }
+                    },
+                )
+                MissionBudgetSummary(limits = currentLimits)
                 OutlinedTextField(
                     value = resume,
                     onValueChange = { resume = it.filter(Char::isDigit).take(3) },

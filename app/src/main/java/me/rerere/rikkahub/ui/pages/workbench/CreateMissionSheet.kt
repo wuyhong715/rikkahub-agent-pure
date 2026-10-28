@@ -39,6 +39,8 @@ import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
+import me.rerere.rikkahub.data.mission.MissionBudgetTiers
+import me.rerere.rikkahub.data.mission.MissionLimits
 import me.rerere.rikkahub.service.mission.MissionWorkflowDocs
 import me.rerere.rikkahub.ui.components.ai.WorkspaceSelectSheet
 import me.rerere.rikkahub.ui.components.ui.AssistantAvatar
@@ -92,6 +94,10 @@ data class MissionDraft(
     val maxResumeRounds: Int?,     // 高级；null = 均衡默认
     val stallRounds: Int?,
     val tokenBudget: Long?,
+    // 批 4 — 档位的另外两个字段。新建时由档位填充，也可以手填；
+    // null = 取 MissionLimits() 的默认值（标准档）。
+    val roundTimeoutMinutes: Int? = null,
+    val wrapUpMinutes: Int? = null,
     // 批 D — 完成后需用户确认（done → REVIEW 而非直接 DONE）
     val requireConfirmation: Boolean = false,
     // 批 B — 开始方式；trigger == null = 立即开始
@@ -124,6 +130,8 @@ fun CreateMissionSheet(
     var maxResumeRounds by remember { mutableStateOf("") }
     var stallRounds by remember { mutableStateOf("") }
     var tokenBudget by remember { mutableStateOf("") }
+    var roundTimeout by remember { mutableStateOf("") }
+    var wrapUp by remember { mutableStateOf("") }
     // 批 D — completion gate
     var requireConfirmation by remember { mutableStateOf(false) }
     var showAssistantSheet by remember { mutableStateOf(false) }
@@ -466,11 +474,34 @@ fun CreateMissionSheet(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    // 批 4 — 预算档位。档位不单独存状态：四个输入框的当前值反查得出当前档位，
+                    // 于是「手改任何一个数字 = 回到自定义」是自然结果，不会出现选着「标准」却
+                    // 显示 90 分钟的不一致。
+                    val defaultLimits = remember { MissionLimits() }
+                    val draftLimits = defaultLimits.copy(
+                        maxResumeRounds = maxResumeRounds.toIntOrNull() ?: defaultLimits.maxResumeRounds,
+                        stallRounds = stallRounds.toIntOrNull() ?: defaultLimits.stallRounds,
+                        tokenBudget = tokenBudget.toLongOrNull() ?: defaultLimits.tokenBudget,
+                        roundTimeoutMinutes = roundTimeout.toIntOrNull() ?: defaultLimits.roundTimeoutMinutes,
+                        wrapUpMinutes = wrapUp.toIntOrNull() ?: defaultLimits.wrapUpMinutes,
+                    )
+                    MissionBudgetTierPicker(
+                        selected = MissionBudgetTiers.match(draftLimits),
+                        onSelect = { picked ->
+                            if (picked != null) {
+                                maxResumeRounds = picked.maxResumeRounds.toString()
+                                tokenBudget = picked.tokenBudget.toString()
+                                roundTimeout = picked.roundTimeoutMinutes.toString()
+                                wrapUp = picked.wrapUpMinutes.toString()
+                            }
+                        },
+                    )
+                    MissionBudgetSummary(limits = draftLimits)
                     OutlinedTextField(
                         value = maxResumeRounds,
                         onValueChange = { maxResumeRounds = it.filter(Char::isDigit) },
                         label = { Text(text = stringResource(R.string.mission_create_max_resume_rounds)) },
-                        placeholder = { Text(text = "5") },
+                        placeholder = { Text(text = "12") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -488,7 +519,25 @@ fun CreateMissionSheet(
                         value = tokenBudget,
                         onValueChange = { tokenBudget = it.filter(Char::isDigit) },
                         label = { Text(text = stringResource(R.string.mission_create_token_budget)) },
-                        placeholder = { Text(text = "500000") },
+                        placeholder = { Text(text = "3000000") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    )
+                    OutlinedTextField(
+                        value = roundTimeout,
+                        onValueChange = { roundTimeout = it.filter(Char::isDigit) },
+                        label = { Text(text = stringResource(R.string.mission_create_round_time)) },
+                        placeholder = { Text(text = "60") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    )
+                    OutlinedTextField(
+                        value = wrapUp,
+                        onValueChange = { wrapUp = it.filter(Char::isDigit) },
+                        label = { Text(text = stringResource(R.string.mission_create_wrapup)) },
+                        placeholder = { Text(text = "10") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -542,6 +591,8 @@ fun CreateMissionSheet(
                             maxResumeRounds = maxResumeRounds.toIntOrNull(),
                             stallRounds = stallRounds.toIntOrNull(),
                             tokenBudget = tokenBudget.toLongOrNull(),
+                            roundTimeoutMinutes = roundTimeout.toIntOrNull(),
+                            wrapUpMinutes = wrapUp.toIntOrNull(),
                             requireConfirmation = requireConfirmation,
                             startMode = startMode,
                             trigger = trigger,

@@ -292,7 +292,8 @@ class MissionLauncherTest {
         assertEquals("任务：写周报", request.title)
         assertNull("promptPrefix must not be used by the launcher", request.promptPrefix)
         assertTrue("null approvalMode inherits the default headless posture", request.headless)
-        assertEquals(30L * 60_000L, request.timeoutMs)
+        // 批 4 — 单轮上限默认从 30 分钟提到 60 分钟。
+        assertEquals(60L * 60_000L, request.timeoutMs)
 
         // Create prompt = mission directive + kickoff instruction.
         val expectedDirective = MissionContinueComposer.composeDirective("写周报", "总结本周进展", emptyList())

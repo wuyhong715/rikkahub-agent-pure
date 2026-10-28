@@ -390,7 +390,7 @@ class MissionSupervisor(
             }
 
             // 批 H — 设了截止时间的任务，真正的约束是时间而不是轮数。
-            // 默认 maxResumeRounds=5 在 30 分钟一轮下只有三个小时，和「跑到 8 小时」直接矛盾；
+            // 轮数上限（批 4 默认 12 轮 / 60 分钟一轮）在「跑到 8 小时」面前仍然是第二把锁；
             // 有了 deadline + 收尾轮 + token 预算三道闸之后，轮数不必再当第二把锁。
             val deadlineBounded = mission.limits.deadlineAt != null
             val input = ContinueInput(

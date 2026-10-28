@@ -144,17 +144,23 @@ class WorkbenchVM(
             )
             missionRepository.updateWorkspaceAndAssistant(mission.id, workspaceId, draft.assistantId)
             draft.approvalMode?.let { missionRepository.updateApprovalMode(mission.id, it) }
+            // 批 4 — 预算档位：draft 里没填的字段一律取 MissionLimits 的默认值（标准档），
+            // 不再在这里抄一份 5 / 2 / 500_000 的魔数（那样改默认值等于改两处，迟早不同步）。
             if (draft.maxResumeRounds != null || draft.stallRounds != null || draft.tokenBudget != null ||
+                draft.roundTimeoutMinutes != null || draft.wrapUpMinutes != null ||
                 draft.requireConfirmation
             ) {
+                val defaults = MissionLimits()
                 missionRepository.updateLimits(
                     mission.id,
-                    MissionLimits(
-                        maxResumeRounds = draft.maxResumeRounds ?: 5,
-                        stallRounds = draft.stallRounds ?: 2,
-                        tokenBudget = draft.tokenBudget ?: 500_000L,
+                    defaults.copy(
+                        maxResumeRounds = draft.maxResumeRounds ?: defaults.maxResumeRounds,
+                        stallRounds = draft.stallRounds ?: defaults.stallRounds,
+                        tokenBudget = draft.tokenBudget ?: defaults.tokenBudget,
                         requireConfirmation = draft.requireConfirmation,
-                    )
+                        roundTimeoutMinutes = draft.roundTimeoutMinutes ?: defaults.roundTimeoutMinutes,
+                        wrapUpMinutes = draft.wrapUpMinutes ?: defaults.wrapUpMinutes,
+                    ),
                 )
             }
             if (triggerJson == null) {

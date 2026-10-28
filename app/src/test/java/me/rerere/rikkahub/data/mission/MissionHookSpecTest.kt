@@ -122,7 +122,7 @@ class MissionHookSpecTest {
         val defaults = MissionLimits()
         assertTrue(defaults.hooks.isEmpty())
         assertEquals(2, defaults.maxCheckFailures)
-        assertEquals(5, defaults.maxResumeRounds)
+        assertEquals(12, defaults.maxResumeRounds)
         assertFalse(defaults.sanitized().hooks.any { it.isRunnable })
     }
 }

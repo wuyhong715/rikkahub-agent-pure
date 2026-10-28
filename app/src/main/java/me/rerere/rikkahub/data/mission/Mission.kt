@@ -197,9 +197,12 @@ val MissionEntity.acceptanceChecked: List<Int>
  */
 @Serializable
 data class MissionLimits(
-    val maxResumeRounds: Int = 5,
+    // 批 4 — 默认值是「标准档」：12 轮续跑 + 300 万 token。旧的 5 轮 / 50 万在真实任务里
+    // 只够一轮半就熔断（见 MissionBudgetTiers），所以默认值整体上移；老任务的 limits_json
+    // 里已经写了具体数字，反序列化时以存储值覆盖默认，不受影响。
+    val maxResumeRounds: Int = 12,
     val stallRounds: Int = 2,
-    val tokenBudget: Long = 500_000L,
+    val tokenBudget: Long = 3_000_000L,
     val requireConfirmation: Boolean = false,
     /**
      * 批 F — 连续多少次「完成前检查失败」的返工之后把任务交给用户。

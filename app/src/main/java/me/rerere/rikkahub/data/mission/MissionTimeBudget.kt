@@ -17,8 +17,8 @@ package me.rerere.rikkahub.data.mission
  */
 object MissionTimeBudget {
 
-    /** 单轮上限默认 30 分钟（与批 A 的常量一致，避免行为突变）。 */
-    const val DEFAULT_ROUND_MIN: Int = 30
+    /** 单轮上限默认 60 分钟（批 4 起从 30 上调：真实任务一轮常常跑满半小时还没收口）。 */
+    const val DEFAULT_ROUND_MIN: Int = 60
 
     /** 单轮上限下限：低于 5 分钟，模型还没热身就被掐。 */
     const val MIN_ROUND_MIN: Int = 5
@@ -26,8 +26,8 @@ object MissionTimeBudget {
     /** 单轮上限上限：再长就该靠检查点续跑，而不是一轮硬跑。 */
     const val MAX_ROUND_MIN: Int = 180
 
-    /** 收尾窗口默认 5 分钟。 */
-    const val DEFAULT_WRAPUP_MIN: Int = 5
+    /** 收尾窗口默认 10 分钟（与标准档一致；5 分钟不够把结果整理成交付物）。 */
+    const val DEFAULT_WRAPUP_MIN: Int = 10
 
     /** 收尾窗口上限 60 分钟（再长就不是「收尾」了）。 */
     const val MAX_WRAPUP_MIN: Int = 60

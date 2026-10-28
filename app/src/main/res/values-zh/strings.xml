@@ -3000,6 +3000,14 @@ HARDLINE 保护仍然生效：rm -rf /、mkfs、shutdown / reboot、向块设备
   <string name="mission_rework_desc">任务回到进行中，并带着你的意见新开一轮。</string>
   <string name="mission_rework_field">修改意见（可选）</string>
   <string name="mission_rework_confirm">打回并重做</string>
+  <string name="mission_budget_tier_label">预算档位</string>
+  <string name="mission_budget_tier_fast">快</string>
+  <string name="mission_budget_tier_standard">标准</string>
+  <string name="mission_budget_tier_long">长跑</string>
+  <string name="mission_budget_tier_custom">自定义</string>
+  <string name="mission_budget_summary">单轮 %1$d 分钟 · 最多续跑 %2$d 轮 · 预算 %3$s token · 收尾 %4$d 分钟</string>
+  <string name="mission_create_round_time">单轮时长（分钟）</string>
+  <string name="mission_create_wrapup">收尾窗口（分钟）</string>
   <string name="mission_limits_title">兜底参数</string>
   <string name="mission_limits_desc">无人值守时的熔断保护：连续无进展或累计 token 超预算，任务会停下并通知你。</string>
   <string name="mission_limits_resume">自动续跑轮数</string>
