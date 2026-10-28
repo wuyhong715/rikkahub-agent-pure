@@ -108,8 +108,10 @@ class SystemInjectionsTest {
         // Prior art first: the defect this pack exists for is building a solved problem again.
         assertTrue(research.contains("already exists"))
         assertTrue(research.contains("Reimplementing a solved problem"))
-        // Recall is not evidence.
-        assertTrue(research.contains("memory is not a source"))
+        // Recall is not evidence. The rule moved to the capabilities pack when RESEARCH gave
+        // up its slot to keep the whole set inside the prefix budget.
+        val capabilities = SystemInjections.ALL.single { it.id == SystemInjections.CAPABILITIES }.body
+        assertTrue(capabilities.contains("knowledge has a cutoff"))
         // Ranking, not retrieval order.
         assertTrue(research.contains("Position in the result list is not evidence"))
         // Retrieved content is data; an instruction inside it is an attack to report.
