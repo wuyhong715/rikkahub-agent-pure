@@ -866,7 +866,6 @@ private fun BoxScope.MessageJumper(
                         scope.launch {
                             state.animateScrollToItem(
                                 (state.firstVisibleItemIndex - 1).fastCoerceAtLeast(0),
-                                animationSpec = Motion.emphasis(),
                             )
                         }
                     },
@@ -878,7 +877,6 @@ private fun BoxScope.MessageJumper(
                         scope.launch {
                             state.animateScrollToItem(
                                 state.firstVisibleItemIndex + 1,
-                                animationSpec = Motion.emphasis(),
                             )
                         }
                     },
@@ -892,7 +890,6 @@ private fun BoxScope.MessageJumper(
                         scope.launch {
                             state.animateScrollToItem(
                                 (state.layoutInfo.totalItemsCount - 1).fastCoerceAtLeast(0),
-                                animationSpec = Motion.emphasis(),
                             )
                         }
                     },
