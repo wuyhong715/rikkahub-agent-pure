@@ -56,6 +56,8 @@ import me.rerere.rikkahub.runtime.tools.ToolExecutionRetryPolicy
 import me.rerere.rikkahub.runtime.tools.ToolOutputRules
 import me.rerere.rikkahub.runtime.tools.ToolResultBudget
 import me.rerere.rikkahub.runtime.tools.buildMemoryTools
+import me.rerere.rikkahub.runtime.tools.ToolResultEnvelope
+import me.rerere.rikkahub.runtime.tools.buildTruncationHeader
 import me.rerere.rikkahub.runtime.tools.buildTruncationNotice
 import me.rerere.rikkahub.runtime.usage.UsageCallContext
 import me.rerere.rikkahub.runtime.usage.UsagePurpose
@@ -358,6 +360,13 @@ internal data class PriorToolCall(
 internal data class LoopGuardDecision(
     val block: Boolean,
     val priorOccurrences: Int,
+    /**
+     * The freshness-TTL bypass fired: the newest matching call is older than the tool's TTL, so
+     * this repeat is a deliberate refresh of a real-time value rather than a loop. Callers that
+     * grade repeats ([RepeatBreaker]) must suppress every escalation level when this is true —
+     * refusing a fresh re-read is exactly the false positive the bypass exists to prevent.
+     */
+    val refreshed: Boolean = false,
 )
 
 /**
@@ -387,13 +396,16 @@ internal object LoopGuard {
         }
         val matching = relevant.filter { it.signature == signature }
         val priorOccurrences = matching.size
-        if (priorOccurrences < threshold) return LoopGuardDecision(false, priorOccurrences)
         // Freshness-TTL bypass: a real-time reader re-called after its TTL is a refresh, not
         // a loop; let it through so the model gets a fresh reading instead of a stale one.
+        // Computed BEFORE the threshold early-return: a caller that grades repeats
+        // (RepeatBreaker) needs the bypass on every repeat, not only at its own threshold, or
+        // a fresh re-read would still collect a "you are looping" reminder.
         val ttl = freshnessTtlMs[toolName]
-        if (ttl != null && nowMs - matching.maxOf { it.epochMs } >= ttl) {
-            return LoopGuardDecision(false, priorOccurrences)
-        }
+        val refreshed = ttl != null && matching.isNotEmpty() &&
+            nowMs - matching.maxOf { it.epochMs } >= ttl
+        if (priorOccurrences < threshold) return LoopGuardDecision(false, priorOccurrences, refreshed)
+        if (refreshed) return LoopGuardDecision(false, priorOccurrences, refreshed = true)
         return LoopGuardDecision(true, priorOccurrences)
     }
 }
@@ -450,6 +462,13 @@ class GenerationLoop(
          * cached prefix. Default "" keeps every caller that does not opt in byte-identical.
          */
         systemInjection: String = "",
+        /**
+         * The `<app_environment>` block, when the call site owns its rendering. Blank by default:
+         * the environment still arrives through `AppEnvironmentTransformer`, and an empty section
+         * produces exactly the bytes this pipeline sent before, so the two paths can be switched
+         * one call site at a time rather than in a single commit.
+         */
+        appEnvironmentPrompt: String = "",
         memories: List<LoopMemory>? = null,
         /** Live memories the injection rules left out; only used to explain the gap to the model. */
         memoriesOmitted: Int = 0,
@@ -607,6 +626,14 @@ class GenerationLoop(
                 // activates mid-turn becomes callable without waiting for the next user turn.
                 addAll(extraToolsProvider())
             }
+                // Deterministic order in the request. The list is assembled from three sources
+                // (injected memory tools, the assistant's own tools, mid-turn activations) and the
+                // middle one is not stable when MCP servers connect in a different order or a tool
+                // filter re-ranks. Every change to that order rewrites the tools block — which sits
+                // at the very front of the request and is exactly what providers cache. Sorting
+                // costs one cache miss once and makes the prefix identical across sessions that
+                // expose the same tool set.
+                .sortedBy { it.name }
 
             // Check if we have tool calls ready to continue after user interaction.
             val pendingTools = messages.lastOrNull()?.getTools()?.filter {
@@ -665,6 +692,7 @@ class GenerationLoop(
                     generateInternal(
                         assistant = assistant,
                         systemInjection = systemInjection,
+                        appEnvironmentPrompt = appEnvironmentPrompt,
                         settings = settings,
                         systemAddendum = systemAddendum,
                         messages = messages,
@@ -1033,34 +1061,41 @@ class GenerationLoop(
                                 .filter { it.isExecuted }
                                 .map { PriorToolCall(it.toolName, it.toolName + "::" + it.input, epochMs) }
                         }
+                        // The guard's threshold is lowered to "the escalation ladder is engaged";
+                        // whether this particular repeat still runs is [RepeatBreaker]'s call.
+                        // priorOccurrences keeps its meaning (act-observe reset and the freshness
+                        // TTL bypass are both already applied by LoopGuard).
                         val loopDecision = LoopGuard.evaluate(
                             priorCalls = priorCalls,
                             toolName = tool.toolName,
                             signature = signature,
                             nowMs = System.currentTimeMillis(),
+                            threshold = RepeatBreaker.NUDGE_AT - 1,
                         )
                         val priorOccurrences = loopDecision.priorOccurrences
-                        if (loopDecision.block) {
+                        val repeat = RepeatBreaker.decide(
+                            priorOccurrences = priorOccurrences,
+                            refreshed = loopDecision.refreshed,
+                        )
+                        // A reminder must reach the model WITHOUT entering the loop's `messages`
+                        // var: that list is written back and persisted, so anything in it renders
+                        // as a chat bubble. ConversationInjections is drained once per loop step
+                        // (line ~673) and appended to the request-only `internalMessages`, which
+                        // is exactly the semantics a harness directive needs.
+                        repeat.reminder?.let { text ->
+                            conversationId?.let { ConversationInjections.push(it, text) }
+                        }
+                        if (repeat.blocked) {
                             loopGuardTripCount++
-                            Log.w(TAG, "generateText: loop-guard tripped on $signature (${priorOccurrences + 1} repeat, trip #$loopGuardTripCount this turn); injecting bail-out envelope")
+                            Log.w(TAG, "generateText: repeat ${repeat.grade} on $signature (${repeat.streak} in a row, trip #$loopGuardTripCount this turn); refusing execution")
+                            val block = RepeatBreaker.blockFor(repeat.grade, tool.toolName, repeat.streak)
                             executedTools += tool.copy(
                                 output = listOf(
                                     UIMessagePart.Text(
                                         json.encodeToString(
                                             buildJsonObject {
-                                                put("error", JsonPrimitive("loop_detected"))
-                                                put(
-                                                    "recovery", JsonPrimitive(
-                                                        "You have already called ${tool.toolName} with identical arguments " +
-                                                            "${priorOccurrences} time(s) in this turn without making progress. " +
-                                                            "Stop retrying. Either: (a) change the args meaningfully, (b) try a " +
-                                                            "different tool that addresses the underlying request, or (c) hand " +
-                                                            "back to the user with what you have so far. Examples: for 'search " +
-                                                            "X in chrome' use open_url(\"https://www.google.com/search?q=X\") " +
-                                                            "instead of fighting Chrome's URL bar via set_text; for terminal " +
-                                                            "tasks use termux_run_command instead of typing into Termux."
-                                                    )
-                                                )
+                                                put("error", JsonPrimitive(block.code))
+                                                put("recovery", JsonPrimitive(block.recovery))
                                             }
                                         )
                                     )
@@ -1387,6 +1422,7 @@ class GenerationLoop(
     private suspend fun generateInternal(
         assistant: LoopAssistant,
         systemInjection: String = "",
+        appEnvironmentPrompt: String = "",
         settings: LoopSettings,
         systemAddendum: String? = null,
         messages: List<UIMessage>,
@@ -1450,6 +1486,7 @@ class GenerationLoop(
             val (stableSystem, volatileSystem) = systemPromptBuilder.buildSections(
                 assistantPrompt = effectiveSystemPrompt,
                 systemInjectionPrompt = systemInjection,
+                appEnvironmentPrompt = appEnvironmentPrompt,
                 memoryPrompt = memoryPrompt,
                 factsPrompt = factsPrompt,
                 recentChatsPrompt = recentChatsPrompt,
@@ -1976,9 +2013,32 @@ class GenerationLoop(
             "maybeTruncateToolOutput: $toolCallId kind=$kind ${routed.originalTokens} -> " +
                 "${routed.resultTokens} tokens (budget=$budget, ${routed.elidedChars} chars elided)",
         )
+        // Keep the result structured. A tool's JSON fields are what the UI renderers read and what
+        // the model keys off (`path`, `text`, `totalLines`…); replacing the object with prose to
+        // save tokens throws the schema away with the payload — see ToolResultEnvelope. Falls back
+        // to the plain notice only when the result is not a JSON object (nothing to put the body in).
+        val header = buildTruncationHeader(
+            kind = kind,
+            originalTokens = routed.originalTokens,
+            resultTokens = routed.resultTokens,
+            totalChars = totalChars,
+            fileName = fileName,
+            hasShellAccess = hasShellAccess,
+        )
+        val envelope = ToolResultEnvelope.rebuild(
+            originalText = fullText,
+            body = routed.text,
+            meta = ToolResultEnvelope.Meta(
+                notice = header,
+                originalTokens = routed.originalTokens,
+                resultTokens = routed.resultTokens,
+                totalChars = totalChars,
+                spillFile = fileName,
+            ),
+        )
         return listOf(
             UIMessagePart.Text(
-                buildTruncationNotice(
+                envelope ?: buildTruncationNotice(
                     kind = kind,
                     originalTokens = routed.originalTokens,
                     resultTokens = routed.resultTokens,

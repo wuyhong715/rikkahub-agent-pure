@@ -2301,6 +2301,7 @@ HARDLINE protections still apply: rm -rf /, mkfs, shutdown / reboot, dd to block
   <string name="tool_ui_edit_file_default">Edit file</string>
   <string name="tool_ui_read_file">Read: %s</string>
   <string name="tool_ui_read_file_default">Read file</string>
+  <string name="tool_ui_result_truncated">preview</string>
   <string name="tool_ui_write_file">Write: %s</string>
   <string name="tool_ui_write_file_default">Write file</string>
   <string name="tool_ui_list_files">List: %s</string>

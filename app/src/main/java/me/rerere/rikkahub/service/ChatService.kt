@@ -73,6 +73,10 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.AssistantResolver
 import me.rerere.rikkahub.data.vector.MemoryIndexCoordinator
 import me.rerere.rikkahub.runtime.AutomationRecorder
+import me.rerere.rikkahub.runtime.CompactionDiagnostics
+import me.rerere.rikkahub.runtime.CompactionEvent
+import me.rerere.rikkahub.runtime.CompactionStatus
+import me.rerere.rikkahub.runtime.CompactionTrigger
 import me.rerere.rikkahub.data.ai.toLoopAssistant
 import me.rerere.rikkahub.data.ai.toLoopMemory
 import me.rerere.rikkahub.data.ai.toLoopSettings
@@ -3928,6 +3932,27 @@ class ChatService(
             targetTokens = targetTokens,
             isAuto = isAuto,
         )
+        // Telemetry must never be able to fail a compaction that already succeeded: the summary is
+        // stored at this point, and an estimate over a large conversation can throw on its own.
+        runCatching {
+            val latest = getConversationFlow(conversation.id).value
+            val event = CompactionEvent(
+                conversationId = conversation.id.toString(),
+                trigger = if (isAuto) CompactionTrigger.AUTO else CompactionTrigger.MANUAL,
+                status = CompactionStatus.CREATED,
+                tokensBefore = ContextBudgetPlanner.estimateContextTokens(conversation.currentMessages),
+                tokensAfter = ContextBudgetPlanner.estimateContextTokens(
+                    loadCompactedMessageView(latest).messages,
+                ),
+                summaryChars = compaction.summary.length,
+                modelId = compaction.summaryModelId.toString(),
+                atMs = System.currentTimeMillis(),
+            )
+            CompactionDiagnostics.record(event)
+            Log.i(TAG, event.render())
+        }.onFailure { error ->
+            Log.w(TAG, "compaction telemetry failed: ${error.message}")
+        }
         scheduleFactExtraction(compaction)
         return compaction
     }

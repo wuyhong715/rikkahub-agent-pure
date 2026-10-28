@@ -146,11 +146,13 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
 
     val renderer = remember(tool.toolName) { ToolUIRegistry.resolve(tool.toolName) }
     val context = remember(tool, loading) {
+        val content = parseToolOutputContent(tool)
         ToolUIContext(
             tool = tool,
             arguments = tool.inputAsJson(),
-            content = parseToolOutputContent(tool),
+            content = content,
             loading = loading,
+            truncated = content.isTruncationEnvelope(),
         )
     }
 
@@ -194,8 +196,15 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
             }
         },
         label = {
+            val title = renderer.title(context)
             Text(
-                text = renderer.title(context),
+                // 截断标记跟在标题后面而不是单独一行: 折叠状态下这是唯一可见的提示, 用户扫一眼
+                // 就知道模型读的是预览。字符串资源缺失的语言回退到英文, 不会破坏标题。
+                text = if (context.truncated) {
+                    title + " · " + stringResource(R.string.tool_ui_result_truncated)
+                } else {
+                    title
+                },
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.secondary,
                 modifier = Modifier.shimmer(isLoading = loading),
