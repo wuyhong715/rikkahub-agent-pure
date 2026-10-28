@@ -28,6 +28,7 @@ import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.service.mission.LaunchSource
 import me.rerere.rikkahub.service.mission.MissionForkService
 import me.rerere.rikkahub.service.mission.MissionContinueComposer
+import me.rerere.rikkahub.service.mission.MissionConversationEcho
 import me.rerere.rikkahub.service.mission.MissionLauncher
 import me.rerere.rikkahub.service.mission.MissionWorkflowDocs
 import me.rerere.rikkahub.service.mission.WORKFLOW_DIR
@@ -48,6 +49,8 @@ class MissionDetailVM(
     private val snapshotStore: MissionSnapshotStore,
     /** 批 I — 任务分叉。 */
     private val forkService: MissionForkService,
+    /** 批 4 — 用户在这里验收通过时，也往源对话回一句「已完成」。 */
+    private val missionEcho: MissionConversationEcho,
 ) : ViewModel() {
 
     val mission: StateFlow<MissionEntity?> = missionRepository.observeMission(missionId)
@@ -99,6 +102,15 @@ class MissionDetailVM(
                     ?.let { conv -> runCatching { chatService.stopGeneration(conv) } }
             }
             missionRepository.transition(missionId, to)
+            // 批 4 — 用户在详情页点「验收通过」也要回声：任务完成的路不止督导自动收尾这一条，
+            // 而源对话里的用户只认「任务到底做完没有」，不关心是谁落的 DONE。
+            // 幂等由 echo 内部保证（同一任务同一状态只推一次），所以和督导那条路撞上也没事。
+            if (to == MissionStatus.DONE) {
+                runCatching {
+                    val fresh = missionRepository.getById(missionId) ?: return@runCatching
+                    missionEcho.onSettled(fresh, MissionStatus.DONE, "你在任务详情里确认了交付")
+                }
+            }
         }
     }
 

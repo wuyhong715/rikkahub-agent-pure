@@ -4,6 +4,7 @@ import me.rerere.rikkahub.ui.pages.assistant.AssistantVM
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantDetailVM
 import me.rerere.rikkahub.ui.pages.backup.BackupVM
 import me.rerere.rikkahub.ui.pages.chat.ChatDrawerVM
+import me.rerere.rikkahub.ui.pages.chat.ChatMissionCreateVM
 import me.rerere.rikkahub.ui.pages.chat.ChatVM
 import me.rerere.rikkahub.ui.pages.debug.DebugVM
 import me.rerere.rikkahub.ui.pages.developer.DeveloperVM
@@ -56,6 +57,7 @@ val viewModelModule = module {
     viewModelOf(::EmbeddingModelViewModel)
     viewModelOf(::ChatDrawerVM)
     viewModelOf(::WorkbenchVM)
+    viewModelOf(::ChatMissionCreateVM)
     viewModelOf(::MissionWorkflowsVM)
     viewModel<MissionDetailVM> { params ->
         MissionDetailVM(
@@ -68,6 +70,7 @@ val viewModelModule = module {
             missionLauncher = get(),
             snapshotStore = get(),
             forkService = get(),
+            missionEcho = get(),
         )
     }
     viewModelOf(::SettingVM)

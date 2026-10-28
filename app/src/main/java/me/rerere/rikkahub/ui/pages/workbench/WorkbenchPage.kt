@@ -103,8 +103,9 @@ fun WorkbenchPage(currentConversationId: String? = null) {
             settings = settings,
             workspaces = workspaces,
             onDismiss = { showSheet = false },
-            defaultConversationId = currentConversationId,
-            onCreate = { draft -> vm.createMission(draft) },
+            // 从会话里打开的：「开始任务」的含义就是「以这个对话为来源」。从抽屉打开时为 null。
+            sourceConversationId = currentConversationId,
+            onCreate = { draft -> vm.createMission(draft, currentConversationId) },
             loadWorkflows = { id -> vm.listWorkflowDocs(id) },
         )
     }

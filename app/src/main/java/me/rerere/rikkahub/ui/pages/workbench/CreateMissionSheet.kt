@@ -115,13 +115,22 @@ fun CreateMissionSheet(
     settings: Settings,
     workspaces: List<WorkspaceEntity>,
     onDismiss: () -> Unit,
-    defaultConversationId: String? = null,
+    /**
+     * 批 4 — 这个任务是从哪个对话发起的。非空时：首轮带源对话摘要，任务落定后往那个对话回推
+     * 消息。工作台从对话里打开时也会传（`Screen.Workbench(conversationId)`），从抽屉打开时为 null。
+     */
+    sourceConversationId: String? = null,
+    /** 预填标题（「以此开始任务」用消息首行）。空 = 用户自己写。 */
+    initialTitle: String = "",
+    /** 预填目标正文：会话内发起时就是输入框里的草稿或那条消息的全文。 */
+    initialDescription: String = "",
     onCreate: (MissionDraft) -> Unit,
     /** 批 C — lists `workflows/ 下的 .md` of a workspace (DI: WorkbenchVM → WorkspaceRepository). */
     loadWorkflows: suspend (String) -> List<String> = { emptyList() },
 ) {
-    var title by remember { mutableStateOf("") }
-    var description by remember { mutableStateOf("") }
+    // 预填值变了要重建（同一个 sheet 实例可能被复用），所以 key 用 initial*。
+    var title by remember(initialTitle) { mutableStateOf(initialTitle) }
+    var description by remember(initialDescription) { mutableStateOf(initialDescription) }
     val criteria = remember { mutableStateListOf<String>() }
     var assistantId by remember { mutableStateOf<String?>(null) }
     var workspaceId by remember { mutableStateOf<String?>(null) }
@@ -209,6 +218,15 @@ fun CreateMissionSheet(
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 2,
                 )
+                // 批 4 — 从对话里发起时说清后果：任务会带上这段对话的摘要，跑完回来说一声。
+                // 工作台路径（sourceConversationId = null）不显示这行，行为不变。
+                if (sourceConversationId != null) {
+                    Text(
+                        text = stringResource(R.string.mission_create_source_hint),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 Text(
                     text = stringResource(R.string.mission_create_acceptance),
                     style = MaterialTheme.typography.titleSmall,

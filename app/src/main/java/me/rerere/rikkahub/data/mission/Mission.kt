@@ -245,6 +245,19 @@ data class MissionLimits(
      * `mission_report(done)` 先过验收判定：全部通过才落 DONE，否则把未通过项当返工要求。
      */
     val acceptanceChecks: List<AcceptanceCheck> = emptyList(),
+    /**
+     * 批 4（M102 反馈④）— 这个任务是从哪个对话发起的；null = 从工作台创建 / 老任务。
+     *
+     * 用途有两个：任务首轮带上源对话的摘要（[ConversationBrief]），以及任务开始 / 待验收 /
+     * 完成 / 阻塞时往源对话回推一条 App 消息。空值意味着**完全不回声**，行为与之前一致。
+     *
+     * **这是权宜，不是终态**：正式解法是 `missions` 表加一列（`source_conversation_id`），
+     * 但那要 bump Room schema（`36.json` + `ImportedDatabaseReconciler` 的 identity hash 一起动，
+     * 一轮 CI 只够验证一遍）。塞进 `limits_json` 的代价是零迁移 —— 老任务的 JSON 里没有这个键，
+     * 反序列化自动取默认值 null，正好就是「没有来源」的语义。将来真加列时：读旧 JSON 的值回填
+     * 新列，再把这一项从 [MissionLimits] 里删掉，读写两头都不需要兼容层。
+     */
+    val sourceConversationId: String? = null,
 ) {
     /** 只保留可执行的 hook / 验收项（丢掉空命令、越界超时、空目标），写库前统一走这里。 */
     fun sanitized(): MissionLimits = copy(
@@ -252,6 +265,8 @@ data class MissionLimits(
         roundTimeoutMinutes = MissionTimeBudget.clampRoundMinutes(roundTimeoutMinutes),
         wrapUpMinutes = MissionTimeBudget.clampWrapUpMinutes(wrapUpMinutes),
         acceptanceChecks = AcceptanceCheckSpec.sanitize(acceptanceChecks),
+        // 空白串不是「某个会话」，一律降级成 null —— 否则回声会去解析一个空 UUID 然后失败。
+        sourceConversationId = sourceConversationId?.trim()?.takeIf { it.isNotEmpty() },
     )
 }
 

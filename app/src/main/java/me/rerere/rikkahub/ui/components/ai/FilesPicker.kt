@@ -54,6 +54,7 @@ import kotlinx.coroutines.Deferred
 import me.rerere.ai.provider.Modality
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Rocket01
 import me.rerere.hugeicons.stroke.Voice
 import me.rerere.hugeicons.stroke.Camera01
 import me.rerere.hugeicons.stroke.Codesandbox
@@ -109,6 +110,11 @@ internal fun FilesPicker(
     onPickAudio: () -> Unit,
     onPickFile: () -> Unit,
     onStartVoiceMode: (() -> Unit)? = null,
+    /**
+     * 批 4 — 「开始任务」：把当前输入框（或某条消息）当成任务目标，就地开一个任务。
+     * null = 调用方没有这个入口（其它复用 FilesPicker 的地方行为不变）。
+     */
+    onStartMission: (() -> Unit)? = null,
 ) {
     val settings = LocalSettings.current
     val currentModel = settings.resolveChatModel(conversation.chatModelId, conversation.assistantId)
@@ -152,6 +158,15 @@ internal fun FilesPicker(
                 BigIconTextButton(
                     icon = { Icon(HugeIcons.Voice, contentDescription = null) },
                     text = { Text(stringResource(R.string.chat_page_voice_title)) },
+                    onClick = start,
+                )
+            }
+
+            // 批 4 — 从这条对话直接开任务：草稿非空时它就是任务目标，空的话只开表。
+            onStartMission?.let { start ->
+                BigIconTextButton(
+                    icon = { Icon(HugeIcons.Rocket01, contentDescription = null) },
+                    text = { Text(stringResource(R.string.mission_start_from_chat)) },
                     onClick = start,
                 )
             }

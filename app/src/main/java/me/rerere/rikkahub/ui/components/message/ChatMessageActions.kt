@@ -50,6 +50,7 @@ import me.rerere.hugeicons.stroke.FavouriteCircle
 import me.rerere.hugeicons.stroke.GitFork
 import me.rerere.hugeicons.stroke.MoreVertical
 import me.rerere.hugeicons.stroke.Refresh03
+import me.rerere.hugeicons.stroke.Rocket01
 import me.rerere.hugeicons.stroke.Share04
 import me.rerere.hugeicons.stroke.StopCircle
 import me.rerere.hugeicons.stroke.TextSelection
@@ -61,6 +62,7 @@ import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.context.LocalTTSState
+import me.rerere.rikkahub.ui.pages.chat.LocalMissionStarter
 import me.rerere.rikkahub.utils.copyMessageToClipboard
 import me.rerere.rikkahub.utils.extractQuotedContentAsText
 import me.rerere.rikkahub.utils.removeBracketedContent
@@ -309,6 +311,41 @@ fun ChatMessageActionsSheet(
             // WebView Preview (only show if message has text content)
             val hasTextContent = message.parts.filterIsInstance<UIMessagePart.Text>()
                 .any { it.text.isNotBlank() }
+
+            // 批 4 — 以这条消息开始任务。会话页通过 LocalMissionStarter 提供入口；其它渲染场景
+            // （预览 / 分享）provider 为 null，这一项就不出现。App 自己写的消息不给这个入口：
+            // 从一条「任务已完成」的汇报里再开一个任务，没人想要。
+            val startMission = LocalMissionStarter.current
+            if (startMission != null && hasTextContent && !speakerIsApp) {
+                Card(
+                    onClick = {
+                        val text = message.parts.filterIsInstance<UIMessagePart.Text>()
+                            .joinToString("\n\n") { it.text }
+                            .trim()
+                        onDismissRequest()
+                        startMission(text)
+                    },
+                    shape = MaterialTheme.shapes.medium,
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        modifier = Modifier
+                            .padding(16.dp)
+                            .fillMaxWidth()
+                    ) {
+                        Icon(
+                            imageVector = HugeIcons.Rocket01,
+                            contentDescription = null,
+                            modifier = Modifier.padding(4.dp)
+                        )
+                        Text(
+                            text = stringResource(R.string.mission_start_from_message),
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                    }
+                }
+            }
 
             if (hasTextContent) {
                 Card(

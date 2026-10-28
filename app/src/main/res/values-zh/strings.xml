@@ -3066,6 +3066,9 @@ HARDLINE 保护仍然生效：rm -rf /、mkfs、shutdown / reboot、向块设备
   <string name="mission_action_send_review">送验收</string>
   <string name="mission_action_complete">完成</string>
   <string name="mission_create_title">新建任务</string>
+  <string name="mission_create_source_hint">这个任务从当前对话发起：首轮会带上最近几条消息的摘要，开始、待验收、完成或卡住时会回到这里说一声。</string>
+  <string name="mission_start_from_chat">开始任务</string>
+  <string name="mission_start_from_message">以此开始任务</string>
   <string name="mission_create_field_title">标题</string>
   <string name="mission_create_field_description">描述（可选）</string>
   <string name="mission_create_acceptance">目标</string>

@@ -108,6 +108,7 @@ import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.context.Navigator
 import me.rerere.rikkahub.ui.hooks.ChatInputState
+import me.rerere.rikkahub.ui.pages.workbench.CreateMissionSheet
 import me.rerere.rikkahub.subagent.SubAgentRegistry
 import me.rerere.rikkahub.subagent.SubAgentRun
 import me.rerere.rikkahub.subagent.SubAgentStatus
@@ -431,6 +432,30 @@ private fun ChatPageContent(
     val allowAudioVideoAttachments =
         currentChatModel?.findProvider(setting.providers) is ProviderSetting.Google
 
+    // ---------------------------------------------------------------------------------------
+    // 批 4（M102 反馈④）— 会话内「开始任务」：表单就地弹出，不跳工作台。
+    // ---------------------------------------------------------------------------------------
+    val missionVm: ChatMissionCreateVM = koinViewModel()
+    val missionSeed by missionVm.seed.collectAsStateWithLifecycle()
+    val missionWorkspaces by missionVm.workspaces.collectAsStateWithLifecycle()
+    val missionLaunchError by missionVm.launchError.collectAsStateWithLifecycle()
+    val missionLaunchFailedLabel = stringResource(R.string.mission_launch_failed)
+    LaunchedEffect(missionSeed) {
+        // 表开着就把默认工作区的 workflows/ 铺好，否则 playbook 选择器是空的。
+        if (missionSeed != null) missionVm.prepareWorkflowLibrary()
+    }
+    LaunchedEffect(missionLaunchError) {
+        val error = missionLaunchError
+        if (error != null) {
+            toaster.show("$missionLaunchFailedLabel: $error", type = ToastType.Error)
+            missionVm.clearLaunchError()
+        }
+    }
+    // 「以此开始任务」：消息正文就是任务目标。用 remember 包一层，避免每次重组都换实例。
+    val missionStarter: (String) -> Unit = remember(conversation.id, missionVm) {
+        { text -> missionVm.open(conversation.id, text) }
+    }
+
     val completionProviders = remember(assistant.workspaceId, conversation.workspaceCwd, workspaceRepository) {
         assistant.workspaceId?.let { workspaceId ->
             listOf(
@@ -487,6 +512,8 @@ private fun ChatPageContent(
         color = MaterialTheme.colorScheme.background,
         modifier = Modifier.fillMaxSize()
     ) {
+        // 消息长按菜单里的「以此开始任务」通过这个 Local 拿到入口（见 LocalMissionStarter）。
+        CompositionLocalProvider(LocalMissionStarter provides missionStarter) {
         AssistantBackground(setting = setting, modifier = Modifier.hazeSource(hazeState))
         Scaffold(
             // The title bar is drawn inside the content instead (see the overlay below): Scaffold
@@ -776,8 +803,24 @@ private fun ChatPageContent(
                 attachmentPickerActions = attachmentPickerActions,
                 onStartVoiceMode = onStartVoiceMode,
                 onDismiss = { showFilesSheet = false },
+                onStartMission = { goal -> missionVm.open(conversation.id, goal) },
             )
         }
+
+        // 创建表：就在这个页面上弹出来，提交完回到底下的对话。
+        missionSeed?.let { seed ->
+            CreateMissionSheet(
+                settings = setting,
+                workspaces = missionWorkspaces,
+                onDismiss = { missionVm.dismiss() },
+                sourceConversationId = seed.sourceConversationId,
+                initialTitle = missionTitleFromGoal(seed.goal),
+                initialDescription = seed.goal,
+                onCreate = { draft -> missionVm.create(draft) },
+                loadWorkflows = { id -> missionVm.listWorkflowDocs(id) },
+            )
+        }
+        } // CompositionLocalProvider(LocalMissionStarter)
     }
 }
 
@@ -791,6 +834,8 @@ private fun ChatFilesPickerSheet(
     attachmentPickerActions: ChatAttachmentPickerActions,
     onStartVoiceMode: () -> Unit,
     onDismiss: () -> Unit,
+    /** 批 4 — 把当前草稿当成任务目标就地开任务（由 ChatPageContent 提供）。 */
+    onStartMission: (goal: String) -> Unit,
 ) {
     val voiceState by vm.voiceSession.state.collectAsStateWithLifecycle()
     val focusManager = LocalFocusManager.current
@@ -858,6 +903,13 @@ private fun ChatFilesPickerSheet(
                     onStartVoiceMode()
                 }
             } else null,
+            onStartMission = {
+                // 草稿就是任务目标；草稿为空时开一张空表让用户自己填。
+                val goal = inputState.textContent.text.toString()
+                dismissAll()
+                focusManager.clearFocus(force = true)
+                onStartMission(goal)
+            },
         )
     }
 }

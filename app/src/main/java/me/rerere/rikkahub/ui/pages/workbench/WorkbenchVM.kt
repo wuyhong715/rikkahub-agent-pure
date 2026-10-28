@@ -8,29 +8,23 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlinx.serialization.encodeToString
 import me.rerere.rikkahub.data.mission.MissionEntity
-import me.rerere.rikkahub.data.mission.MissionLimits
 import me.rerere.rikkahub.data.mission.MissionRepository
 import me.rerere.rikkahub.data.mission.MissionStatus
 import me.rerere.rikkahub.data.mission.executionStateEnum
 import me.rerere.rikkahub.data.mission.isLive
 import me.rerere.rikkahub.data.mission.statusEnum
-import me.rerere.rikkahub.data.runevent.RunEventType
-import me.rerere.rikkahub.runtime.util.JsonInstant
-import me.rerere.rikkahub.service.mission.LaunchSource
-import me.rerere.rikkahub.service.mission.MissionLauncher
 import me.rerere.rikkahub.subagent.SubAgentRegistry
 import me.rerere.rikkahub.subagent.SubAgentRun
 import me.rerere.rikkahub.subagent.SubAgentStatus
-import me.rerere.rikkahub.workflow.model.TriggerSpec
 import java.util.Calendar
 
 class WorkbenchVM(
     private val missionRepository: MissionRepository,
-    private val missionLauncher: MissionLauncher,
     private val workspaceRepository: me.rerere.rikkahub.data.repository.WorkspaceRepository,
     private val missionCreation: me.rerere.rikkahub.service.mission.MissionCreationService,
+    /** 批 4 — 建任务的共用路径（会话内入口走的是同一个）。 */
+    private val missionDraftExecutor: MissionDraftExecutor,
     /** Deleted tasks drop their round snapshots with them — see [delete]. */
     private val snapshotStore: me.rerere.rikkahub.data.mission.MissionSnapshotStore,
     /** 从列表直接暂停/完成/删除时，正在跑的那一轮必须一起停下来。 */
@@ -117,68 +111,22 @@ class WorkbenchVM(
             .sorted()
     }.getOrDefault(emptyList())
 
-    fun createMission(draft: MissionDraft) {
+    /**
+     * 批 4 — 建任务。
+     *
+     * 逻辑搬进了 [MissionDraftExecutor]：会话内「开始任务」和这里必须是同一条路径，否则
+     * 两条路的预算 / 工作区 / 来源迟早分叉。[sourceConversationId] 非空表示这个任务是用户
+     * 在某个对话里发起的（工作台从会话里打开时也会带上），任务会带摘要开跑、落定后回推消息。
+     */
+    fun createMission(draft: MissionDraft, sourceConversationId: String? = null) {
         viewModelScope.launch {
-            // 批 B — trigger start mode: serialize the spec; null = the immediate wish-style path.
-            val triggerJson = draft.trigger?.let { spec ->
-                runCatching { JsonInstant.encodeToString<TriggerSpec>(spec) }.getOrNull()
+            val result = runCatching {
+                missionDraftExecutor.execute(draft, sourceConversationId = sourceConversationId)
+            }.getOrElse { error ->
+                launchError.value = error.message ?: error::class.simpleName
+                return@launch
             }
-            // Default workspace + workflow seeding: a mission created without an explicit
-            // workspace used to have no `workflows/` folder at all, so the picker and the
-            // model's chooser were always empty. The creation service owns that guarantee.
-            val workspaceId = draft.workspaceId ?: runCatching {
-                missionCreation.defaultWorkspace().id
-            }.getOrNull()
-            if (workspaceId != null) {
-                runCatching { missionCreation.seedWorkflows(workspaceId) }
-            }
-            val mission = missionRepository.create(
-                title = draft.title,
-                description = draft.description,
-                acceptance = draft.goals,
-                conversationId = null,
-                triggerJson = triggerJson,
-                cooldownSeconds = if (triggerJson != null) draft.cooldownSeconds else 0,
-                maxRunsPerDay = if (triggerJson != null) draft.maxRunsPerDay else null,
-                workflowPath = draft.workflowPath,
-            )
-            missionRepository.updateWorkspaceAndAssistant(mission.id, workspaceId, draft.assistantId)
-            draft.approvalMode?.let { missionRepository.updateApprovalMode(mission.id, it) }
-            // 批 4 — 预算档位：draft 里没填的字段一律取 MissionLimits 的默认值（标准档），
-            // 不再在这里抄一份 5 / 2 / 500_000 的魔数（那样改默认值等于改两处，迟早不同步）。
-            if (draft.maxResumeRounds != null || draft.stallRounds != null || draft.tokenBudget != null ||
-                draft.roundTimeoutMinutes != null || draft.wrapUpMinutes != null ||
-                draft.requireConfirmation
-            ) {
-                val defaults = MissionLimits()
-                missionRepository.updateLimits(
-                    mission.id,
-                    defaults.copy(
-                        maxResumeRounds = draft.maxResumeRounds ?: defaults.maxResumeRounds,
-                        stallRounds = draft.stallRounds ?: defaults.stallRounds,
-                        tokenBudget = draft.tokenBudget ?: defaults.tokenBudget,
-                        requireConfirmation = draft.requireConfirmation,
-                        roundTimeoutMinutes = draft.roundTimeoutMinutes ?: defaults.roundTimeoutMinutes,
-                        wrapUpMinutes = draft.wrapUpMinutes ?: defaults.wrapUpMinutes,
-                    ),
-                )
-            }
-            if (triggerJson == null) {
-                val outcome = missionLauncher.launch(mission.id, LaunchSource.Create)
-                if (!outcome.ok) {
-                    launchError.value = outcome.error
-                }
-            } else {
-                // Trigger-driven: MissionScheduler picks the mission up; do not launch now.
-                runCatching {
-                    missionRepository.logEvent(
-                        mission.id,
-                        RunEventType.NOTE,
-                        title = "trigger_armed",
-                        detail = draft.trigger?.let { it::class.simpleName },
-                    )
-                }
-            }
+            result.launchError?.let { launchError.value = it }
         }
     }
 
