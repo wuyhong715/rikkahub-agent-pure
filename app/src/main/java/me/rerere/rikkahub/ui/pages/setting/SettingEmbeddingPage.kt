@@ -762,6 +762,24 @@ fun SettingEmbeddingPage() {
                         )
                     },
                 )
+                item(
+                    headlineContent = {
+                        Text(stringResource(R.string.assistant_page_embedding_auto_recall))
+                    },
+                    supportingContent = {
+                        Text(stringResource(R.string.assistant_page_embedding_auto_recall_desc))
+                    },
+                    trailingContent = {
+                        Switch(
+                            checked = settings.enableAutoRecall,
+                            onCheckedChange = { on ->
+                                scope.launch {
+                                    settingsStore.update { it.copy(enableAutoRecall = on) }
+                                }
+                            },
+                        )
+                    },
+                )
             }
 
             // 6. Everything this model feeds, in one place: the state of each index and the button

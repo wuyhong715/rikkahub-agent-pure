@@ -175,6 +175,8 @@
   <string name="assistant_page_library_image_summary_not_needed">Not needed: the embedding model reads images itself, so a description could only add a worse answer beside a better one.</string>
   <string name="assistant_page_embedding_native_images_desc">An image is embedded as an image, so it is found by what it shows \\u2014 no text recognition and no description in between. Around two seconds per image, spread over background rounds.</string>
   <string name="assistant_page_embedding_native_images_not_vision">The embedding model in use cannot see images \\u2014 install EmbeddingGemma 2 440M (text + vision) to turn this on.</string>
+  <string name="assistant_page_embedding_auto_recall">Recall relevant notes</string>
+  <string name="assistant_page_embedding_auto_recall_desc">Search the knowledge base with each message and, when something matches, put the matching file names in the prompt. The note itself is still read only when the model opens it.</string>
   <string name="assistant_page_library_image_summary_on">Images in this library are sent to %1$s to be described.</string>
   <string name="assistant_page_library_image_summary_off">Off. Turning this on sends each image of this library to %1$s once, so that it can be found by what it shows.</string>
   <string name="assistant_page_library_image_summary_no_model">Choose a vision model first \u2014 Settings \u2192 Models \u2192 OCR model.</string>

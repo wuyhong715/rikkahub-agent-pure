@@ -2736,6 +2736,8 @@ HARDLINE 保护仍然生效：rm -rf /、mkfs、shutdown / reboot、向块设备
   <string name="assistant_page_library_image_summary_not_needed">不需要了：嵌入模型自己就能看图，生成描述只会在更好的答案旁边添一个更差的。</string>
   <string name="assistant_page_embedding_native_images_desc">图片直接以图片嵌入，按画面内容就能搜到 —— 中间不再需要文字识别或描述。每张约 2 秒，分摊在多轮后台索引里。</string>
   <string name="assistant_page_embedding_native_images_not_vision">当前嵌入模型不能看图 —— 装上 EmbeddingGemma 2 440M（文本 + 视觉）即可开启。</string>
+  <string name="assistant_page_embedding_auto_recall">自动召回相关笔记</string>
+  <string name="assistant_page_embedding_auto_recall_desc">每条消息先检索知识库，命中时把文件名附在提示里；正文仍由模型按需打开。</string>
   <string name="assistant_page_library_image_summary_on">文件库里的图片会发送到 %1$s 生成描述。</string>
   <string name="assistant_page_library_image_summary_off">关闭中。开启后，文件库里的每张图片会发送到 %1$s 一次，以便按画面内容被搜到。</string>
   <string name="assistant_page_library_image_summary_no_model">先选一个能看图的模型：设置 → 模型 → OCR 模型。</string>
