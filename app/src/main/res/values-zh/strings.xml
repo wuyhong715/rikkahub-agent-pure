@@ -3048,6 +3048,7 @@ HARDLINE 保护仍然生效：rm -rf /、mkfs、shutdown / reboot、向块设备
   <string name="mission_created_at">创建于 %1$s</string>
   <string name="mission_detail_description_expand">展开全部</string>
   <string name="chat_drawer_nav_missions">任务</string>
+  <string name="chat_drawer_nav_missions_badge_desc">任务：%1$d 项未结束，其中 %2$d 项待你处理</string>
   <string name="setting_page_show_mission_conversations_title">任务会话显示在对话列表</string>
   <string name="setting_page_show_mission_conversations_desc">默认关闭：任务的执行记录留在任务内部，从任务详情可以打开。打开后这些记录会作为普通会话出现在列表里。</string>
   <string name="chat_drawer_nav_assistant">助手</string>

@@ -55,7 +55,7 @@ class MissionConversationFilterTest {
     }
 
     @Test
-    fun `active count only counts ACTIVE missions`() {
+    fun `open count covers every non-terminal status`() {
         val statuses = listOf(
             MissionStatus.ACTIVE.name,
             MissionStatus.REVIEW.name,
@@ -64,7 +64,46 @@ class MissionConversationFilterTest {
             MissionStatus.BLOCKED.name,
             MissionStatus.ARCHIVED.name,
         )
-        assertEquals(2, MissionConversationFilter.activeCount(statuses))
-        assertEquals(0, MissionConversationFilter.activeCount(emptyList()))
+        // 旧口径（只数 ACTIVE）会给出 2，把「等待验收 / 卡住等人」两件事吞掉。
+        assertEquals(4, MissionConversationFilter.openCount(statuses))
+        assertEquals(0, MissionConversationFilter.openCount(emptyList()))
+    }
+
+    @Test
+    fun `needs user count is BLOCKED plus REVIEW`() {
+        val statuses = listOf(
+            MissionStatus.ACTIVE.name,
+            MissionStatus.REVIEW.name,
+            MissionStatus.BLOCKED.name,
+            MissionStatus.BLOCKED.name,
+            MissionStatus.DONE.name,
+            MissionStatus.ARCHIVED.name,
+        )
+        assertEquals(3, MissionConversationFilter.needsUserCount(statuses))
+        assertEquals(0, MissionConversationFilter.needsUserCount(emptyList()))
+    }
+
+    @Test
+    fun `a mission blocked before it ever ran still shows in the badge`() {
+        // 用户在创建时被审批拦下：没有 ACTIVE 过，旧口径角标为 0。
+        val statuses = listOf(MissionStatus.BLOCKED.name)
+        assertEquals(1, MissionConversationFilter.openCount(statuses))
+        assertEquals(1, MissionConversationFilter.needsUserCount(statuses))
+    }
+
+    @Test
+    fun `needs user count never exceeds the open count`() {
+        val statuses = MissionStatus.entries.map { it.name }
+        assertTrue(
+            MissionConversationFilter.needsUserCount(statuses) <=
+                MissionConversationFilter.openCount(statuses)
+        )
+    }
+
+    @Test
+    fun `unknown status strings are ignored instead of throwing`() {
+        val statuses = listOf("PAUSED", MissionStatus.ACTIVE.name, "")
+        assertEquals(1, MissionConversationFilter.openCount(statuses))
+        assertEquals(0, MissionConversationFilter.needsUserCount(statuses))
     }
 }

@@ -81,13 +81,20 @@ class ChatDrawerVM(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     /**
-     * 批 4 — 抽屉「任务」入口的角标：还有几个任务没结束。
+     * 批 4 — 抽屉「任务」入口的角标：还没结束的任务数（ACTIVE + BLOCKED + REVIEW）。
      *
-     * 读任务表而不是读会话表：角标要的是「我手上还有几件事」，两轮之间的 IDLE 空档不该让它闪。
+     * 两个数各自有用：`open` 画角标数字，`needsUser` 决定角标是否染成「等你处理」的强调色。
+     * 读任务表而不是读会话表 —— 两轮之间的 IDLE 空档不该让角标闪。
      */
-    val activeMissionCount: StateFlow<Int> = missionRepository.observeAll()
-        .map { missions -> MissionConversationFilter.activeCount(missions.map { it.status }) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+    val missionBadge: StateFlow<MissionBadgeCounts> = missionRepository.observeAll()
+        .map { missions ->
+            val statuses = missions.map { it.status }
+            MissionBadgeCounts(
+                open = MissionConversationFilter.openCount(statuses),
+                needsUser = MissionConversationFilter.needsUserCount(statuses),
+            )
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), MissionBadgeCounts())
 
     /**
      * 对话列表。批 4 起任务的执行会话默认不出现（设置项 `showMissionConversations` 可以关掉这个
@@ -327,3 +334,14 @@ class ChatDrawerVM(
         }
     }
 }
+
+/**
+ * 抽屉「任务」角标的两个数字。
+ *
+ * [open] 是画在角标里的总数（未结束的任务），[needsUser] 是其中真正等人出手的
+ * （BLOCKED + REVIEW）。角标位置只够放一个数字，所以总数照旧，用 [needsUser] 换颜色。
+ */
+data class MissionBadgeCounts(
+    val open: Int = 0,
+    val needsUser: Int = 0,
+)

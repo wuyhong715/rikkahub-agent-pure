@@ -44,11 +44,33 @@ object MissionConversationFilter {
     }
 
     /**
-     * 抽屉「任务」入口上的角标：还在进行中的任务数。
+     * 抽屉「任务」入口上的角标：还没结束的任务数 = 所有非终态（ACTIVE + BLOCKED + REVIEW）。
      *
-     * 用 `status == ACTIVE` 而不是 `execution_state == running`：用户想看的是「我还有几件事没结束」，
-     * 而两轮之间的 IDLE 空档不该让角标闪。
+     * 口径修正（#442 的 `activeCount` 只数 ACTIVE）：BLOCKED 和 REVIEW 恰恰是「在等你」的两个状态，
+     * 只数 ACTIVE 会让角标低估，最坏情况下显示 0 —— 用户以为没事，其实有两件事卡着等他。
+     *
+     * 用任务状态而不是 `execution_state == running`：用户想知道的是「我还有几件事没结束」，
+     * 两轮之间的 IDLE 空档不该让角标闪。
+     *
+     * 未知状态字符串（未来新增的枚举名、被手工改坏的库）一律不计入，宁可少算也不抛。
      */
-    fun activeCount(statuses: Iterable<String>): Int =
-        statuses.count { it == MissionStatus.ACTIVE.name }
+    fun openCount(statuses: Iterable<String>): Int =
+        statuses.count { statusOf(it)?.isTerminal == false }
+
+    /**
+     * 上面那堆里真正要用户出手的：BLOCKED（卡住了，等人给条件/权限）+ REVIEW（跑完了，等人验收）。
+     *
+     * 角标只有位置放一个数字，所以对外仍是一个总数；这个数用来把角标染色 + 写进无障碍描述，
+     * 让「有 3 件事没结束」和「有 3 件事在等你」在视觉上能分开。
+     */
+    fun needsUserCount(statuses: Iterable<String>): Int =
+        statuses.count {
+            when (statusOf(it)) {
+                MissionStatus.BLOCKED, MissionStatus.REVIEW -> true
+                else -> false
+            }
+        }
+
+    private fun statusOf(name: String): MissionStatus? =
+        MissionStatus.entries.firstOrNull { it.name == name }
 }
