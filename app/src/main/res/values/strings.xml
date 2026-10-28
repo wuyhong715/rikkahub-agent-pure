@@ -1455,6 +1455,7 @@
   <string name="theme_name_black">Neutral Black</string>
   <string name="theme_name_claude">Claude</string>
   <string name="theme_name_ink">Ink</string>
+  <string name="chat_empty_hero_hint">Ask anything, or pick a suggestion to start.</string>
   <string name="theme_name_minimal">Minimal White</string>
   <string name="theme_name_ocean">Ocean Blue</string>
   <string name="theme_name_sakura">Sakura Pink</string>

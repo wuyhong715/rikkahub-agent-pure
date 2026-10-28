@@ -25,7 +25,7 @@
       "loading_description": "Loading conversation details",
       "error_title": "Load failed",
       "no_message_title": "No messages yet",
-      "no_message_description": "This conversation does not have any messages yet"
+      "no_message_description": "Ask anything, or start a new thread from the sidebar."
     },
     "welcome_prompt": "How can I help you?",
     "user": {
@@ -33,6 +33,12 @@
     },
     "header": {
       "select_conversation": "Select a conversation"
+    },
+    "greeting": {
+      "morning": "Good morning",
+      "afternoon": "Good afternoon",
+      "evening": "Good evening",
+      "night": "Still up?"
     }
   }
 }

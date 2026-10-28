@@ -33,7 +33,11 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.adaptive.currentWindowDpSize
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.material3.rememberDrawerState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -46,8 +50,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -740,6 +746,25 @@ private fun ChatPageContent(
                         )
                 )
 
+                // 顶栏随列表滚动「收起」：标题还在，助手 / 模型 / token 那行元信息淡出，
+                // 同时顶栏浮出一层半透明底 + 一条发丝分隔线。这样列表滚到中间时，文字不会
+                // 直接压着标题，也不需要一条常驻的实心 bar 把画面切掉一块。
+                val collapseTarget by remember(chatListState) {
+                    derivedStateOf {
+                        val index = chatListState.firstVisibleItemIndex
+                        if (index > 0) {
+                            1f
+                        } else {
+                            (chatListState.firstVisibleItemScrollOffset / 96f).coerceIn(0f, 1f)
+                        }
+                    }
+                }
+                val collapseFraction by animateFloatAsState(
+                    targetValue = collapseTarget,
+                    animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+                    label = "topBarCollapse",
+                )
+
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
@@ -747,6 +772,7 @@ private fun ChatPageContent(
                         .onSizeChanged { topBarHeightPx = it.height },
                 ) {
                     TopBar(
+                        collapseFraction = collapseFraction,
                         settings = setting,
                         conversation = conversation,
                         turnFooters = turnFooters,
@@ -864,6 +890,7 @@ private fun ChatFilesPickerSheet(
 
 @Composable
 private fun TopBar(
+    collapseFraction: Float = 0f,
     settings: Settings,
     conversation: Conversation,
     turnFooters: Map<String, TurnFooter>,
@@ -881,8 +908,14 @@ private fun TopBar(
     val activity = LocalContext.current as ComponentActivity
     val drawerVm: ChatDrawerVM = koinViewModel(viewModelStoreOwner = activity)
 
+    // 收起进度控制三件事：底色浓度、底部发丝线的可见度、元信息那一行的高度。
+    // 三者用同一个 fraction，滚动停下时不会出现「底已经实了但线还没出来」的错位。
+    val barColor = MaterialTheme.colorScheme.surface.copy(
+        alpha = 0.92f * collapseFraction.coerceIn(0f, 1f),
+    )
+    Box(modifier = Modifier.fillMaxWidth()) {
     TopAppBar(
-        colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
+        colors = TopAppBarDefaults.topAppBarColors(containerColor = barColor),
         navigationIcon = {
             if (!bigScreen) {
                 GlassTopBarButton(
@@ -963,6 +996,13 @@ private fun TopBar(
                             assistantName = assistant.name.ifBlank { stringResource(R.string.assistant_page_default_assistant) },
                             modelName = model.displayName,
                             usedTokens = usedTokens,
+                            modifier = Modifier.graphicsLayer {
+                                // 收起时这行连同它的占位一起淡出：alpha 到 0 后高度仍由
+                                // 上方的 AnimatedVisibility 收紧，这里只负责透明度，
+                                // 避免「字没了但还是占着一行高」的空白。
+                                alpha = (1f - collapseFraction * 1.6f).coerceIn(0f, 1f)
+                                translationY = -collapseFraction * 4.dp.toPx()
+                            },
                             color = LocalContentColor.current.copy(0.55f),
                             style = MaterialTheme.typography.labelSmall.copy(
                                 // 元信息（助手名 / 模型名 / token 数）比正文再轻一档：
@@ -1006,6 +1046,21 @@ private fun TopBar(
             }
         },
     )
+
+        // 发丝分隔线：只在收起过程中出现，滚动到顶部时完全消失。
+        // 用 outlineVariant 而不是 onSurface，底线才不会把顶栏框成一条工具栏。
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(
+                    MaterialTheme.colorScheme.outlineVariant.copy(
+                        alpha = 0.55f * collapseFraction.coerceIn(0f, 1f),
+                    )
+                )
+        )
+    }
 }
 
 /**

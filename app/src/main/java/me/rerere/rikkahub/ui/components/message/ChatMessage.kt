@@ -89,6 +89,7 @@ import me.rerere.ai.ui.speaker
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowDown01
 import me.rerere.hugeicons.stroke.ArrowUp01
+import me.rerere.hugeicons.stroke.MoreVertical
 import me.rerere.hugeicons.stroke.File02
 import me.rerere.hugeicons.stroke.MusicNote03
 import me.rerere.hugeicons.stroke.Video01
@@ -114,6 +115,8 @@ import me.rerere.rikkahub.ui.pages.chat.chatPhotoShown
 import me.rerere.rikkahub.ui.pages.chat.effectiveBackground
 import me.rerere.rikkahub.ui.theme.LocalChatFontFamily
 import me.rerere.rikkahub.ui.theme.LocalDarkMode
+import me.rerere.rikkahub.ui.theme.contentEnter
+import me.rerere.rikkahub.ui.theme.contentExit
 import me.rerere.rikkahub.ui.theme.rememberChatFontFamily
 import me.rerere.rikkahub.ui.theme.extendColors
 import me.rerere.rikkahub.runtime.util.JsonInstant
@@ -172,6 +175,9 @@ fun ChatMessage(
     )
     var showActionsSheet by remember { mutableStateOf(false) }
     var showSelectCopySheet by remember { mutableStateOf(false) }
+    // 历史消息默认收起动作条：一屏十几条消息各带一排图标，正文的层级会被这些按钮吃掉。
+    // 最后一条仍然常开（那是刚生成出来的东西，最可能要重生成/复制），其余点「⋮」再展开。
+    var actionsExpanded by rememberSaveable(node.id) { mutableStateOf(false) }
     val navController = LocalNavController.current
     val context = LocalContext.current
     val colorScheme = MaterialTheme.colorScheme
@@ -256,16 +262,13 @@ fun ChatMessage(
             )
         }
 
-        val showActions = if (lastMessage) {
-            !loading
-        } else {
-            message.parts.isEmptyUIMessage().not()
-        }
+        val hasContent = message.parts.isEmptyUIMessage().not()
+        val showActions = if (lastMessage) !loading && hasContent else hasContent && actionsExpanded
 
         AnimatedVisibility(
             visible = showActions,
-            enter = slideInVertically { it / 2 } + fadeIn(),
-            exit = slideOutVertically { it / 2 } + fadeOut()
+            enter = contentEnter(),
+            exit = contentExit(),
         ) {
             Column(
                 modifier = Modifier.animateContentSize()
@@ -281,6 +284,32 @@ fun ChatMessage(
                     onTranslate = onTranslate,
                     onClearTranslation = onClearTranslation
                 )
+            }
+        }
+
+        // 历史消息的「更多」开关：一条 24dp 的点阵，和动作条同一侧对齐。
+        // 它自己也在最后一条消息上隐藏——那里动作条本来就展开着。
+        if (!lastMessage && hasContent) {
+            Surface(
+                onClick = { actionsExpanded = !actionsExpanded },
+                shape = CircleShape,
+                color = Color.Transparent,
+                modifier = Modifier.size(24.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = if (actionsExpanded) {
+                            HugeIcons.ArrowUp01
+                        } else {
+                            HugeIcons.MoreVertical
+                        },
+                        contentDescription = stringResource(
+                            if (actionsExpanded) R.string.chat_message_collapse else R.string.chat_message_expand,
+                        ),
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
+                    )
+                }
             }
         }
 

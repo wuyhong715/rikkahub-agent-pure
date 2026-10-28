@@ -623,7 +623,7 @@ function ChatInputInner({
               }}
             placeholder={placeholder}
             disabled={!ready || disabled}
-            className="min-h-[64px] max-h-[200px] resize-none border-0 bg-transparent dark:bg-transparent p-2 text-sm shadow-none focus-visible:ring-0"
+            className="min-h-[64px] max-h-[200px] resize-none border-0 bg-transparent p-2 text-[15px] leading-6 shadow-none focus-visible:ring-0 dark:bg-transparent"
             rows={2}
           />
           <div className="flex items-center justify-between gap-2">
@@ -730,7 +730,8 @@ function ChatInputInner({
                 disabled={actionDisabled}
                 size="icon"
                 className={cn(
-                  "size-9 shrink-0 rounded-full",
+                  // 主操作：按下时缩到 95%，可用时轻微提亮。是整个输入条里唯一有缩放的控件。
+                  "size-9 shrink-0 rounded-full transition-transform duration-150 active:scale-95",
                   isGenerating && !submitting
                     ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
                     : "bg-primary text-primary-foreground hover:bg-primary/90",

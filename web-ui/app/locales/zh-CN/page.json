@@ -25,7 +25,7 @@
       "loading_description": "正在加载会话详情",
       "error_title": "加载失败",
       "no_message_title": "暂无消息",
-      "no_message_description": "当前会话还没有消息"
+      "no_message_description": "直接问点什么，或者用左侧「新对话」换一个话题。"
     },
     "welcome_prompt": "有什么可以帮助你的？",
     "user": {
@@ -33,6 +33,12 @@
     },
     "header": {
       "select_conversation": "请选择会话"
+    },
+    "greeting": {
+      "morning": "早上好",
+      "afternoon": "下午好",
+      "evening": "晚上好",
+      "night": "夜深了"
     }
   }
 }
