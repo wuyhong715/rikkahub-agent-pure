@@ -31,7 +31,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
@@ -73,6 +72,7 @@ import me.rerere.hugeicons.stroke.PlusSign
 import me.rerere.hugeicons.stroke.Tick01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.components.ui.MoxwSheet
 import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.pages.setting.components.PresetThemeButtonGroup
@@ -391,9 +391,11 @@ private fun CustomThemeEditSheet(
         mutableStateOf(theme ?: CustomTheme())
     }
 
-    ModalBottomSheet(
+    MoxwSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
+        title = if (theme == null) stringResource(R.string.setting_theme_page_create_theme)
+        else stringResource(R.string.setting_theme_page_edit_theme),
     ) {
         Column(
             modifier = Modifier
@@ -401,14 +403,6 @@ private fun CustomThemeEditSheet(
                 .padding(horizontal = 24.dp)
                 .padding(bottom = 32.dp),
         ) {
-            Text(
-                text = if (theme == null) stringResource(R.string.setting_theme_page_create_theme)
-                else stringResource(R.string.setting_theme_page_edit_theme),
-                style = MaterialTheme.typography.titleLarge,
-            )
-
-            Spacer(Modifier.height(16.dp))
-
             Column(
                 modifier = Modifier
                     .weight(1f, fill = false)

@@ -1,9 +1,7 @@
 package me.rerere.rikkahub.ui.components.ai
 
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
@@ -115,6 +113,7 @@ import me.rerere.rikkahub.ui.components.ai.completion.ChatCompletionList
 import me.rerere.rikkahub.ui.components.ai.completion.ChatCompletionProvider
 import me.rerere.rikkahub.ui.components.ui.AutoAIIconFill
 import me.rerere.rikkahub.ui.components.ui.KeepScreenOn
+import me.rerere.rikkahub.ui.theme.Motion
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionManager
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionRecordAudio
 import me.rerere.rikkahub.ui.components.ui.permission.rememberPermissionState
@@ -244,7 +243,9 @@ fun ChatInput(
     // 用同一条 240ms 的形变时长，和气泡、顶栏的形变保持同一个节奏。
     val containerCorner by animateDpAsState(
         targetValue = if (expanded) 20.dp else 26.dp,
-        animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing),
+        // 与顶栏收起、气泡高度共用同一条形变曲线：输入条从胶囊长成卡片的过程中，
+        // 圆角、高度、按钮位置是同一次运动，不该各走各的。
+        animationSpec = Motion.emphasis(),
         label = "chatInputCorner",
     )
     val containerShape = RoundedCornerShape(containerCorner)
@@ -589,7 +590,7 @@ private fun ChatInputBar(
     // the bug this layout exists to avoid).
     val progress by animateFloatAsState(
         targetValue = if (expanded) 1f else 0f,
-        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
+        animationSpec = Motion.emphasis(),
         label = "chatInputBarExpanded",
     )
     Layout(modifier = modifier, content = { left(); center(); right() }) { measurables, constraints ->
@@ -659,12 +660,12 @@ private fun SendButton(
     val armed = showStop || !empty
     val discSize by animateDpAsState(
         targetValue = if (armed) 32.dp else 26.dp,
-        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+        animationSpec = Motion.emphasis(),
         label = "sendDiscSize",
     )
     val iconScale by animateFloatAsState(
         targetValue = if (armed) 1f else 0.88f,
-        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+        animationSpec = Motion.emphasis(),
         label = "sendIconScale",
     )
     Box(

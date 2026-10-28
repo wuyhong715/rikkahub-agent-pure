@@ -20,7 +20,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -62,6 +61,7 @@ import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.ui.components.ai.useCropLauncher
 import me.rerere.rikkahub.ui.hooks.rememberAvatarShape
 import org.koin.compose.koinInject
+import me.rerere.rikkahub.ui.components.ui.MoxwSheet
 import java.io.File
 
 @Composable
@@ -295,7 +295,7 @@ fun UIAvatar(
     }
 
     if (showEmojiPicker) {
-        ModalBottomSheet(
+        MoxwSheet(
             onDismissRequest = {
                 showEmojiPicker = false
             },

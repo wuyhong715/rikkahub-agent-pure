@@ -13,7 +13,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberBottomSheetState
@@ -32,6 +31,7 @@ import me.rerere.hugeicons.stroke.Tick02
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.ui.components.ui.MoxwSheet
 import me.rerere.rikkahub.ui.pages.extensions.workspace.toShellStatusLabel
 
 @Composable
@@ -42,12 +42,13 @@ internal fun WorkspaceSelectSheet(
     onManage: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    ModalBottomSheet(
+    MoxwSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberBottomSheetState(
             initialValue = SheetValue.Hidden,
             enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded)
         ),
+        title = stringResource(R.string.workspace_select),
     ) {
         Column(
             modifier = Modifier
@@ -56,12 +57,6 @@ internal fun WorkspaceSelectSheet(
                 .padding(bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Text(
-                text = stringResource(R.string.workspace_select),
-                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                modifier = Modifier.padding(vertical = 8.dp),
-            )
-
             Column(
                 modifier = Modifier
                     .heightIn(max = 360.dp)

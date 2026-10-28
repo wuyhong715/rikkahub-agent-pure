@@ -21,7 +21,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -59,6 +58,7 @@ import me.rerere.rikkahub.data.ssh.SshHostDraftValidator
 import me.rerere.rikkahub.data.ssh.SshHostError
 import me.rerere.rikkahub.data.ssh.SshHostField
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.components.ui.MoxwSheet
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.Select
 import me.rerere.rikkahub.ui.context.LocalToaster
@@ -364,7 +364,7 @@ internal fun SshHostEditorSheet(
     val errors = SshHostDraftValidator.validate(draft, existingNames)
     val isNew = initialDraft.isNew
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    MoxwSheet(onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()

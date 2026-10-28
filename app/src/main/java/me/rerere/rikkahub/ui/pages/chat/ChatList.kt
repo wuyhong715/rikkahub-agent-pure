@@ -25,6 +25,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.LocalOverscrollFactory
 import androidx.compose.foundation.layout.FlowRow
 import me.rerere.rikkahub.ui.components.ui.Greeting
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -108,6 +109,7 @@ import me.rerere.rikkahub.ui.components.ui.RabbitLoadingIndicator
 import me.rerere.rikkahub.ui.components.ui.Tooltip
 import me.rerere.rikkahub.ui.hooks.ImeLazyListAutoScroller
 import me.rerere.rikkahub.ui.theme.ChatFontProvider
+import me.rerere.rikkahub.ui.theme.Motion
 import me.rerere.rikkahub.utils.plus
 import kotlin.uuid.Uuid
 
@@ -815,6 +817,17 @@ private fun ChatSuggestionsRow(
     }
 }
 
+/**
+ * 消息快速跳转条。
+ *
+ * 之前是四个各自独立的浮动圆钮，贴着屏幕右缘上下排开：圆与圆之间没有共同的底，
+ * 于是它们看起来像四个不小心飘在那里的按钮，而不是一组工具；出现时又从屏幕外横着
+ * 滑进来（位移是自身宽度的两倍），在正文上划一道。
+ *
+ * 现在收成一条竖直导轨：一个半透明圆角容器把四个动作装在一起，动作之间用发丝线
+ * 分开；进出走淡入 + 轻微缩放，不再横穿正文；「回到底部」用主色标出来——它是这四个里
+ * 唯一九成时候会被按到的动作。
+ */
 @Composable
 private fun BoxScope.MessageJumper(
     show: Boolean,
@@ -825,105 +838,104 @@ private fun BoxScope.MessageJumper(
     AnimatedVisibility(
         visible = show,
         modifier = Modifier.align(if (onLeft) Alignment.CenterStart else Alignment.CenterEnd),
-        enter = slideInHorizontally(
-            initialOffsetX = { if (onLeft) -it * 2 else it * 2 },
-        ),
-        exit = slideOutHorizontally(
-            targetOffsetX = { if (onLeft) -it * 2 else it * 2 },
-        )
+        enter = fadeIn(Motion.enter()) + scaleIn(Motion.enter(), initialScale = 0.92f),
+        exit = fadeOut(Motion.exit()) + scaleOut(Motion.exit(), targetScale = 0.94f),
     ) {
-        Column(
-            modifier = Modifier.padding(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+        Surface(
+            shape = RoundedCornerShape(26.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f),
+            border = BorderStroke(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+            ),
         ) {
-            Surface(
-                onClick = {
-                    scope.launch {
-                        state.scrollToItem(0)
-                    }
-                },
-                shape = CircleShape,
-                tonalElevation = 4.dp,
-                color = MaterialTheme.colorScheme.surfaceColorAtElevation(
-                    4.dp
-                ).copy(alpha = 0.65f)
+            Column(
+                modifier = Modifier.padding(vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                Icon(
-                    imageVector = HugeIcons.ArrowUpDouble,
-                    contentDescription = null,
-                    modifier = Modifier
-                        .padding(4.dp)
+                JumperButton(
+                    icon = HugeIcons.ArrowUpDouble,
+                    contentDescription = stringResource(R.string.chat_page_scroll_to_top),
+                    onClick = { scope.launch { state.scrollToItem(0) } },
                 )
-            }
-            Surface(
-                onClick = {
-                    scope.launch {
-                        state.animateScrollToItem(
-                            (state.firstVisibleItemIndex - 1).fastCoerceAtLeast(
-                                0
+                JumperDivider()
+                JumperButton(
+                    icon = HugeIcons.ArrowUp01,
+                    contentDescription = stringResource(R.string.chat_page_scroll_up),
+                    onClick = {
+                        scope.launch {
+                            state.animateScrollToItem(
+                                (state.firstVisibleItemIndex - 1).fastCoerceAtLeast(0),
+                                animationSpec = Motion.emphasis(),
                             )
-                        )
-                    }
-                },
-                shape = CircleShape,
-                tonalElevation = 4.dp,
-                color = MaterialTheme.colorScheme.surfaceColorAtElevation(
-                    4.dp
-                ).copy(alpha = 0.65f)
-            ) {
-                Icon(
-                    imageVector = HugeIcons.ArrowUp01,
-                    contentDescription = null,
-                    modifier = Modifier
-                        .padding(4.dp)
+                        }
+                    },
                 )
-            }
-            Surface(
-                onClick = {
-                    scope.launch {
-                        state.animateScrollToItem(state.firstVisibleItemIndex + 1)
-                    }
-                },
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.surfaceColorAtElevation(
-                    4.dp
-                ).copy(alpha = 0.65f)
-            ) {
-                Icon(
-                    imageVector = HugeIcons.ArrowDown01,
-                    contentDescription = null,
-                    modifier = Modifier
-                        .padding(4.dp)
+                JumperButton(
+                    icon = HugeIcons.ArrowDown01,
+                    contentDescription = stringResource(R.string.chat_page_scroll_down),
+                    onClick = {
+                        scope.launch {
+                            state.animateScrollToItem(
+                                state.firstVisibleItemIndex + 1,
+                                animationSpec = Motion.emphasis(),
+                            )
+                        }
+                    },
                 )
-            }
-            Surface(
-                onClick = {
-                    scope.launch {
-                        state.scrollToItem(state.layoutInfo.totalItemsCount - 1)
-                    }
-                },
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.surfaceColorAtElevation(
-                    4.dp
-                ).copy(alpha = 0.65f),
-            ) {
-                Icon(
-                    imageVector = HugeIcons.ArrowDownDouble,
+                JumperDivider()
+                JumperButton(
+                    icon = HugeIcons.ArrowDownDouble,
                     contentDescription = stringResource(R.string.chat_page_scroll_to_bottom),
-                    modifier = Modifier
-                        .padding(4.dp)
+                    highlighted = true,
+                    onClick = {
+                        scope.launch {
+                            state.animateScrollToItem(
+                                (state.layoutInfo.totalItemsCount - 1).fastCoerceAtLeast(0),
+                                animationSpec = Motion.emphasis(),
+                            )
+                        }
+                    },
                 )
             }
         }
     }
 }
 
-/**
- * 空会话的「开场」：助手头像 + 问候 + 一句提示 +（若有）建议胶囊。
- *
- * 为什么放在列表里而不是叠在列表上：它是列表的第 0 项，所以首条消息出现时会被自然顶上去，
- * 不需要额外的显隐状态机；上面留 72dp，视觉上大致落在屏幕中上部，又不会被输入条压住。
- */
+/** 导轨上的一个动作。 */
+@Composable
+private fun JumperButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+    highlighted: Boolean = false,
+) {
+    IconButton(
+        onClick = onClick,
+        modifier = Modifier.size(40.dp),
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            modifier = Modifier.size(18.dp),
+            tint = if (highlighted) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+        )
+    }
+}
+
+/** 导轨上的分隔线：一档比卡片描边更淡的灰，只做「这里断开了」。 */
+@Composable
+private fun JumperDivider() {
+    androidx.compose.material3.HorizontalDivider(
+        modifier = Modifier.padding(horizontal = 10.dp),
+        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f),
+    )
+}
+
 @Composable
 private fun ChatEmptyHero(
     assistant: me.rerere.rikkahub.data.model.Assistant?,

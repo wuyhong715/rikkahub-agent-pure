@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.theme
 
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.Easing
 import androidx.compose.animation.core.FastOutLinearInEasing
@@ -14,6 +15,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.ui.Modifier
 
 /**
  * 动效刻度。
@@ -56,7 +58,28 @@ object Motion {
     fun <T> emphasis() = tween<T>(durationMillis = EMPHASIS_MS, easing = Shape)
 
     fun <T> exit() = tween<T>(durationMillis = EXIT_MS, easing = Exit)
+
+    /**
+     * 容器长高（展开）。
+     *
+     * 与 [emphasis] 同一条曲线、同一档时长：展开和圆角、位移是同一次形变的几个侧面，
+     * 分成两条曲线就会出现「边框已经变圆、内容还在长」的错位。
+     */
+    fun <T> grow() = tween<T>(durationMillis = EMPHASIS_MS, easing = Standard)
+
+    /** 容器变矮（收起）：退场比进场快一档，与 [exit] 同理。 */
+    fun <T> shrink() = tween<T>(durationMillis = EXIT_MS, easing = Exit)
 }
+
+/**
+ * 高度变化走同一条形变曲线。
+ *
+ * `animateContentSize()` 默认的 spring 会和旁边的圆角动画各走各的：圆角先到位，内容还在长，
+ * 于是中间那 200ms 里看起来像「在呼吸」。改成与 [Motion.emphasis] 同一条曲线后，
+ * 高度与圆角是同一次运动的两半。
+ */
+fun Modifier.motionContentSize(): Modifier =
+    animateContentSize(animationSpec = Motion.emphasis())
 
 /** 内容出现：淡入 + 从下往上 1/8 个自身高度。 */
 fun contentEnter(): EnterTransition =

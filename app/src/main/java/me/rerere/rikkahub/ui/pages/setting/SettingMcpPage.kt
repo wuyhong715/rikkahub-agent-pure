@@ -40,7 +40,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SecondaryTabRow
@@ -103,6 +102,7 @@ import me.rerere.rikkahub.data.ai.mcp.McpServerConfig
 import me.rerere.rikkahub.data.ai.mcp.McpStatus
 import me.rerere.rikkahub.data.ai.mcp.McpTool
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.components.ui.MoxwSheet
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.Switch
 import me.rerere.rikkahub.ui.components.ui.SwitchSize
@@ -449,7 +449,7 @@ private fun McpServerConfigModal(state: EditState<McpServerConfig>) {
     state.EditStateContent { config, updateValue ->
         val pagerState = rememberPagerState { 2 }
         val scope = rememberCoroutineScope()
-        ModalBottomSheet(
+        MoxwSheet(
             onDismissRequest = {
                 state.dismiss()
             },
@@ -1047,9 +1047,11 @@ private fun McpImportModal(
     val noValidConfigMsg = stringResource(R.string.setting_mcp_page_import_no_valid_config)
     val parseErrorMsg = stringResource(R.string.setting_mcp_page_import_parse_error)
 
-    ModalBottomSheet(
+    MoxwSheet(
         onDismissRequest = onDismiss,
-        sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded))
+        sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded)),
+        title = stringResource(R.string.setting_mcp_page_import_title),
+        subtitle = stringResource(R.string.setting_mcp_page_import_desc),
     ) {
         Column(
             modifier = Modifier
@@ -1059,12 +1061,6 @@ private fun McpImportModal(
                 .imePadding(),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text(stringResource(R.string.setting_mcp_page_import_title), style = MaterialTheme.typography.titleLarge)
-            Text(
-                stringResource(R.string.setting_mcp_page_import_desc),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
             OutlinedTextField(
                 value = jsonText,
                 onValueChange = {

@@ -50,7 +50,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.InputChip
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
@@ -91,6 +90,7 @@ import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.components.ui.MoxwSheet
 import me.rerere.rikkahub.ui.components.ui.ExportDialog
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.Select
@@ -400,9 +400,10 @@ private fun ModeInjectionEditSheet(
     val sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded))
     val scope = rememberCoroutineScope()
 
-    ModalBottomSheet(
+    MoxwSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
+        title = stringResource(R.string.prompt_page_edit_mode_injection),
         sheetGesturesEnabled = false,
         dragHandle = {
             IconButton(onClick = {
@@ -422,12 +423,6 @@ private fun ModeInjectionEditSheet(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text(
-                text = stringResource(R.string.prompt_page_edit_mode_injection),
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.align(Alignment.CenterHorizontally)
-            )
-
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -831,9 +826,10 @@ private fun LorebookEditSheet(
         }
     }
 
-    ModalBottomSheet(
+    MoxwSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
+        title = stringResource(R.string.prompt_page_edit_lorebook),
         sheetGesturesEnabled = false,
         dragHandle = {
             IconButton(onClick = {
@@ -853,12 +849,6 @@ private fun LorebookEditSheet(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text(
-                text = stringResource(R.string.prompt_page_edit_lorebook),
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.align(Alignment.CenterHorizontally)
-            )
-
             Column(
                 modifier = Modifier
                     .weight(1f)

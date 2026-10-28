@@ -31,7 +31,6 @@ import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -67,6 +66,7 @@ import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantMemory
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.components.ui.MoxwSheet
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TagType
@@ -357,7 +357,7 @@ private fun AssistantCreationSheet(
     state: EditState<Assistant>,
 ) {
     state.EditStateContent { assistant, update ->
-        ModalBottomSheet(
+        MoxwSheet(
             onDismissRequest = {
                 state.dismiss()
             },
@@ -522,7 +522,7 @@ private fun AssistantActionSheet(
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }
 
-    ModalBottomSheet(
+    MoxwSheet(
         onDismissRequest = onDismiss
     ) {
         Column(

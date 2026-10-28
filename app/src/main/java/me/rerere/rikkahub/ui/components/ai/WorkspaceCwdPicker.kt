@@ -18,7 +18,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -32,7 +31,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import java.util.concurrent.CancellationException
@@ -46,6 +44,8 @@ import me.rerere.hugeicons.stroke.ArrowTurnBackward
 import me.rerere.hugeicons.stroke.Folder01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
+import me.rerere.rikkahub.ui.components.ui.MoxwSheet
+import me.rerere.rikkahub.ui.components.ui.MoxwSheetPadding
 import me.rerere.workspace.WorkspaceFileEntry
 import me.rerere.workspace.WorkspaceStorageArea
 import org.koin.compose.koinInject
@@ -83,23 +83,18 @@ fun WorkspaceCwdPickerSheet(
         }
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    MoxwSheet(
+        onDismissRequest = onDismiss,
+        title = stringResource(R.string.workspace_cwd_select_directory),
+        subtitle = stringResource(R.string.workspace_cwd_select_desc),
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp)
+                .padding(horizontal = MoxwSheetPadding)
                 .padding(bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(
-                text = stringResource(R.string.workspace_cwd_select_directory),
-                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-            )
-            Text(
-                text = stringResource(R.string.workspace_cwd_select_desc),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
 
             Row(
                 modifier = Modifier.fillMaxWidth(),

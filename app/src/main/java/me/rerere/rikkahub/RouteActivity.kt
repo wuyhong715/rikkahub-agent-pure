@@ -143,6 +143,7 @@ import me.rerere.rikkahub.ui.pages.stats.StatsPage
 import me.rerere.rikkahub.ui.pages.translator.TranslatorPage
 import me.rerere.rikkahub.ui.pages.webview.WebViewPage
 import me.rerere.rikkahub.ui.theme.LocalDarkMode
+import me.rerere.rikkahub.ui.theme.Motion
 import me.rerere.rikkahub.ui.theme.RikkahubTheme
 import me.rerere.rikkahub.utils.CrashHandler
 import me.rerere.rikkahub.utils.openUsageAccessSettings
@@ -368,25 +369,58 @@ class RouteActivity : ComponentActivity() {
                         ),
                         modifier = Modifier.fillMaxSize(),
                         onBack = { backStack.removeLastOrNull() },
+                        // 页面过渡：前进是「推」，返回是「拉回」，两者互为镜像。
+                        //
+                        // 之前用的是 M3 默认的 spring 弹性 + 0.7 的缩放：页面从右边进来时，
+                        // 底下那页被捏到 70%，整屏跟着一起缩小，读起来是「弹」而不是「推」，
+                        // 而且 spring 的收尾有明显的回弹，和界面里其它动效（标准曲线）不同调。
+                        // 现在：位移与缩放共用同一条 240ms 形变曲线，缩放收到 0.94——
+                        // 足够说清「这页被压到后面去了」，又不会让整屏缩一下。
                         transitionSpec = {
-                            if (backStack.size == 1) fadeIn() togetherWith fadeOut()
-                            else {
-                                slideInHorizontally { it } togetherWith
-                                    slideOutHorizontally { -it / 2 } + scaleOut(targetScale = 0.7f) + fadeOut()
+                            if (backStack.size == 1) {
+                                fadeIn(Motion.enter()) togetherWith fadeOut(Motion.exit())
+                            } else {
+                                (slideInHorizontally(animationSpec = Motion.emphasis()) { it } +
+                                    fadeIn(Motion.enter())) togetherWith
+                                    (slideOutHorizontally(animationSpec = Motion.emphasis()) { -it / 4 } +
+                                        scaleOut(
+                                            animationSpec = Motion.emphasis(),
+                                            targetScale = 0.94f,
+                                        ) +
+                                        fadeOut(Motion.exit()))
                             }
                         },
                         popTransitionSpec = {
-                            slideInHorizontally { -it / 2 } + scaleIn(initialScale = 0.7f) + fadeIn() togetherWith
-                                slideOutHorizontally { it }
+                            (slideInHorizontally(animationSpec = Motion.emphasis()) { -it / 4 } +
+                                scaleIn(
+                                    animationSpec = Motion.emphasis(),
+                                    initialScale = 0.94f,
+                                ) +
+                                fadeIn(Motion.enter())) togetherWith
+                                (slideOutHorizontally(animationSpec = Motion.emphasis()) { it } +
+                                    fadeOut(Motion.exit()))
                         },
                         predictivePopTransitionSpec = {
-                            slideInHorizontally { -it / 2 } + scaleIn(initialScale = 0.7f) + fadeIn() togetherWith
-                                slideOutHorizontally { it }
+                            // 预测返回：手势过程中用的就是 pop 的那套，只是更快——
+                            // 手已经松手了还在补一段动画会让人觉得「没跟上」。
+                            (slideInHorizontally(animationSpec = Motion.emphasis()) { -it / 4 } +
+                                scaleIn(
+                                    animationSpec = Motion.emphasis(),
+                                    initialScale = 0.94f,
+                                ) +
+                                fadeIn(Motion.enter())) togetherWith
+                                (slideOutHorizontally(animationSpec = Motion.emphasis()) { it } +
+                                    fadeOut(Motion.exit()))
                         },
                         entryProvider = entryProvider {
                             entry<Screen.Chat>(
-                                metadata = NavDisplay.transitionSpec { fadeIn() togetherWith fadeOut() }
-                                        + NavDisplay.popTransitionSpec { fadeIn() togetherWith fadeOut() }
+                                // 会话页不做位移：它是主场景，切过去时整屏横移会让用户以为
+                                // 离开了聊天。用同一套淡入淡出刻度即可。
+                                metadata = NavDisplay.transitionSpec {
+                                    fadeIn(Motion.enter()) togetherWith fadeOut(Motion.exit())
+                                } + NavDisplay.popTransitionSpec {
+                                    fadeIn(Motion.enter()) togetherWith fadeOut(Motion.exit())
+                                }
                             ) { key ->
                                 ChatPage(
                                     id = Uuid.parse(key.id),

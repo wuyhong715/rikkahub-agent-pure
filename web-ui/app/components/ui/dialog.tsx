@@ -38,6 +38,8 @@ function DialogOverlay({
       data-slot="dialog-overlay"
       className={cn(
         "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/50",
+        "data-[state=open]:duration-[var(--motion-enter)] data-[state=closed]:duration-[var(--motion-exit)]",
+        "data-[state=open]:ease-[var(--motion-ease)] data-[state=closed]:ease-[var(--motion-ease)]",
         className
       )}
       {...props}
@@ -59,7 +61,10 @@ function DialogContent({
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg duration-200 outline-none sm:max-w-lg",
+          // 与抽屉同一套壳：纸色高一档 + 1px 描边 + 只给浮层的阴影；进 160ms / 出 120ms，
+          // 缩放用同一条曲线（缩到 96% 而不是 95%，幅度更小、看起来更稳）。
+          "bg-card data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-96 data-[state=open]:zoom-in-96 fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-xl border border-border p-6 shadow-lg outline-none sm:max-w-lg",
+          "transition ease-[var(--motion-ease)] data-[state=open]:duration-[var(--motion-enter)] data-[state=closed]:duration-[var(--motion-exit)]",
           className
         )}
         {...props}

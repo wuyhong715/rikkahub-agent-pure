@@ -25,7 +25,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Surface
@@ -80,6 +79,8 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.ui.components.ui.ExtensionSelector
+import me.rerere.rikkahub.ui.components.ui.MoxwSheet
+import me.rerere.rikkahub.ui.components.ui.MoxwSheetPadding
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionCamera
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionManager
 import me.rerere.rikkahub.ui.components.ui.permission.rememberPermissionState
@@ -440,7 +441,7 @@ private fun InjectionQuickConfigSheet(
     val sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded))
     val navController = LocalNavController.current
 
-    ModalBottomSheet(
+    MoxwSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
     ) {
@@ -448,7 +449,7 @@ private fun InjectionQuickConfigSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .fillMaxHeight(0.75f)
-                .padding(horizontal = 16.dp),
+                .padding(horizontal = MoxwSheetPadding),
         ) {
             ExtensionSelector(
                 assistant = assistant,

@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -23,6 +22,7 @@ import me.rerere.hugeicons.stroke.Puzzle
 import me.rerere.hugeicons.stroke.Zap
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.components.ui.SettingIcon
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.theme.CustomColors
@@ -57,19 +57,19 @@ fun ExtensionsPage() {
                 ) {
                     item(
                         onClick = { navController.navigate(Screen.QuickMessages) },
-                        leadingContent = { Icon(HugeIcons.Zap, null) },
+                        leadingContent = { SettingIcon(HugeIcons.Zap) },
                         headlineContent = { Text(stringResource(R.string.assistant_page_quick_messages)) },
                         supportingContent = { Text(stringResource(R.string.extensions_page_quick_messages_desc)) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.Prompts) },
-                        leadingContent = { Icon(HugeIcons.Book03, null) },
+                        leadingContent = { SettingIcon(HugeIcons.Book03) },
                         headlineContent = { Text(stringResource(R.string.extensions_page_prompts)) },
                         supportingContent = { Text(stringResource(R.string.extensions_page_prompts_desc)) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.Skills) },
-                        leadingContent = { Icon(HugeIcons.Puzzle, null) },
+                        leadingContent = { SettingIcon(HugeIcons.Puzzle) },
                         headlineContent = { Text(stringResource(R.string.extensions_page_agent_skills)) },
                         supportingContent = { Text(stringResource(R.string.extensions_page_agent_skills_desc)) },
                     )

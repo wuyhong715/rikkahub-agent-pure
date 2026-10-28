@@ -29,7 +29,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -58,6 +57,7 @@ import me.rerere.rikkahub.ui.theme.RikkahubTheme
 import me.rerere.rikkahub.RouteActivity
 import me.rerere.rikkahub.utils.CrashHandler
 import org.koin.android.ext.android.inject
+import me.rerere.rikkahub.ui.components.ui.MoxwSheet
 import kotlin.uuid.Uuid
 
 class SafeModeActivity : ComponentActivity() {
@@ -192,7 +192,7 @@ private fun AssistantPickerSheet(
         else settings.assistants.filter { it.tags.any { id -> id in selectedTagIds } }
     }
 
-    ModalBottomSheet(
+    MoxwSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
     ) {

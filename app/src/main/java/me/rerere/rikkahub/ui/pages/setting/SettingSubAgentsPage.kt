@@ -34,7 +34,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.FilterChip
 import androidx.compose.ui.focus.onFocusChanged
@@ -42,6 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.subagent.SubAgentDefaults
+import me.rerere.rikkahub.ui.components.ui.MoxwSheet
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.subagent.SubAgentDispatchProfile
 import me.rerere.rikkahub.subagent.SubAgentDispatchProfileRules
@@ -919,9 +919,10 @@ private fun AgentDefinitionEditSheet(
         }
     }
 
-    ModalBottomSheet(
+    MoxwSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
+        title = stringResource(R.string.setting_sub_agents_page_edit_title),
         sheetGesturesEnabled = false,
         dragHandle = {
             IconButton(onClick = {
@@ -941,12 +942,6 @@ private fun AgentDefinitionEditSheet(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Text(
-                text = stringResource(R.string.setting_sub_agents_page_edit_title),
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.align(Alignment.CenterHorizontally),
-            )
-
             Column(
                 modifier = Modifier
                     .weight(1f)

@@ -70,6 +70,11 @@
   --shadow-2xl: 0 8px 16px -6px oklch(0.216 0.01 200 / 0.14), 0 32px 48px -16px oklch(0.216 0.01 200 / 0.16);
   --tracking-normal: 0em;
   --spacing: 0.25rem;
+  /* 动效刻度：与 Android 端 `ui/theme/Motion.kt` 同一套。 */
+  --motion-enter: 160ms;
+  --motion-emphasis: 240ms;
+  --motion-exit: 120ms;
+  --motion-ease: cubic-bezier(0.2, 0, 0, 1);
 }
 
 .dark {
