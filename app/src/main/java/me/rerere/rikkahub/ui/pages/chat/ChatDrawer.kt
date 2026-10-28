@@ -31,6 +31,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -84,6 +86,7 @@ import me.rerere.hugeicons.stroke.InLove
 import me.rerere.hugeicons.stroke.LanguageCircle
 import me.rerere.hugeicons.stroke.LookTop
 import me.rerere.hugeicons.stroke.PencilEdit01
+import me.rerere.hugeicons.stroke.Rocket01
 import me.rerere.hugeicons.stroke.Search01
 import me.rerere.hugeicons.stroke.Video01
 import me.rerere.hugeicons.stroke.Settings03
@@ -146,6 +149,8 @@ fun ChatDrawerContent(
     val drawerVm: ChatDrawerVM = koinViewModel(viewModelStoreOwner = activity)
 
     val conversations = drawerVm.conversations.collectAsLazyPagingItems()
+    // 批 4 — 「任务」入口上的角标（进行中的任务数）。
+    val activeMissionCount by drawerVm.activeMissionCount.collectAsStateWithLifecycle()
     val folders by drawerVm.folders.collectAsStateWithLifecycle()
     val selectedFolderId by drawerVm.selectedFolderId.collectAsStateWithLifecycle()
     val archiveFolderId by drawerVm.archiveFolderId.collectAsStateWithLifecycle()
@@ -473,14 +478,16 @@ fun ChatDrawerContent(
                                     .padding(horizontal = 4.dp)
                             ) {
                                 DrawerAction(
+                                    modifier = Modifier.weight(1f),
                                     icon = { Icon(HugeIcons.LookTop, null) },
                                     label = stringResource(R.string.chat_drawer_nav_assistant),
                                     contentDescription = stringResource(R.string.assistant_page_title),
                                     onClick = { navController.navigate(Screen.Assistant) },
                                 )
 
-                                Box {
+                                Box(modifier = Modifier.weight(1f)) {
                                     DrawerAction(
+                                        modifier = Modifier.fillMaxWidth(),
                                         icon = { Icon(HugeIcons.Sparkles, null) },
                                         label = stringResource(R.string.chat_drawer_nav_more),
                                         contentDescription = stringResource(R.string.menu),
@@ -518,6 +525,7 @@ fun ChatDrawerContent(
                                 }
 
                                 DrawerAction(
+                                    modifier = Modifier.weight(1f),
                                     icon = { Icon(HugeIcons.InLove, null) },
                                     label = stringResource(R.string.favorite_page_title),
                                     contentDescription = stringResource(R.string.favorite_page_title),
@@ -525,6 +533,7 @@ fun ChatDrawerContent(
                                 )
 
                                 DrawerAction(
+                                    modifier = Modifier.weight(1f),
                                     icon = { Icon(HugeIcons.ChartColumn, null) },
                                     label = stringResource(R.string.chat_drawer_statistics),
                                     contentDescription = stringResource(R.string.chat_drawer_statistics),
@@ -532,6 +541,17 @@ fun ChatDrawerContent(
                                 )
 
                                 DrawerAction(
+                                    modifier = Modifier.weight(1f),
+                                    icon = { Icon(HugeIcons.Rocket01, null) },
+                                    label = stringResource(R.string.chat_drawer_nav_missions),
+                                    contentDescription = stringResource(R.string.chat_drawer_nav_missions),
+                                    // 角标 = 还在进行中的任务数；没有任务时不画角标（0 不显示）。
+                                    badgeCount = activeMissionCount,
+                                    onClick = { navController.navigate(Screen.Workbench()) },
+                                )
+
+                                DrawerAction(
+                                    modifier = Modifier.weight(1f),
                                     icon = { Icon(HugeIcons.Settings03, null) },
                                     label = stringResource(R.string.settings),
                                     contentDescription = stringResource(R.string.settings),
@@ -1041,6 +1061,8 @@ private fun DrawerAction(
     icon: @Composable () -> Unit,
     label: String,
     contentDescription: String? = null,
+    /** 批 4 — 右上角角标（在跑任务数）；0 表示不画。 */
+    badgeCount: Int = 0,
     onClick: () -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -1059,23 +1081,33 @@ private fun DrawerAction(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Surface(
-            modifier = Modifier.size(42.dp),
-            shape = CircleShape,
-            color = if (darkTheme) scheme.surfaceContainerHighest else scheme.surface,
-            contentColor = scheme.onSurface,
-            shadowElevation = 2.dp,
-            border = BorderStroke(
-                width = 1.dp,
-                color = scheme.outlineVariant.copy(alpha = if (darkTheme) 0.35f else 0.55f),
-            ),
+        BadgedBox(
+            badge = {
+                if (badgeCount > 0) {
+                    Badge {
+                        Text(text = if (badgeCount > 99) "99+" else badgeCount.toString())
+                    }
+                }
+            },
         ) {
-            Box(
-                modifier = Modifier
-                    .padding(11.dp)
-                    .size(20.dp),
+            Surface(
+                modifier = Modifier.size(42.dp),
+                shape = CircleShape,
+                color = if (darkTheme) scheme.surfaceContainerHighest else scheme.surface,
+                contentColor = scheme.onSurface,
+                shadowElevation = 2.dp,
+                border = BorderStroke(
+                    width = 1.dp,
+                    color = scheme.outlineVariant.copy(alpha = if (darkTheme) 0.35f else 0.55f),
+                ),
             ) {
-                icon()
+                Box(
+                    modifier = Modifier
+                        .padding(11.dp)
+                        .size(20.dp),
+                ) {
+                    icon()
+                }
             }
         }
         Text(

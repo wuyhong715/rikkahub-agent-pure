@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
+import androidx.paging.filter
 import androidx.paging.insertSeparators
 import androidx.paging.map
 import kotlinx.coroutines.flow.Flow
@@ -25,6 +26,8 @@ import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.mission.MissionConversationFilter
+import me.rerere.rikkahub.data.mission.MissionRepository
 import me.rerere.rikkahub.data.model.Folder
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.FolderRepository
@@ -38,11 +41,23 @@ import kotlin.uuid.Uuid
 /** P2-23 (D7) — why a folder delete did or did not happen, so the UI can explain itself. */
 enum class FolderDeleteOutcome { Deleted, Generating, Protected }
 
+/**
+ * 批 4 — 一次对话列表查询的全部输入。做成一个对象是因为 `combine` 最多四个参数已经满了，
+ * 而过滤需要任务表与设置项两份额外输入。
+ */
+private data class DrawerQuery(
+    val assistantId: Uuid,
+    val folderId: Uuid?,
+    val hiddenConversationIds: Set<String>,
+    val showMissionConversations: Boolean,
+)
+
 class ChatDrawerVM(
     private val context: Application,
     private val settingsStore: SettingsStore,
     private val conversationRepo: ConversationRepository,
     private val folderRepo: FolderRepository,
+    private val missionRepository: MissionRepository,
     private val chatService: ChatService,
     private val savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
@@ -65,15 +80,52 @@ class ChatDrawerVM(
         .flatMapLatest { folderRepo.getFoldersOfAssistant(it) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    /**
+     * 批 4 — 抽屉「任务」入口的角标：还有几个任务没结束。
+     *
+     * 读任务表而不是读会话表：角标要的是「我手上还有几件事」，两轮之间的 IDLE 空档不该让它闪。
+     */
+    val activeMissionCount: StateFlow<Int> = missionRepository.observeAll()
+        .map { missions -> MissionConversationFilter.activeCount(missions.map { it.status }) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    /**
+     * 对话列表。批 4 起任务的执行会话默认不出现（设置项 `showMissionConversations` 可以关掉这个
+     * 过滤）。过滤发生在 `PagingData` 上而不是 SQL 里：这一轮不动 Room schema（见
+     * [MissionConversationFilter] 的说明），分页键仍然是数据库的键，翻页行为不变。
+     */
     val conversations: Flow<PagingData<ConversationListItem>> =
-        combine(assistantIdFlow, _selectedFolderId) { assistantId, folderId ->
-            assistantId to folderId
+        combine(
+            assistantIdFlow,
+            _selectedFolderId,
+            missionRepository.observeAll(),
+            settingsStore.settingsFlow
+                .map { it.showMissionConversations }
+                .distinctUntilChanged(),
+        ) { assistantId, folderId, missions, showMissionConversations ->
+            DrawerQuery(
+                assistantId = assistantId,
+                folderId = folderId,
+                hiddenConversationIds = MissionConversationFilter.conversationIds(
+                    missions.map { it.conversationId }
+                ),
+                showMissionConversations = showMissionConversations,
+            )
         }
-            .flatMapLatest { (assistantId, folderId) ->
-                if (folderId == null) {
-                    conversationRepo.getUnfiledConversationsOfAssistantPaging(assistantId)
+            .flatMapLatest { query ->
+                val paging = if (query.folderId == null) {
+                    conversationRepo.getUnfiledConversationsOfAssistantPaging(query.assistantId)
                 } else {
-                    conversationRepo.getConversationsOfFolderPaging(folderId)
+                    conversationRepo.getConversationsOfFolderPaging(query.folderId)
+                }
+                paging.map { pagingData ->
+                    pagingData.filter { conversation ->
+                        MissionConversationFilter.isVisible(
+                            conversationId = conversation.id.toString(),
+                            hiddenIds = query.hiddenConversationIds,
+                            showMissionConversations = query.showMissionConversations,
+                        )
+                    }
                 }
             }
             .map { pagingData ->

@@ -3332,6 +3332,9 @@ HARDLINE protections still apply: rm -rf /, mkfs, shutdown / reboot, dd to block
   <string name="mission_note_save">Save</string>
   <string name="mission_created_at">Created %1$s</string>
   <string name="mission_detail_description_expand">Show more</string>
+  <string name="chat_drawer_nav_missions">Tasks</string>
+  <string name="setting_page_show_mission_conversations_title">Show mission sessions in the chat list</string>
+  <string name="setting_page_show_mission_conversations_desc">Off by default: a mission keeps its own transcript inside the task, reachable from the mission detail. Turn this on to browse those transcripts as ordinary conversations.</string>
   <string name="chat_drawer_nav_assistant">Assistant</string>
   <string name="chat_drawer_nav_more">More</string>
   <string name="mission_detail_description_collapse">Show less</string>

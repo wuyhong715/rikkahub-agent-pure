@@ -212,6 +212,13 @@ fun settingsSearchIndex(developerMode: Boolean): List<SettingsSearchEntry> {
             groupRes = R.string.setting_page_group_data,
             route = Screen.SettingFiles,
         ),
+        // 批 4 — 开关不是页面，搜到它时落在设置首页（开关就在「数据」组里）。
+        SettingsSearchEntry(
+            titleRes = R.string.setting_page_show_mission_conversations_title,
+            descriptionRes = R.string.setting_page_show_mission_conversations_desc,
+            groupRes = R.string.setting_page_group_data,
+            route = Screen.Setting,
+        ),
 
         // About & diagnostics
         SettingsSearchEntry(

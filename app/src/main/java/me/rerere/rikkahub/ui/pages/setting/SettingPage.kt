@@ -22,6 +22,7 @@ import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
@@ -410,6 +411,24 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                             }
                         },
                         headlineContent = { Text(stringResource(R.string.setting_files_page_title)) },
+                    )
+                    // 批 4 — 任务会话隔离的开关。默认关（隔离生效）；打开后抽屉恢复完整历史列表。
+                    item(
+                        leadingContent = { Icon(HugeIcons.Message01, null) },
+                        supportingContent = {
+                            Text(stringResource(R.string.setting_page_show_mission_conversations_desc))
+                        },
+                        headlineContent = {
+                            Text(stringResource(R.string.setting_page_show_mission_conversations_title))
+                        },
+                        trailingContent = {
+                            Switch(
+                                checked = settings.showMissionConversations,
+                                onCheckedChange = { checked ->
+                                    vm.updateSettings(settings.copy(showMissionConversations = checked))
+                                },
+                            )
+                        },
                     )
                 }
             }

@@ -9,11 +9,14 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
+import me.rerere.rikkahub.data.mission.MissionConversationFilter
+import me.rerere.rikkahub.data.mission.MissionRepository
 import me.rerere.rikkahub.data.vector.ConversationIndexCoordinator
 import me.rerere.rikkahub.data.vector.ConversationSearchResult
 import kotlin.uuid.Uuid
@@ -49,6 +52,7 @@ private data class SearchRequest(
 class SearchVM(
     private val settingsStore: SettingsStore,
     private val conversationIndex: ConversationIndexCoordinator,
+    private val missionRepository: MissionRepository,
 ) : ViewModel() {
     private val searchRequests = Channel<SearchRequest>(Channel.CONFLATED)
     private var currentAssistantId: Uuid? = null
@@ -158,8 +162,21 @@ class SearchVM(
                 needsEmbeddingModel = true
                 return
             }
+            // 批 4 — 任务的执行会话默认不出现在对话列表里，搜索也一样：否则用户从搜索结果
+            // 直接钻进了一条他从未开始过的 transcript，抽屉里却找不到它。
+            val hiddenMissionConversations = MissionConversationFilter.conversationIds(
+                missionRepository.observeAll().first().map { it.conversationId }
+            )
+            val showMissionConversations = settingsStore.settingsFlow.first().showMissionConversations
             results = response.results
                 .filter { scoped == null || it.assistantId == scoped.toString() }
+                .filter {
+                    MissionConversationFilter.isVisible(
+                        conversationId = it.conversationId,
+                        hiddenIds = hiddenMissionConversations,
+                        showMissionConversations = showMissionConversations,
+                    )
+                }
                 .take(RESULT_LIMIT)
         } finally {
             isLoading = false
