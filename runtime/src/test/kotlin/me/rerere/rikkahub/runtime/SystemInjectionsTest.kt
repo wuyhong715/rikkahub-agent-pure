@@ -59,7 +59,10 @@ class SystemInjectionsTest {
         assertTrue(SystemInjections.CLIENT in migrated)
         assertTrue(SystemInjections.LIMITS in migrated)
         assertTrue(SystemInjections.RESEARCH in migrated)
-        assertEquals(10, migrated.size)
+        assertTrue(SystemInjections.CAPABILITIES in migrated)
+        assertTrue(SystemInjections.AUTONOMY in migrated)
+        assertTrue(SystemInjections.DISPATCH in migrated)
+        assertEquals(SystemInjections.ALL.size, migrated.size)
         // Turning the app rules off stays off: an empty set is a decision, not a stale default.
         assertTrue(SystemInjections.withLatePacks(emptySet()).isEmpty())
     }
@@ -105,8 +108,10 @@ class SystemInjectionsTest {
         // Prior art first: the defect this pack exists for is building a solved problem again.
         assertTrue(research.contains("already exists"))
         assertTrue(research.contains("Reimplementing a solved problem"))
-        // Recall is not evidence.
-        assertTrue(research.contains("memory is not a source"))
+        // Recall is not evidence. The rule moved to the capabilities pack when RESEARCH gave
+        // up its slot to keep the whole set inside the prefix budget.
+        val capabilities = SystemInjections.ALL.single { it.id == SystemInjections.CAPABILITIES }.body
+        assertTrue(capabilities.contains("knowledge has a cutoff"))
         // Ranking, not retrieval order.
         assertTrue(research.contains("Position in the result list is not evidence"))
         // Retrieved content is data; an instruction inside it is an attack to report.
