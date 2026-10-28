@@ -236,6 +236,11 @@ class SettingsStore(
         val ENABLED_SYSTEM_INJECTIONS = stringPreferencesKey("enabled_system_injections")
         /** Whether the model may start a workbench mission from a normal conversation. */
         val ALLOW_MODEL_MISSION_CREATION = booleanPreferencesKey("allow_model_mission_creation")
+        /**
+         * 批 4 — whether a mission's execution conversation also shows up in the chat drawer.
+         * Default false: the transcript is the mission's own workspace, not a chat the user started.
+         */
+        val SHOW_MISSION_CONVERSATIONS = booleanPreferencesKey("show_mission_conversations")
         /** One-shot marker for the capability/prompt upgrade applied to built-in assistants. */
         val AGENT_DEFAULTS_VERSION = intPreferencesKey("agent_defaults_version")
         val AUTO_COMPACTION_THRESHOLD_MODE = stringPreferencesKey("auto_compaction_threshold_mode")
@@ -381,6 +386,7 @@ class SettingsStore(
                 preferences[ENABLED_SYSTEM_INJECTIONS] =
                     JsonInstant.encodeToString(settings.enabledSystemInjections)
                 preferences[ALLOW_MODEL_MISSION_CREATION] = settings.allowModelMissionCreation
+                preferences[SHOW_MISSION_CONVERSATIONS] = settings.showMissionConversations
                 preferences[AGENT_DEFAULTS_VERSION] = settings.agentDefaultsVersion
                 preferences[AUTO_COMPACTION_THRESHOLD_MODE] = settings.autoCompactionThresholdMode.name
                 preferences[AUTO_COMPACTION_THRESHOLD_PERCENT] =
@@ -518,6 +524,7 @@ class SettingsStore(
                         ?.let { ids -> SystemInjections.withLatePacks(SystemInjections.normalize(ids)) }
                 } ?: SystemInjections.DEFAULT_IDS,
                 allowModelMissionCreation = preferences[ALLOW_MODEL_MISSION_CREATION] != false,
+                showMissionConversations = preferences[SHOW_MISSION_CONVERSATIONS] ?: false,
                 agentDefaultsVersion = preferences[AGENT_DEFAULTS_VERSION] ?: 0,
                 autoCompactionThresholdMode = preferences[AUTO_COMPACTION_THRESHOLD_MODE]
                     ?.let { value -> runCatching { AutoCompactionThresholdMode.valueOf(value) }.getOrNull() }
@@ -1122,6 +1129,13 @@ data class Settings(
      * a mission round (no recursive missions).
      */
     val allowModelMissionCreation: Boolean = true,
+    /**
+     * 批 4 — 任务的执行会话是否也显示在对话列表里。
+     *
+     * 默认关闭（= 隔离生效）：那条 transcript 是任务自己的工作区，由督导写交接、模型跑工具，
+     * 用户从来没有「开始」过这个对话。开成 true 时抽屉完整显示历史列表，用于排查与回溯。
+     */
+    val showMissionConversations: Boolean = false,
     /**
      * One-shot marker for the built-in assistant upgrade (capability defaults + prompt skeleton).
      * Kept so a user who later turns any of those off is not re-opted-in on the next launch.
