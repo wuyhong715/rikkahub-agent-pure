@@ -24,6 +24,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.LocalOverscrollFactory
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -778,12 +779,20 @@ private fun ChatSuggestionsRow(
                     .clickable {
                         onClickSuggestion(suggestion)
                     }
-                    .background(MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp))
-                    .padding(vertical = 4.dp, horizontal = 8.dp),
+                    // 建议胶囊：底色 + 一条发丝描边。只靠 surfaceColorAtElevation 的浅灰，
+                    // 在浅色主题下几乎和背景同色，看不出这是一个可以点的东西。
+                    .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                    .border(
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                        shape = RoundedCornerShape(50),
+                    )
+                    .padding(vertical = 6.dp, horizontal = 12.dp),
             ) {
                 Text(
                     text = suggestion,
-                    style = MaterialTheme.typography.bodySmall
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }

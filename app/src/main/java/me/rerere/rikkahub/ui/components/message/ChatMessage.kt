@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -527,7 +528,13 @@ private fun MessagePartsBlock(
                                         // 流式期间关掉高度动画：内容每个 token 都在长，
                                         // 动画每帧都要重测+插值，和自动跟随滚动抢帧。
                                         modifier = if (loading) Modifier else Modifier.animateContentSize(),
-                                        shape = RoundedCornerShape(16.dp),
+                                        // 与用户气泡镜像：收紧的角朝左下（说话人在左侧）。
+                                        shape = RoundedCornerShape(
+                                            topStart = 18.dp,
+                                            topEnd = 18.dp,
+                                            bottomEnd = 18.dp,
+                                            bottomStart = 6.dp,
+                                        ),
                                         color = if (settings.displaySetting.showAssistantBubble) {
                                             MaterialTheme.colorScheme.surfaceContainerHigh.copy(
                                                 alpha = settings.displaySetting.bubbleOpacity,
@@ -536,7 +543,7 @@ private fun MessagePartsBlock(
                                             MaterialTheme.colorScheme.surface.copy(alpha = PHOTO_TEXT_PLATE_ALPHA)
                                         },
                                     ) {
-                                        Column(modifier = Modifier.padding(8.dp)) {
+                                        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
                                             MarkdownBlock(
                                                 content = part.text.replaceRegexes(
                                                     assistant = assistant,
@@ -796,11 +803,25 @@ private fun UserMessageBubble(
     val collapsed = showToggle && !expanded
     Surface(
         modifier = Modifier.animateContentSize(),
-        shape = RoundedCornerShape(16.dp),
+        // 不对称圆角：朝着说话人的那个角收紧（6dp），其余三角 18dp。
+        // 之前四角一律 16dp，一屏上下十几个气泡排下来像一排胶囊，看不出谁在说话；
+        // 收紧的那个角就是一个不占地方的「尾巴」。
+        shape = RoundedCornerShape(
+            topStart = 18.dp,
+            topEnd = 18.dp,
+            bottomEnd = 6.dp,
+            bottomStart = 18.dp,
+        ),
         color = bubbleColor,
+        // 用户气泡是唯一带底色的消息块，用一条极淡描边把它「钉」在纸面上：
+        // primaryContainer 在浅色主题下只比背景深一点，没有边界时会显得发灰。
+        border = BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+        ),
         onClick = onClick,
     ) {
-        Column(modifier = Modifier.padding(8.dp)) {
+        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
             Box(
                 modifier = Modifier
                     .clipToBounds()
@@ -859,8 +880,11 @@ private fun UserMessageBubble(
                         onClick = { expanded = !expanded },
                         shape = CircleShape,
                         color = MaterialTheme.colorScheme.surface,
-                        shadowElevation = 1.dp,
-                        modifier = Modifier.size(30.dp),
+                        border = BorderStroke(
+                            1.dp,
+                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f),
+                        ),
+                        modifier = Modifier.size(28.dp),
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(

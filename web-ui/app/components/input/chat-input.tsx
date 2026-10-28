@@ -501,7 +501,11 @@ function ChatInputInner({
       <div className="mx-auto w-full max-w-3xl px-4 py-4">
         <div
           className={cn(
-            "relative flex flex-col gap-2 rounded-3xl border border-border/60 bg-muted/50 p-2.5 transition-colors focus-within:border-border",
+            // 输入区不是一个灰盒子，而是一张「浮在纸上的纸条」：卡片底色 + 一条描边 + 极淡阴影。
+            // 旧的 bg-muted/50 和页面背景几乎同色，整个输入区在视觉上是塌陷的；聚焦时才靠
+            // 边框变深提示「可以打字了」，而现在静息状态就有明确的边界。
+            "relative flex flex-col gap-2 rounded-[22px] border border-border bg-card/85 p-2.5 shadow-xs backdrop-blur-sm transition-[border-color,box-shadow] duration-200",
+            "focus-within:border-primary/35 focus-within:shadow-md",
             dragActive &&
               "border-primary/40 bg-primary/5 ring-2 ring-primary/30",
           )}

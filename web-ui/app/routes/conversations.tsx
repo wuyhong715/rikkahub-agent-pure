@@ -1156,17 +1156,29 @@ function ConversationsPageInner() {
         onMoveToFolder={handleMoveConversationToFolder}
       />
       <SidebarInset className="flex min-h-svh flex-col overflow-hidden">
-        <div className="flex items-center gap-2 border-b px-4 py-3">
-          <SidebarTrigger />
+        {/* 顶栏：一条发丝分隔线 + 半透明背景。标题是「当前这段对话的名字」，
+            元信息（助手 / 模型 / 供应商）退到第二行并且用等宽数字，扫一眼就知道在看什么。 */}
+        <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-border/70 bg-background/80 px-4 py-2.5 backdrop-blur-md">
+          <SidebarTrigger className="text-muted-foreground hover:text-foreground" />
           <div className="min-w-0 flex-1">
-            <div className="truncate text-sm text-muted-foreground">
+            <div className="truncate text-[13px] font-medium leading-5 tracking-[-0.01em] text-foreground">
               {activeConversation
                 ? activeConversation.title
                 : t("conversations.header.select_conversation")}
             </div>
             {currentModel && currentProvider ? (
-              <div className="truncate text-xs text-muted-foreground/80">
-                {`${getAssistantDisplayName(currentAssistant?.name)} / ${getModelDisplayName(currentModel.displayName, currentModel.modelId)} (${currentProvider.name})`}
+              <div className="mt-0.5 flex min-w-0 items-center gap-1.5 truncate text-[11px] leading-4 text-muted-foreground tabular-nums">
+                <span className="truncate">{getAssistantDisplayName(currentAssistant?.name)}</span>
+                <span aria-hidden className="text-border">
+                  /
+                </span>
+                <span className="truncate">
+                  {getModelDisplayName(currentModel.displayName, currentModel.modelId)}
+                </span>
+                <span aria-hidden className="text-border">
+                  ·
+                </span>
+                <span className="shrink-0 opacity-80">{currentProvider.name}</span>
               </div>
             ) : null}
           </div>

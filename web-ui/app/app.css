@@ -3,122 +3,133 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * 墨（Ink）—— 默认主题，与 Android 端 `InkTheme.kt` 同一套取值。
+ *
+ * 三条规则，后面所有页面都从这三个变量族里取色：
+ * 1. 底色不是纯白/纯黑：浅色是暖纸（L 0.985, 微黄），深色是带一点绿调的炭（L 0.17）。
+ * 2. 层级靠 surface 色阶（card → popover → muted → border），不靠阴影。
+ * 3. 只有一个强调色：青瓷（hue 187）。陶土（hue 45）只留给「进行中/需要注意」。
+ */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --background: oklch(0.985 0.004 95);
+  --foreground: oklch(0.216 0.004 200);
+  --card: oklch(0.976 0.004 95);
+  --card-foreground: oklch(0.216 0.004 200);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
+  --popover-foreground: oklch(0.216 0.004 200);
+  --primary: oklch(0.413 0.055 187);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.937 0.01 168);
+  --secondary-foreground: oklch(0.302 0.012 175);
+  --muted: oklch(0.958 0.006 95);
+  --muted-foreground: oklch(0.482 0.01 200);
+  --accent: oklch(0.94 0.006 95);
+  --accent-foreground: oklch(0.216 0.004 200);
+  --destructive: oklch(0.525 0.155 30);
   --destructive-foreground: oklch(1 0 0);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.81 0.1 252);
-  --chart-2: oklch(0.62 0.19 260);
-  --chart-3: oklch(0.55 0.22 263);
-  --chart-4: oklch(0.49 0.22 264);
-  --chart-5: oklch(0.42 0.18 266);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --border: oklch(0.888 0.006 110);
+  --input: oklch(0.856 0.006 110);
+  --ring: oklch(0.413 0.055 187);
+  --chart-1: oklch(0.413 0.055 187);
+  --chart-2: oklch(0.58 0.075 45);
+  --chart-3: oklch(0.66 0.045 165);
+  --chart-4: oklch(0.55 0.02 220);
+  --chart-5: oklch(0.76 0.05 95);
+  --sidebar: oklch(0.968 0.004 95);
+  --sidebar-foreground: oklch(0.216 0.004 200);
+  --sidebar-primary: oklch(0.413 0.055 187);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.94 0.006 95);
+  --sidebar-accent-foreground: oklch(0.216 0.004 200);
+  --sidebar-border: oklch(0.9 0.006 110);
+  --sidebar-ring: oklch(0.413 0.055 187);
   --font-sans:
     ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-    "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
-    "Segoe UI Symbol", "Noto Color Emoji";
+    "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC",
+    Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
   --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
   --font-mono:
-    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
-    monospace;
-  --radius: 0.625rem;
+    ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
+  --radius: 0.75rem;
   --shadow-x: 0;
   --shadow-y: 1px;
-  --shadow-blur: 3px;
+  --shadow-blur: 2px;
   --shadow-spread: 0px;
-  --shadow-opacity: 0.1;
-  --shadow-color: oklch(0 0 0);
-  --shadow-2xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);
-  --shadow-xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);
-  --shadow-sm: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 1px 2px -1px hsl(0 0% 0% / 0.1);
-  --shadow: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 1px 2px -1px hsl(0 0% 0% / 0.1);
-  --shadow-md: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 2px 4px -1px hsl(0 0% 0% / 0.1);
-  --shadow-lg: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 4px 6px -1px hsl(0 0% 0% / 0.1);
-  --shadow-xl: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 8px 10px -1px hsl(0 0% 0% / 0.1);
-  --shadow-2xl: 0 1px 3px 0px hsl(0 0% 0% / 0.25);
+  --shadow-opacity: 0.06;
+  --shadow-color: oklch(0.216 0.01 200);
+  /* 阴影只用来「抬起」浮层，且永远配合 1px 描边使用；卡片层级不靠影子。 */
+  --shadow-2xs: 0 1px 2px 0 oklch(0.216 0.01 200 / 0.04);
+  --shadow-xs: 0 1px 2px 0 oklch(0.216 0.01 200 / 0.05);
+  --shadow-sm: 0 1px 2px -1px oklch(0.216 0.01 200 / 0.08), 0 1px 3px 0 oklch(0.216 0.01 200 / 0.06);
+  --shadow: 0 1px 2px -1px oklch(0.216 0.01 200 / 0.08), 0 2px 6px -1px oklch(0.216 0.01 200 / 0.08);
+  --shadow-md: 0 2px 4px -1px oklch(0.216 0.01 200 / 0.08), 0 6px 12px -2px oklch(0.216 0.01 200 / 0.08);
+  --shadow-lg: 0 2px 6px -2px oklch(0.216 0.01 200 / 0.08), 0 12px 24px -6px oklch(0.216 0.01 200 / 0.1);
+  --shadow-xl: 0 4px 10px -4px oklch(0.216 0.01 200 / 0.1), 0 20px 32px -10px oklch(0.216 0.01 200 / 0.12);
+  --shadow-2xl: 0 8px 16px -6px oklch(0.216 0.01 200 / 0.14), 0 32px 48px -16px oklch(0.216 0.01 200 / 0.16);
   --tracking-normal: 0em;
   --spacing: 0.25rem;
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.269 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.371 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.275 0 0);
-  --input: oklch(0.325 0 0);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.81 0.1 252);
-  --chart-2: oklch(0.62 0.19 260);
-  --chart-3: oklch(0.55 0.22 263);
-  --chart-4: oklch(0.49 0.22 264);
-  --chart-5: oklch(0.42 0.18 266);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(0.275 0 0);
-  --sidebar-ring: oklch(0.439 0 0);
+  --background: oklch(0.166 0.006 165);
+  --foreground: oklch(0.912 0.006 145);
+  --card: oklch(0.204 0.007 165);
+  --card-foreground: oklch(0.912 0.006 145);
+  --popover: oklch(0.229 0.008 165);
+  --popover-foreground: oklch(0.912 0.006 145);
+  --primary: oklch(0.804 0.07 187);
+  --primary-foreground: oklch(0.28 0.04 187);
+  --secondary: oklch(0.323 0.012 170);
+  --secondary-foreground: oklch(0.9 0.01 160);
+  --muted: oklch(0.246 0.008 165);
+  --muted-foreground: oklch(0.723 0.011 155);
+  --accent: oklch(0.278 0.008 165);
+  --accent-foreground: oklch(0.912 0.006 145);
+  --destructive: oklch(0.795 0.093 25);
+  --destructive-foreground: oklch(0.235 0.05 25);
+  --border: oklch(0.272 0.008 165);
+  --input: oklch(0.306 0.008 165);
+  --ring: oklch(0.804 0.07 187);
+  --chart-1: oklch(0.804 0.07 187);
+  --chart-2: oklch(0.78 0.09 60);
+  --chart-3: oklch(0.7 0.05 165);
+  --chart-4: oklch(0.74 0.03 220);
+  --chart-5: oklch(0.62 0.06 95);
+  --sidebar: oklch(0.145 0.006 165);
+  --sidebar-foreground: oklch(0.912 0.006 145);
+  --sidebar-primary: oklch(0.804 0.07 187);
+  --sidebar-primary-foreground: oklch(0.28 0.04 187);
+  --sidebar-accent: oklch(0.246 0.008 165);
+  --sidebar-accent-foreground: oklch(0.912 0.006 145);
+  --sidebar-border: oklch(0.252 0.008 165);
+  --sidebar-ring: oklch(0.804 0.07 187);
   --font-sans:
     ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-    "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
-    "Segoe UI Symbol", "Noto Color Emoji";
+    "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC",
+    Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
   --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
   --font-mono:
-    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
-    monospace;
-  --radius: 0.625rem;
+    ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
+  --radius: 0.75rem;
   --shadow-x: 0;
   --shadow-y: 1px;
-  --shadow-blur: 3px;
+  --shadow-blur: 2px;
   --shadow-spread: 0px;
-  --shadow-opacity: 0.1;
+  --shadow-opacity: 0.4;
   --shadow-color: oklch(0 0 0);
-  --shadow-2xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);
-  --shadow-xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);
-  --shadow-sm: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 1px 2px -1px hsl(0 0% 0% / 0.1);
-  --shadow: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 1px 2px -1px hsl(0 0% 0% / 0.1);
-  --shadow-md: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 2px 4px -1px hsl(0 0% 0% / 0.1);
-  --shadow-lg: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 4px 6px -1px hsl(0 0% 0% / 0.1);
-  --shadow-xl: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 8px 10px -1px hsl(0 0% 0% / 0.1);
-  --shadow-2xl: 0 1px 3px 0px hsl(0 0% 0% / 0.25);
+  --shadow-2xs: 0 1px 2px 0 oklch(0 0 0 / 0.3);
+  --shadow-xs: 0 1px 2px 0 oklch(0 0 0 / 0.35);
+  --shadow-sm: 0 1px 2px -1px oklch(0 0 0 / 0.4), 0 1px 3px 0 oklch(0 0 0 / 0.3);
+  --shadow: 0 1px 2px -1px oklch(0 0 0 / 0.4), 0 2px 6px -1px oklch(0 0 0 / 0.4);
+  --shadow-md: 0 2px 4px -1px oklch(0 0 0 / 0.4), 0 6px 12px -2px oklch(0 0 0 / 0.4);
+  --shadow-lg: 0 2px 6px -2px oklch(0 0 0 / 0.4), 0 12px 24px -6px oklch(0 0 0 / 0.45);
+  --shadow-xl: 0 4px 10px -4px oklch(0 0 0 / 0.45), 0 20px 32px -10px oklch(0 0 0 / 0.5);
+  --shadow-2xl: 0 8px 16px -6px oklch(0 0 0 / 0.5), 0 32px 48px -16px oklch(0 0 0 / 0.55);
+  --tracking-normal: 0em;
+  --spacing: 0.25rem;
 }
 
 :root[data-theme="claude"] {
@@ -645,8 +656,35 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    /* 深色主题下让浏览器原生控件（下拉、滚动条、表单恢复）也跟着变暗。 */
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
   body {
     @apply bg-background text-foreground;
+    /* 正文默认行高：中文长回答在 1.5 下偏挤，1.6 是阅读与紧凑之间的平衡点。 */
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    font-synthesis-weight: none;
+  }
+  /* 标题统一收一点字距：大字号的默认字距在中文里显得散。 */
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.015em;
+  }
+  ::selection {
+    background: color-mix(in oklch, var(--primary) 24%, transparent);
+    color: var(--foreground);
+  }
+  /* 键盘焦点统一成一条 2px 的青瓷细环，鼠标点击不出现。 */
+  :focus-visible {
+    outline: 2px solid color-mix(in oklch, var(--ring) 55%, transparent);
+    outline-offset: 2px;
   }
 }
 
@@ -654,7 +692,7 @@
 @layer base {
   * {
     scrollbar-width: thin;
-    scrollbar-color: var(--border) transparent;
+    scrollbar-color: color-mix(in oklch, var(--muted-foreground) 30%, transparent) transparent;
   }
 
   *::-webkit-scrollbar {
@@ -667,10 +705,14 @@
   }
 
   *::-webkit-scrollbar-thumb {
-    background-color: var(--border);
+    background-color: color-mix(in oklch, var(--muted-foreground) 28%, transparent);
     border-radius: 9999px;
     border: 2px solid transparent;
     background-clip: content-box;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in oklch, var(--muted-foreground) 45%, transparent);
   }
 
   *::-webkit-scrollbar-corner {

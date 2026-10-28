@@ -936,7 +936,10 @@ private fun TopBar(
                     Text(
                         text = conversation.title.ifBlank { stringResource(R.string.chat_page_new_chat) },
                         maxLines = 1,
-                        style = MaterialTheme.typography.bodyMedium,
+                        // bodyMedium（14sp/常规）在顶栏读起来像一段被截断的正文。
+                        // titleSmall 是同一字号但 weight 500，加上 Type.kt 给的 0.1sp 字距，
+                        // 一行标题就有「这是个标题」的重量，而不需要放大字号。
+                        style = MaterialTheme.typography.titleSmall,
                         overflow = TextOverflow.Ellipsis,
                     )
                     if (model != null) {
@@ -960,13 +963,14 @@ private fun TopBar(
                             assistantName = assistant.name.ifBlank { stringResource(R.string.assistant_page_default_assistant) },
                             modelName = model.displayName,
                             usedTokens = usedTokens,
-                            color = LocalContentColor.current.copy(0.65f),
+                            color = LocalContentColor.current.copy(0.55f),
                             style = MaterialTheme.typography.labelSmall.copy(
-                                // 8sp 在任何系统字号下都读不出来（Material 的 labelSmall 是 11sp，
-                                // 也是正文的最小档）。这里回到 11sp，同时把行高压到 12sp，
-                                // 顶栏高度不会因此变高。
+                                // 元信息（助手名 / 模型名 / token 数）比正文再轻一档：
+                                // labelSmall 是 11sp，行高压到 12sp，顶栏高度不变；
+                                // 字距给 0.4sp，中文数字混排时不会黏成一团。
                                 fontSize = 11.sp,
                                 lineHeight = 12.sp,
+                                letterSpacing = 0.4.sp,
                             ),
                         )
                     }
@@ -1018,8 +1022,10 @@ private fun GlassTopBarButton(
     Surface(
         onClick = onClick,
         modifier = Modifier
-            .padding(horizontal = 4.dp)
-            .size(40.dp)
+            .padding(horizontal = 2.dp)
+            // 40dp 的圆在三连按钮下会把顶栏撑得很高，且看起来像三个并列的主操作。
+            // 收到 36dp（仍在 48dp 触控热区内，热区由 Surface 的 min touch target 补齐）。
+            .size(36.dp)
             .clip(CircleShape)
             .hazeGlass(
                 input = HazeInput.Sources(hazeState),

@@ -558,7 +558,12 @@ export const ChatMessage = React.memo(({
             data-message-bubble
             className={cn(
               "flex flex-col gap-2 text-sm",
-              isUser ? "max-w-[85%] rounded-lg bg-muted px-4 py-3" : "w-full",
+              // 用户消息是唯一带底色的块。用它自己的一点青瓷色（secondary）而不是灰底：
+              // 灰底在一屏里和卡片、代码块混在一起，分不清哪句是自己说的。
+              // 圆角不对称——朝向头像的那个角收紧，代替一个占地方的「尾巴」。
+              isUser
+                ? "max-w-[85%] rounded-[18px] rounded-br-[6px] border border-primary/10 bg-secondary px-4 py-3 text-secondary-foreground"
+                : "w-full",
             )}
           >
             <MessageParts
