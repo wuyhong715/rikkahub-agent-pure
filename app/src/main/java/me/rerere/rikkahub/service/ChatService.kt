@@ -2823,7 +2823,7 @@ class ChatService(
         // Screen-automation experience memory: whatever the agent just did to an app is written
         // to that app's cold-memory playbook here, by the host — the model never has to remember
         // to do it. Best-effort and no-op unless cold memory is configured.
-        flushAutomationPlaybook(assistant)
+        flushAutomationPlaybook(assistant, conversationId)
         val lastMessage = getConversationFlow(conversationId).value.currentMessages.lastOrNull()
         // A tool round normally ends with an ASSISTANT message containing executed
         // tool calls. That message is still a valid point for a context-limit retry:
@@ -3196,14 +3196,14 @@ class ChatService(
      * Best-effort: failures are logged and swallowed, and it is a no-op unless cold memory is
      * configured. Observation state is drained first, so a retried turn cannot double-write.
      */
-    private suspend fun flushAutomationPlaybook(assistant: Assistant) {
+    private suspend fun flushAutomationPlaybook(assistant: Assistant, conversationId: Uuid) {
         // 先判定「这些观测有没有地方可写」，再 drain。反过来写就是：任何一个轮次结束都把
         // 全部观测取走，若这一个助手没开冷记忆就直接丢掉——观测没了，别人的轮次也拿不到。
         if (!assistant.coldMemoryEnabled) return
         val workspaceId = assistant.workspaceId?.toString() ?: return
         val dir = ColdMemoryRules.normalizeDir(assistant.coldMemoryDir) ?: return
         if (workspaceRepository.getById(workspaceId) == null) return
-        val snapshots = AutomationRecorder.drain()
+        val snapshots = AutomationRecorder.drain(scope = conversationId.toString())
         if (snapshots.isEmpty()) return
 
         for (snapshot in snapshots) {

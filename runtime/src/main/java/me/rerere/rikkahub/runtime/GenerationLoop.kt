@@ -1340,7 +1340,7 @@ class GenerationLoop(
                 AgentTurnTracker.reset()
                 // Screen-automation observations are per-turn too: they are flushed to the app's
                 // cold-memory playbook when the turn ends (ChatService.flushAutomationPlaybook).
-                AutomationRecorder.reset()
+                AutomationRecorder.reset(scope = conversationId?.toString())
                 host.showOverlay()
             }
         }
