@@ -285,7 +285,7 @@ class ContextCompactionViewTest {
         val view = ContextCompactionView.buildForRange(conversation, compaction, endExclusive = 3)
 
         assertEquals(2, view!!.rawTailStartIndex)
-        assertEquals(3, view.messages.size)
+        assertEquals(2, view.messages.size)
         assertEquals("summary of one and two", view.messages[0].parts[0].let { (it as UIMessagePart.Text).text })
         // Anchors cover the compacted region only: "one" and "two" (node 3 is the regenerated one).
         val anchors = (view.messages[0].parts[1] as UIMessagePart.Text).text
