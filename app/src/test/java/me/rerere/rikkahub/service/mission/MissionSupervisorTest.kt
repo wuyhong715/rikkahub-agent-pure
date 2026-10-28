@@ -266,7 +266,7 @@ class MissionSupervisorTest {
     @Test
     fun `resume count at the max rounds blocks instead of resuming`() = runBlocking {
         val fx = Fixture()
-        fx.seed(mission(id = "m4", conversationId = CONV1, resumeCount = 5))
+        fx.seed(mission(id = "m4", conversationId = CONV1, resumeCount = 12))
         fx.runEvents.emit(
             type = RunEventType.TOOL_RESULT,
             title = "tool",

@@ -209,9 +209,12 @@ class MissionRepositoryTest {
             assertNull(row.limitsJson)
             assertNull(row.lastRunId)
             assertEquals(MissionLimits(), row.limits)
-            assertEquals(5, row.limits.maxResumeRounds)
+            // 批 4 — 默认值上移到标准档（12 轮 / 300 万 token / 60 分钟一轮）。
+            assertEquals(12, row.limits.maxResumeRounds)
             assertEquals(2, row.limits.stallRounds)
-            assertEquals(500_000L, row.limits.tokenBudget)
+            assertEquals(3_000_000L, row.limits.tokenBudget)
+            assertEquals(60, row.limits.roundTimeoutMinutes)
+            assertEquals(10, row.limits.wrapUpMinutes)
         }
 
     @Test

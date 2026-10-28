@@ -3285,6 +3285,14 @@ HARDLINE protections still apply: rm -rf /, mkfs, shutdown / reboot, dd to block
   <string name="mission_rework_desc">The mission returns to active and starts a new round carrying your notes.</string>
   <string name="mission_rework_field">Change request (optional)</string>
   <string name="mission_rework_confirm">Send back and redo</string>
+  <string name="mission_budget_tier_label">Budget preset</string>
+  <string name="mission_budget_tier_fast">Quick</string>
+  <string name="mission_budget_tier_standard">Standard</string>
+  <string name="mission_budget_tier_long">Long run</string>
+  <string name="mission_budget_tier_custom">Custom</string>
+  <string name="mission_budget_summary">%1$d min per round · up to %2$d auto-continue rounds · %3$s tokens · %4$d min wrap-up</string>
+  <string name="mission_create_round_time">Minutes per round</string>
+  <string name="mission_create_wrapup">Wrap-up window (minutes)</string>
   <string name="mission_limits_title">Runtime limits</string>
   <string name="mission_limits_desc">Circuit breakers for unattended runs: a mission that keeps making no progress, or burns through its token budget, is stopped and you are notified.</string>
   <string name="mission_limits_resume">Auto-continue rounds</string>
