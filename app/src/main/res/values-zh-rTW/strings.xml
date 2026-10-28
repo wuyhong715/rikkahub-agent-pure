@@ -2246,6 +2246,9 @@
   <string name="setting_page_asr_silence_duration">語音結束靜音時長</string>
   <string name="setting_page_asr_silence_duration_desc">在連續靜音達此時間後結束語句。建議：800–1000 毫秒。</string>
   <string name="setting_page_asr_milliseconds">毫秒</string>
+  <string name="chat_input_interject_hint">生成中 · 傳送 = 插話（下一步生效）</string>
+  <string name="chat_input_queue_hint">生成中 · 附件會排到下一輪</string>
+  <string name="workbench_subagent_open">開啟執行對話</string>
   <string name="chat_page_queue_resume">恢復傳送</string>
   <string name="chat_page_queue_image">[圖片]</string>
   <string name="chat_page_queue_file">[檔案]</string>

@@ -304,9 +304,15 @@ fun ChatInput(
 
                     // 生成中且草稿是纯文本：发送按钮这一下不再是「排队」，而是插话（steer）。
                     // 带附件时仍走排队，所以这里只对「只有文字」的草稿提示，免得说反。
-                    if (loading && state.messageContent.isEmpty() && state.textContent.text.isNotBlank()) {
+                    if (loading && !state.isEmpty()) {
                         Text(
-                            text = stringResource(R.string.chat_input_interject_hint),
+                            text = stringResource(
+                                if (state.messageContent.isEmpty()) {
+                                    R.string.chat_input_interject_hint
+                                } else {
+                                    R.string.chat_input_queue_hint
+                                },
+                            ),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,

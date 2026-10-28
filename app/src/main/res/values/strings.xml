@@ -395,6 +395,8 @@
   <string name="setting_display_page_show_app_speaker_title">App message bubble</string>
   <string name="setting_display_page_show_app_speaker_desc">Show messages the app writes into the conversation (mission briefs, handoffs, rework) as Moxw bubbles instead of plain text.</string>
   <string name="chat_input_interject_hint">Generating · send = steer (applies on the next step)</string>
+  <string name="chat_input_queue_hint">Generating · attachments will be queued for the next turn</string>
+  <string name="workbench_subagent_open">Open execution chat</string>
   <string name="chat_interject_next_step">Steer · applies on the next step</string>
   <string name="chat_interject_after_turn">Steer · applies after this turn</string>
   <string name="chat_input_hint_2">Where do we start?</string>
