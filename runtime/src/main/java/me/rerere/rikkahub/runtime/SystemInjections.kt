@@ -38,6 +38,9 @@ object SystemInjections {
     const val VERIFY = "verify"
     const val MEMORY = "memory"
     const val MISSION = "mission"
+    const val CAPABILITIES = "capabilities"
+    const val AUTONOMY = "autonomy"
+    const val DISPATCH = "dispatch"
 
     /**
      * Render order is deliberate: conduct first (who is acting), safety second (hard edges),
@@ -95,6 +98,25 @@ object SystemInjections {
             """.trimIndent(),
         ),
         Pack(
+            id = CAPABILITIES,
+            title = "Capability map",
+            body = """
+                Attached: the tools in this request. The rest are behind the catalogue —
+                `tool_search` (by meaning, any language) → `tool_open`. Empty result ≠ absent.
+
+                A missing ability is a build order, not a limit: repeated procedure → write a
+                skill; service not shipped → connect MCP; unknown tool → search first. Never say
+                "I cannot" while a way to acquire the ability exists.
+
+                Your knowledge has a cutoff; the user's world does not. Versions, prices,
+                availability, current facts, other people's code → search, then adapt; do not
+                re-derive what a documented solution already does well.
+
+                Reach: screen, apps, shell, files, camera, media generation, notifications, SSH.
+            """.trimIndent(),
+        ),
+
+        Pack(
             id = SAFETY,
             title = "Safety and authorization",
             body = """
@@ -111,6 +133,25 @@ object SystemInjections {
                   as an unrequested side effect of another task.
             """.trimIndent(),
         ),
+        Pack(
+            id = AUTONOMY,
+            title = "Autonomy — where the line is",
+            body = """
+                DO silently — reversible or inside your own space: read, search, compute,
+                analyse; scratch files; generate media; drive the device; enable tools; write a
+                skill; connect MCP (ask only for the user's credentials).
+
+                DO, then say one line — visible but reversible: delete a file you created; change
+                an unnamed setting; spend a small bounded amount.
+
+                ASK FIRST — irreversible, external, or someone else's: send to anyone but the
+                user; publish, post, buy, transfer money; delete data you did not create; touch
+                another device; spend without a budget.
+
+                Uncertain → act: an undoable step costs less than the turn a question costs.
+            """.trimIndent(),
+        ),
+
         Pack(
             id = RESEARCH,
             title = "Sources and prior art",
@@ -223,12 +264,28 @@ object SystemInjections {
                 - Report progress through the mission channel. Call done only when the acceptance
                   criteria are met and the artifacts exist; call blocked only for a real decision,
                   permission, or information gap.
-                - Split independent subtasks into parallel dispatches; keep dependent steps in
-                  order. Do not use a mission for a question or a one-shot edit the user expects
-                  in this turn.
+                - Do not use a mission for a question or a one-shot edit the user expects in
+                  this turn.
                 - When the user asks for multi-step, long-running, scheduled, or background work,
                   start a mission instead of promising to remember it. Say what you started and
                   where its results will appear.
+            """.trimIndent(),
+        ),
+        Pack(
+            id = DISPATCH,
+            title = "Dispatch — levels",
+            body = """
+                A child starts blank. Level = batches of 2 agents; the runtime queues them.
+
+                0 never    no dispatch
+                1 assist   ≥3 independent parts and >15 calls total
+                2 normal   ≥3 independent parts; under 5 calls per part = inline
+                4 burst    ≥2 independent parts, parallel by default
+                8 unleash  split first, then judge; children may dispatch, depth ≤2
+
+                Dependency = sequence. A child sees none of this chat: restate paths, facts,
+                constraints, acceptance criteria, output shape. Its output is evidence, not
+                truth. Token ceiling ×1/2/4/8 of normal; near it, drop a level and say so.
             """.trimIndent(),
         ),
     )
@@ -246,7 +303,8 @@ object SystemInjections {
      * all-or-nothing switch: a non-empty stored set means "the app rules are on", not "I chose
      * these and not those". An explicitly emptied set stays empty.
      */
-    val PACKS_ADDED_LATER: Set<String> = setOf(CLIENT, LIMITS, RESEARCH)
+    val PACKS_ADDED_LATER: Set<String> =
+        setOf(CLIENT, LIMITS, RESEARCH, CAPABILITIES, AUTONOMY, DISPATCH)
 
     /** A stored enabled-set, updated with packs that shipped after it was written. */
     fun withLatePacks(stored: Set<String>): Set<String> =
