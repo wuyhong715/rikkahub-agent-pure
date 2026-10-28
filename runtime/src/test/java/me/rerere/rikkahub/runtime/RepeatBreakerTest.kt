@@ -64,13 +64,20 @@ class RepeatBreakerTest {
     }
 
     @Test
-    fun `every repeat after the escalation stays refused`() {
-        for (prior in 4..6) {
+    fun `the call that crosses the escalation line is the last one that explains itself`() {
+        // Streak 5 crosses the line: refused AND told why (three exits).
+        val crossing = at(4)
+        assertEquals(RepeatGrade.ESCALATE, crossing.grade)
+        assertTrue(crossing.blocked)
+        assertNotNull(crossing.reminder)
+
+        // Streaks 6 and 7 are refused silently. Repeating the lecture every step spends tokens on a
+        // model that is past reading it — the pattern is already established by the crossing call.
+        for (prior in 5..6) {
             val d = at(prior)
             assertEquals(RepeatGrade.ESCALATE, d.grade)
             assertTrue(d.blocked)
-            // Only the crossing call carries the reminder; refusals 6..7 are silent.
-            assertNull(d.reminder)
+            assertNull("streak ${d.streak} must not re-explain", d.reminder)
         }
     }
 
