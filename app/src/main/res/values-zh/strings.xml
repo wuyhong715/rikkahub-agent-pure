@@ -250,6 +250,8 @@
   <string name="setting_display_page_show_app_speaker_title">App 消息气泡</string>
   <string name="setting_display_page_show_app_speaker_desc">App 写进会话的消息（任务简报、交接、返工）用 Moxw 气泡显示；关掉后退回纯文本样式。</string>
   <string name="chat_input_interject_hint">生成中 · 发送 = 插话（下一步生效）</string>
+  <string name="chat_input_queue_hint">生成中 · 附件会排到下一轮</string>
+  <string name="workbench_subagent_open">打开执行会话</string>
   <string name="chat_interject_next_step">插话 · 下一步生效</string>
   <string name="chat_interject_after_turn">插话 · 本回合结束后生效</string>
   <string name="chat_input_hint_2">从哪开始？</string>
