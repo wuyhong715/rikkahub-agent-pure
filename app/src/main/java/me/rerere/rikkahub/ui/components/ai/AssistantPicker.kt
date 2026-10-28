@@ -14,15 +14,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.Text
 import androidx.compose.material3.SheetValue
@@ -35,7 +29,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -48,6 +41,10 @@ import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.ui.components.ui.AssistantAvatar
+import me.rerere.rikkahub.ui.components.ui.MoxwSheet
+import me.rerere.rikkahub.ui.components.ui.MoxwSheetItemSpacing
+import me.rerere.rikkahub.ui.components.ui.MoxwSheetPadding
+import me.rerere.rikkahub.ui.components.ui.MoxwSheetRow
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.hooks.rememberAssistantState
 import kotlin.uuid.Uuid
@@ -133,22 +130,18 @@ private fun AssistantPickerSheet(
         }
     }
 
-    ModalBottomSheet(
+    MoxwSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
+        title = stringResource(R.string.assistant_page_title),
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .fillMaxHeight(0.8f)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(horizontal = MoxwSheetPadding),
+            verticalArrangement = Arrangement.spacedBy(MoxwSheetItemSpacing)
         ) {
-            Text(
-                text = stringResource(R.string.assistant_page_title),
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
 
             // 标签过滤器
             if (settings.assistantTags.isNotEmpty()) {
@@ -178,70 +171,41 @@ private fun AssistantPickerSheet(
             val navController = LocalNavController.current
             LazyColumn(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(MoxwSheetItemSpacing),
             ) {
                 items(filteredAssistants, key = { it.id }) { assistant ->
                     val checked = assistant.id == currentAssistant.id
-                    Card(
+                    MoxwSheetRow(
+                        title = assistant.name.ifEmpty { defaultAssistantName },
+                        selected = checked,
                         onClick = { onAssistantSelected(assistant) },
                         modifier = Modifier.animateItem(),
-                        shape = MaterialTheme.shapes.large,
-                        colors = CardDefaults.cardColors(
-                            containerColor = if (checked) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-                            contentColor = if (checked) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
-                        ),
-                    ) {
-                        AssistantItem(
-                            assistant = assistant,
-                            defaultAssistantName = defaultAssistantName,
-                            onEdit = {
-                                scope.launch {
-                                    sheetState.hide()
-                                    onDismiss()
-                                    navController.navigate(Screen.AssistantDetail(assistant.id.toString()))
+                        leading = {
+                            AssistantAvatar(
+                                assistant = assistant,
+                                name = assistant.name.ifEmpty { defaultAssistantName },
+                                modifier = Modifier.size(32.dp)
+                            )
+                        },
+                        trailing = {
+                            IconButton(
+                                onClick = {
+                                    scope.launch {
+                                        sheetState.hide()
+                                        onDismiss()
+                                        navController.navigate(Screen.AssistantDetail(assistant.id.toString()))
+                                    }
                                 }
+                            ) {
+                                Icon(
+                                    imageVector = HugeIcons.Edit03,
+                                    contentDescription = stringResource(R.string.accessibility_edit_assistant)
+                                )
                             }
-                        )
-                    }
+                        },
+                    )
                 }
             }
         }
     }
-}
-
-@Composable
-private fun AssistantItem(
-    assistant: Assistant,
-    defaultAssistantName: String,
-    onEdit: () -> Unit
-) {
-    ListItem(
-        headlineContent = {
-            Text(
-                text = assistant.name.ifEmpty { defaultAssistantName },
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        },
-        leadingContent = {
-            AssistantAvatar(
-                assistant = assistant,
-                name = assistant.name.ifEmpty { defaultAssistantName },
-                modifier = Modifier.size(32.dp)
-            )
-        },
-        trailingContent = {
-            IconButton(
-                onClick = {
-                    onEdit()
-                }
-            ) {
-                Icon(
-                    imageVector = HugeIcons.Edit03,
-                    contentDescription = stringResource(R.string.accessibility_edit_assistant)
-                )
-            }
-        },
-        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-    )
 }

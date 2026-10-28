@@ -46,7 +46,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
@@ -98,6 +97,7 @@ import me.rerere.rikkahub.data.files.FileUtils
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.components.ui.MoxwSheet
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.OutlinedNumberInput
 import me.rerere.rikkahub.ui.context.LocalToaster
@@ -497,7 +497,7 @@ private fun VideoSettingsBottomSheet(
     val durationSeconds by vm.durationSeconds.collectAsStateWithLifecycle()
     val numberOfVideos by vm.numberOfVideos.collectAsStateWithLifecycle()
 
-    ModalBottomSheet(
+    MoxwSheet(
         onDismissRequest = onDismiss,
         dragHandle = { BottomSheetDefaults.DragHandle() },
     ) {
@@ -655,7 +655,7 @@ private fun VideoGalleryScreen(vm: VideoGenVM) {
     }
 
     detail?.let { video ->
-        ModalBottomSheet(
+        MoxwSheet(
             onDismissRequest = { detail = null },
             dragHandle = { BottomSheetDefaults.DragHandle() },
         ) {

@@ -169,7 +169,7 @@ export function ConversationQuickJump({ items }: ConversationQuickJumpProps) {
                     />
                     <span
                       className={cn(
-                        "size-1.5 rounded-full transition-opacity duration-200",
+                        "size-1.5 rounded-full transition-opacity duration-[var(--motion-emphasis)]",
                         getRoleDotClass(item.role),
                         isActive ? "animate-pulse opacity-100" : "opacity-0",
                       )}

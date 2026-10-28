@@ -35,7 +35,6 @@ import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -101,6 +100,10 @@ import me.rerere.rikkahub.data.model.Folder
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.ui.components.ai.AssistantPicker
 import me.rerere.rikkahub.ui.components.ui.BackupReminderCard
+import me.rerere.rikkahub.ui.components.ui.MoxwSheet
+import me.rerere.rikkahub.ui.components.ui.MoxwSheetItemSpacing
+import me.rerere.rikkahub.ui.components.ui.MoxwSheetPadding
+import me.rerere.rikkahub.ui.components.ui.MoxwSheetRow
 import me.rerere.rikkahub.ui.components.ui.AssistantAvatar
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.ui.components.ui.SEAM_SHADOW_WIDTH
@@ -626,84 +629,54 @@ fun ChatDrawerContent(
                 }
             }
         }
-        ModalBottomSheet(
+        MoxwSheet(
             onDismissRequest = {
                 showMoveToFolderSheet = false
                 conversationToMoveFolder = null
             },
-            sheetState = folderSheetState
+            sheetState = folderSheetState,
+            title = stringResource(R.string.chat_page_move_to_folder),
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(max = 400.dp)
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                    .padding(horizontal = MoxwSheetPadding),
+                verticalArrangement = Arrangement.spacedBy(MoxwSheetItemSpacing)
             ) {
-                Text(
-                    text = stringResource(R.string.chat_page_move_to_folder),
-                    style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.padding(bottom = 8.dp)
+                // 移出文件夹（未归类）
+                MoxwSheetRow(
+                    title = stringResource(R.string.chat_page_remove_from_folder),
+                    selected = conversationToMoveFolder?.folderId == null,
+                    onClick = { doMove(null) },
+                    leading = {
+                        Icon(
+                            imageVector = HugeIcons.Folder01,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    },
                 )
 
-                // 移出文件夹（未归类）
-                Surface(
-                    onClick = { doMove(null) },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = MaterialTheme.shapes.medium,
-                    color = if (conversationToMoveFolder?.folderId == null) {
-                        MaterialTheme.colorScheme.surfaceVariant
-                    } else {
-                        MaterialTheme.colorScheme.surface
-                    },
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Icon(HugeIcons.Folder01, null)
-                        Text(
-                            text = stringResource(R.string.chat_page_remove_from_folder),
-                            style = MaterialTheme.typography.titleMedium,
-                        )
-                    }
-                }
-
                 LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(MoxwSheetItemSpacing),
                 ) {
                     items(folders) { folder ->
                         val isCurrent = folder.id == conversationToMoveFolder?.folderId
-                        Surface(
+                        MoxwSheetRow(
+                            title = folder.name,
+                            selected = isCurrent,
                             onClick = { doMove(folder.id) },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = MaterialTheme.shapes.medium,
-                            color = if (isCurrent) {
-                                MaterialTheme.colorScheme.surfaceVariant
-                            } else {
-                                MaterialTheme.colorScheme.surface
-                            },
-                            tonalElevation = if (isCurrent) 2.dp else 0.dp
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(16.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                Icon(HugeIcons.Folder01, null)
-                                Text(
-                                    text = folder.name,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
+                            leading = {
+                                Icon(
+                                    imageVector = HugeIcons.Folder01,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
-                            }
-                        }
+                            },
+                        )
                     }
                 }
             }
@@ -879,28 +852,23 @@ fun ChatDrawerContent(
 
     // 移动到助手 Bottom Sheet
     if (showMoveToAssistantSheet) {
-        ModalBottomSheet(
+        MoxwSheet(
             onDismissRequest = {
                 showMoveToAssistantSheet = false
                 conversationToMove = null
             },
-            sheetState = bottomSheetState
+            sheetState = bottomSheetState,
+            title = stringResource(R.string.chat_page_move_to_assistant),
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(max = 400.dp)
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                    .padding(horizontal = MoxwSheetPadding),
+                verticalArrangement = Arrangement.spacedBy(MoxwSheetItemSpacing)
             ) {
-                Text(
-                    text = stringResource(R.string.chat_page_move_to_assistant),
-                    style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
-
                 LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(MoxwSheetItemSpacing),
                 ) {
                     items(settings.assistants, key = { it.id }) { assistant ->
                         AssistantItem(
@@ -1257,53 +1225,34 @@ private fun FolderChip(
     }
 }
 
+/**
+ * 抽屉里的「移到助手」行。
+ *
+ * 与 [MoxwSheetRow] 同一套骨架：选中态用 `primaryContainer` 铺底（不是换图标颜色——
+ * 深色主题里换颜色几乎看不出来），当前助手多一行副标题说明「就是这一个」。
+ */
 @Composable
 private fun AssistantItem(
     assistant: Assistant,
     isCurrentAssistant: Boolean,
     onClick: () -> Unit
 ) {
-    Surface(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.medium,
-        color = if (isCurrentAssistant) {
-            MaterialTheme.colorScheme.surfaceVariant
+    MoxwSheetRow(
+        title = assistant.name.ifBlank { stringResource(R.string.assistant_page_default_assistant) },
+        subtitle = if (isCurrentAssistant) {
+            stringResource(R.string.assistant_page_current_assistant)
         } else {
-            MaterialTheme.colorScheme.surface
+            null
         },
-        tonalElevation = if (isCurrentAssistant) 2.dp else 0.dp
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
+        selected = isCurrentAssistant,
+        onClick = onClick,
+        leading = {
             AssistantAvatar(
                 assistant = assistant,
                 name = assistant.name,
                 onUpdate = {},
-                modifier = Modifier.size(40.dp),
+                modifier = Modifier.size(32.dp),
             )
-            Column(
-                modifier = Modifier.weight(1f)
-            ) {
-                Text(
-                    text = assistant.name.ifBlank { stringResource(R.string.assistant_page_default_assistant) },
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                if (isCurrentAssistant) {
-                    Text(
-                        text = stringResource(R.string.assistant_page_current_assistant),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
-    }
+        },
+    )
 }

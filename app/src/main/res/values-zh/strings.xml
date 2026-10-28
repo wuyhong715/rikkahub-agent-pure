@@ -333,7 +333,10 @@
   <string name="chat_page_regenerate_title">重新生成标题</string>
   <string name="chat_page_rename_chat">重命名</string>
   <string name="chat_page_save">保存</string>
+  <string name="chat_page_scroll_down">向下滚动</string>
   <string name="chat_page_scroll_to_bottom">滚动到底部</string>
+  <string name="chat_page_scroll_to_top">滚动到顶部</string>
+  <string name="chat_page_scroll_up">向上滚动</string>
   <string name="chat_page_search_chats">搜索聊天</string>
   <string name="chat_page_today">今天</string>
   <string name="chat_page_yesterday">昨天</string>

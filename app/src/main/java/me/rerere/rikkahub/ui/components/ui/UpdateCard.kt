@@ -14,7 +14,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
 import androidx.compose.material3.SheetValue
@@ -48,6 +47,7 @@ import me.rerere.rikkahub.utils.onSuccess
 import me.rerere.rikkahub.runtime.util.toLocalDateTime
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
+import me.rerere.rikkahub.ui.components.ui.MoxwSheet
 import kotlin.time.toJavaInstant
 
 @OptIn(ExperimentalTime::class)
@@ -127,7 +127,7 @@ fun UpdateCard(vm: ChatVM) {
                 showDetail = false
                 toaster.show(context.getString(R.string.update_card_downloading), type = ToastType.Info)
             }
-            ModalBottomSheet(
+            MoxwSheet(
                 onDismissRequest = { showDetail = false },
                 sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded)),
             ) {

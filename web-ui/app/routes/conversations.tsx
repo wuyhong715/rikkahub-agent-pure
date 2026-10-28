@@ -667,7 +667,7 @@ const ConversationTimeline = React.memo(
                   id={getConversationMessageAnchorId(message.id)}
                   // 新消息淡入并上浮 6px：流式输出时只有「新的一整条」有入场，
                   // 已有消息的内容增长仍然走帧内重排，不会每条 token 都触发一次动画。
-                  className="animate-in scroll-mt-24 fade-in slide-in-from-bottom-1.5 duration-200 ease-out"
+                  className="animate-in scroll-mt-24 fade-in slide-in-from-bottom-1.5 duration-[var(--motion-enter)] ease-[var(--motion-ease)]"
                 >
                   <ChatMessage
                     node={node}
@@ -1198,7 +1198,7 @@ function ConversationsPageInner() {
             元信息（助手 / 模型 / 供应商）退到第二行并且用等宽数字，扫一眼就知道在看什么。 */}
         <div
           className={cn(
-            "sticky top-0 z-10 flex items-center gap-2 border-b px-4 backdrop-blur-md transition-[background-color,border-color,padding] duration-200",
+            "sticky top-0 z-10 flex items-center gap-2 border-b px-4 backdrop-blur-md transition-[background-color,border-color,padding] duration-[var(--motion-emphasis)] ease-[var(--motion-ease)]",
             headerElevated
               ? "border-border bg-background/85 py-2"
               : "border-transparent bg-background/60 py-3",

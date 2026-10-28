@@ -17,7 +17,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -43,6 +42,7 @@ import me.rerere.rikkahub.data.mission.MissionBudgetTiers
 import me.rerere.rikkahub.data.mission.MissionLimits
 import me.rerere.rikkahub.service.mission.MissionWorkflowDocs
 import me.rerere.rikkahub.ui.components.ai.WorkspaceSelectSheet
+import me.rerere.rikkahub.ui.components.ui.MoxwSheet
 import me.rerere.rikkahub.ui.components.ui.AssistantAvatar
 import me.rerere.rikkahub.workflow.model.TriggerSpec
 
@@ -189,7 +189,10 @@ fun CreateMissionSheet(
     val workspaceSheetAssistant = selectedAssistant ?: settings.assistants.firstOrNull()
     val selectedWorkspace = workspaces.firstOrNull { it.id == workspaceId }
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    MoxwSheet(
+        onDismissRequest = onDismiss,
+        title = stringResource(R.string.mission_create_title),
+    ) {
         // 表单已经不短：标题 / 描述 / 验收标准 × N / 执行助手 / 工作区 / 工作流 / 启动方式 / 限额。
         // 原来「创建」跟着内容一起滚，手机上必须滚到底才看得见；改成内容区自己滚、主操作固定在底部。
         Column(modifier = Modifier.fillMaxWidth()) {
@@ -200,10 +203,6 @@ fun CreateMissionSheet(
                     .padding(horizontal = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text(
-                    text = stringResource(R.string.mission_create_title),
-                    style = MaterialTheme.typography.titleLarge,
-                )
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
@@ -634,7 +633,7 @@ fun CreateMissionSheet(
 
     // 执行助手选择
     if (showAssistantSheet) {
-        ModalBottomSheet(onDismissRequest = { showAssistantSheet = false }) {
+        MoxwSheet(onDismissRequest = { showAssistantSheet = false }) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()

@@ -27,7 +27,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -73,6 +72,7 @@ import kotlinx.coroutines.launch
 import me.rerere.rikkahub.skills.SkillTestRunner
 import me.rerere.rikkahub.data.files.SkillMetadata
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.components.ui.MoxwSheet
 import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.theme.CustomColors
@@ -215,9 +215,15 @@ private fun SkillTesterSheet(skillName: String, onDismiss: () -> Unit) {
     val state by stateFlow.collectAsStateWithLifecycle()
     val scope = androidx.compose.runtime.rememberCoroutineScope()
 
-    ModalBottomSheet(
+    MoxwSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
+        title = stringResource(R.string.skill_tester_title, skillName),
+        trailing = {
+            IconButton(onClick = onDismiss) {
+                Icon(Lucide.X, contentDescription = stringResource(R.string.cancel))
+            }
+        },
     ) {
         Column(
             modifier = Modifier
@@ -226,17 +232,6 @@ private fun SkillTesterSheet(skillName: String, onDismiss: () -> Unit) {
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = stringResource(R.string.skill_tester_title, skillName),
-                    style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.weight(1f),
-                )
-                IconButton(onClick = onDismiss) {
-                    Icon(Lucide.X, contentDescription = stringResource(R.string.cancel))
-                }
-            }
-
             OutlinedTextField(
                 value = prompt,
                 onValueChange = { prompt = it },

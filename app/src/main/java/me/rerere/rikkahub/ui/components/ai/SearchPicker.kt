@@ -33,7 +33,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -69,10 +68,14 @@ import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.runtime.findProvider
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
+import me.rerere.rikkahub.ui.components.ui.MoxwSheet
+import me.rerere.rikkahub.ui.components.ui.MoxwSheetHeader
+import me.rerere.rikkahub.ui.components.ui.MoxwSheetPadding
 import me.rerere.rikkahub.ui.components.ui.AutoAIIconFill
 import me.rerere.rikkahub.ui.components.ui.ToggleSurface
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.pages.setting.SearchAbilityTagLine
+import me.rerere.rikkahub.ui.theme.Motion
 
 enum class SearchMode {
     OFF,
@@ -144,7 +147,7 @@ private fun SearchPickerSheet(
     model: Model?,
 ) {
     if (!visible) return
-    ModalBottomSheet(
+    MoxwSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberBottomSheetState(
             initialValue = SheetValue.Hidden,
@@ -155,12 +158,18 @@ private fun SearchPickerSheet(
         AnimatedContent(
             targetState = selectingProvider,
             transitionSpec = {
+                // 两页之间是「往里 / 往外」的一层，不是左右乱飞：进二级页时新页从右边进、
+                // 旧页往左出，返回时反过来。时长与缓动都走 Motion，和全应用的进出节奏一致。
                 if (targetState) {
-                    slideInHorizontally { it } + fadeIn() togetherWith
-                        slideOutHorizontally { -it } + fadeOut()
+                    (slideInHorizontally(animationSpec = Motion.enter()) { it } +
+                            fadeIn(Motion.enter())) togetherWith
+                            (slideOutHorizontally(animationSpec = Motion.enter()) { -it } +
+                                    fadeOut(Motion.exit()))
                 } else {
-                    slideInHorizontally { -it } + fadeIn() togetherWith
-                        slideOutHorizontally { it } + fadeOut()
+                    (slideInHorizontally(animationSpec = Motion.enter()) { -it } +
+                            fadeIn(Motion.enter())) togetherWith
+                            (slideOutHorizontally(animationSpec = Motion.enter()) { it } +
+                                    fadeOut(Motion.exit()))
                 }
             },
             label = "SearchPickerPage"
@@ -212,29 +221,23 @@ private fun SearchPicker(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp)
+            .padding(horizontal = MoxwSheetPadding)
             .padding(bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = stringResource(R.string.search_picker_title),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f)
-            )
-            IconButton(
-                onClick = {
-                    onDismiss()
-                    navBackStack.navigate(Screen.SettingSearch)
+        MoxwSheetHeader(
+            title = stringResource(R.string.search_picker_title),
+            trailing = {
+                IconButton(
+                    onClick = {
+                        onDismiss()
+                        navBackStack.navigate(Screen.SettingSearch)
+                    }
+                ) {
+                    Icon(HugeIcons.Settings03, contentDescription = null)
                 }
-            ) {
-                Icon(HugeIcons.Settings03, contentDescription = null)
-            }
-        }
+            },
+        )
 
         Row(
             modifier = Modifier
@@ -416,22 +419,14 @@ private fun SearchProviderPicker(
             .fillMaxWidth()
             .fillMaxHeight(0.7f)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            IconButton(onClick = onBack) {
-                Icon(HugeIcons.ArrowLeft01, contentDescription = null)
-            }
-            Text(
-                text = stringResource(R.string.search_picker_select_provider),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
-        }
+        MoxwSheetHeader(
+            title = stringResource(R.string.search_picker_select_provider),
+            leading = {
+                IconButton(onClick = onBack) {
+                    Icon(HugeIcons.ArrowLeft01, contentDescription = null)
+                }
+            },
+        )
         LazyVerticalGrid(
             modifier = Modifier
                 .fillMaxSize()

@@ -11,7 +11,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberBottomSheetState
@@ -30,6 +29,7 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Share03
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.runtime.util.JsonInstant
+import me.rerere.rikkahub.ui.components.ui.MoxwSheet
 import kotlin.io.encoding.Base64
 
 @Composable
@@ -38,7 +38,7 @@ fun ShareSheet(
 ) {
     val context = LocalContext.current
     if (state.isShow) {
-        ModalBottomSheet(
+        MoxwSheet(
             onDismissRequest = {
                 state.dismiss()
             },

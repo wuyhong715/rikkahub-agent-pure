@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -36,6 +35,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.components.ui.SettingIcon
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.AssistantAvatar
 import me.rerere.rikkahub.ui.context.LocalNavController
@@ -96,17 +96,15 @@ fun AssistantDetailPage(id: String) {
                 ) {
                     item(
                         onClick = { navController.navigate(Screen.AssistantBasic(id)) },
-                        leadingContent = { Icon(HugeIcons.Settings03, null) },
+                        leadingContent = { SettingIcon(HugeIcons.Settings03) },
                         supportingContent = { Text(stringResource(R.string.assistant_detail_basic_desc)) },
                         headlineContent = { Text(stringResource(R.string.assistant_page_tab_basic)) },
-                        trailingContent = { Icon(HugeIcons.ArrowRight01, null) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.AssistantPrompt(id)) },
-                        leadingContent = { Icon(HugeIcons.Message02, null) },
+                        leadingContent = { SettingIcon(HugeIcons.Message02) },
                         supportingContent = { Text(stringResource(R.string.assistant_detail_prompt_desc)) },
                         headlineContent = { Text(stringResource(R.string.assistant_page_tab_prompt)) },
-                        trailingContent = { Icon(HugeIcons.ArrowRight01, null) },
                     )
                 }
             }
@@ -118,24 +116,21 @@ fun AssistantDetailPage(id: String) {
                 ) {
                     item(
                         onClick = { navController.navigate(Screen.AssistantInjections(id)) },
-                        leadingContent = { Icon(HugeIcons.Puzzle, null) },
+                        leadingContent = { SettingIcon(HugeIcons.Puzzle) },
                         supportingContent = { Text(stringResource(R.string.assistant_detail_extensions_desc)) },
                         headlineContent = { Text(stringResource(R.string.assistant_page_tab_extensions)) },
-                        trailingContent = { Icon(HugeIcons.ArrowRight01, null) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.AssistantMcp(id)) },
-                        leadingContent = { Icon(HugeIcons.Wrench01, null) },
+                        leadingContent = { SettingIcon(HugeIcons.Wrench01) },
                         supportingContent = { Text(stringResource(R.string.assistant_detail_mcp_desc)) },
                         headlineContent = { Text(stringResource(R.string.assistant_page_tab_mcp)) },
-                        trailingContent = { Icon(HugeIcons.ArrowRight01, null) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.AssistantLocalTool(id)) },
-                        leadingContent = { Icon(HugeIcons.BookOpen01, null) },
+                        leadingContent = { SettingIcon(HugeIcons.BookOpen01) },
                         supportingContent = { Text(stringResource(R.string.assistant_detail_local_tools_desc)) },
                         headlineContent = { Text(stringResource(R.string.assistant_page_tab_local_tools)) },
-                        trailingContent = { Icon(HugeIcons.ArrowRight01, null) },
                     )
                 }
             }
@@ -147,17 +142,15 @@ fun AssistantDetailPage(id: String) {
                 ) {
                     item(
                         onClick = { navController.navigate(Screen.AssistantMemory(id)) },
-                        leadingContent = { Icon(HugeIcons.Brain02, null) },
+                        leadingContent = { SettingIcon(HugeIcons.Brain02) },
                         supportingContent = { Text(stringResource(R.string.assistant_detail_memory_desc)) },
                         headlineContent = { Text(stringResource(R.string.assistant_page_tab_memory)) },
-                        trailingContent = { Icon(HugeIcons.ArrowRight01, null) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.AssistantRequest(id)) },
-                        leadingContent = { Icon(HugeIcons.Code, null) },
+                        leadingContent = { SettingIcon(HugeIcons.Code) },
                         supportingContent = { Text(stringResource(R.string.assistant_detail_request_desc)) },
                         headlineContent = { Text(stringResource(R.string.assistant_page_tab_request)) },
-                        trailingContent = { Icon(HugeIcons.ArrowRight01, null) },
                     )
                 }
             }

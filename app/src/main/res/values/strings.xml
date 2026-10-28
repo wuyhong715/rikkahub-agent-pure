@@ -481,7 +481,10 @@
   <string name="chat_page_regenerate_title">Regenerate title</string>
   <string name="chat_page_rename_chat">Rename</string>
   <string name="chat_page_save">Save</string>
+  <string name="chat_page_scroll_down">Scroll down</string>
   <string name="chat_page_scroll_to_bottom">Scroll to bottom</string>
+  <string name="chat_page_scroll_to_top">Scroll to top</string>
+  <string name="chat_page_scroll_up">Scroll up</string>
   <string name="chat_page_search_chats">Search Chats</string>
   <string name="chat_page_today">Today</string>
   <string name="chat_page_yesterday">Yesterday</string>

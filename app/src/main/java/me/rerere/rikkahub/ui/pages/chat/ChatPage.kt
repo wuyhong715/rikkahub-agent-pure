@@ -21,7 +21,6 @@ import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.PermanentNavigationDrawer
 import androidx.compose.material3.Scaffold
@@ -33,9 +32,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.adaptive.currentWindowDpSize
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.material3.rememberDrawerState
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.CompositionLocalProvider
@@ -73,10 +70,12 @@ import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.glass.hazeGlass
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
+import me.rerere.rikkahub.ui.components.ui.MoxwSheet
 import me.rerere.rikkahub.ui.components.ui.PushDrawerContent
 import me.rerere.rikkahub.ui.components.ui.conversationDrawerWidthFor
 import me.rerere.rikkahub.ui.components.ui.rikkaGlassStyle
 import me.rerere.rikkahub.ui.theme.LocalDarkMode
+import me.rerere.rikkahub.ui.theme.Motion
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -788,7 +787,9 @@ private fun ChatPageContent(
                 }
                 val collapseFraction by animateFloatAsState(
                     targetValue = collapseTarget,
-                    animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+                    // 与全应用同一条形变曲线：顶栏收起时底色、元信息、位移是同一次运动，
+                    // 不该各自走不同的缓动（之前这里单独用 200ms FastOutSlowIn）。
+                    animationSpec = Motion.emphasis(),
                     label = "topBarCollapse",
                 )
 
@@ -879,7 +880,7 @@ private fun ChatFilesPickerSheet(
         initialValue = SheetValue.Hidden,
         enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded)
     )
-    ModalBottomSheet(
+    MoxwSheet(
         sheetState = filesSheetState,
         onDismissRequest = { dismissAll() },
     ) {
