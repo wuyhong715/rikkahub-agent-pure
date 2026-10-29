@@ -135,6 +135,7 @@ import me.rerere.rikkahub.ui.pages.setting.SettingSpeechPage
 import me.rerere.rikkahub.ui.pages.setting.SettingSponsorPage
 import me.rerere.rikkahub.ui.pages.setting.SettingSubAgentsPage
 // P2-32 ssh hosts page
+import me.rerere.rikkahub.ui.pages.setting.SettingMoxwAccountPage
 import me.rerere.rikkahub.ui.pages.setting.SettingSshPage
 import me.rerere.rikkahub.ui.pages.setting.SettingTelegramPage
 import me.rerere.rikkahub.ui.pages.setting.SettingWebPage
@@ -582,6 +583,9 @@ class RouteActivity : ComponentActivity() {
                             entry<Screen.SettingSsh> {
                                 SettingSshPage()
                             }
+                            entry<Screen.SettingMoxwAccount> {
+                                SettingMoxwAccountPage()
+                            }
 
                             entry<Screen.SettingFiles> {
                                 SettingFilesPage()
@@ -913,6 +917,8 @@ sealed interface Screen : NavKey {
     data object SettingSubAgents : Screen
 
     @Serializable
+    data object SettingMoxwAccount : Screen
+
     data object SettingSsh : Screen
 
     @Serializable
