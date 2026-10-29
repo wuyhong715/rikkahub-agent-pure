@@ -4,7 +4,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.getJsonArray
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.put
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -17,6 +17,8 @@ import org.junit.Test
  * 是纯文本。旧版 ShellToolUI.Summary 直接对 tool 输出调用 `JsonElement.getJsonArray`, 当内容是
  * JsonLiteral 时抛 `IllegalArgumentException: Element class kotlinx.serialization.json.JsonLiteral
  * is not a JsonArray`, 整个聊天界面崩溃 (崩溃栈: ShellToolUI.Summary → JsonElementKt.getJsonArray)。
+ * (注: 当前 kotlinx-serialization-json 1.11.0 的访问器是 `jsonArray` 等属性形式, 旧客户端用的是
+ * 更早版本的 `getJsonArray()` 函数形式; 两者对类型不符都抛 IllegalArgumentException。)
  *
  * 所有渲染器对输出字段的访问必须走 null 安全的 jsonObjectOrNull / jsonArrayOrNull /
  * jsonPrimitiveOrNull, 类型不符时安全回退而不是抛异常。
@@ -152,11 +154,13 @@ class ToolUIsJsonSafetyTest {
         assertNull(scrapeUrlEntryOf(JsonPrimitive("https://a.example")))
     }
 
-    // ---- 崩溃根因文档化: 旧代码对 JsonLiteral 调 getJsonArray 确实抛异常 ----
+    // ---- 崩溃根因文档化: 对 JsonLiteral 访问数组属性确实抛异常 ----
 
     @Test(expected = IllegalArgumentException::class)
-    fun `getJsonArray on a JSON literal throws exactly the reported crash`() {
-        // 这行复现用户崩溃栈里的核心调用 (ShellToolUI.Summary → JsonElementKt.getJsonArray):
-        JsonPrimitive("plain").getJsonArray()
+    fun `jsonArray on a JSON literal throws exactly the reported crash`() {
+        // 复现用户崩溃栈的核心调用。旧客户端 (kotlinx-serialization < 1.7) 的访问器是
+        // `getJsonArray()` 函数, 报错 "Element class ... is not a JsonArray"; 当前
+        // 1.11.0 里等价的是 `jsonArray` 属性, 抛同样的 IllegalArgumentException。
+        JsonPrimitive("plain").jsonArray
     }
 }
