@@ -486,7 +486,7 @@ internal data class ShellSummary(
 
 /** 解析 [ShellSummary]; 对任何非对象输出 (null / JsonLiteral / JsonArray) 都安全回退 */
 internal fun shellSummaryOf(content: JsonElement?): ShellSummary {
-    val obj = content.jsonObjectOrNull
+    val obj = content?.jsonObjectOrNull
     return ShellSummary(
         exitCode = obj?.get("exitCode")?.jsonPrimitiveOrNull?.intOrNull,
         timedOut = obj?.get("timedOut")?.jsonPrimitiveOrNull?.booleanOrNull ?: false,
