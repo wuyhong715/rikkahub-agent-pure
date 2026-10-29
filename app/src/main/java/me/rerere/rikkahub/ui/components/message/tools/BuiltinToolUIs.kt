@@ -44,10 +44,8 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.longOrNull
-import kotlinx.serialization.json.jsonPrimitive
+import me.rerere.common.http.jsonArrayOrNull
 import me.rerere.common.http.jsonObjectOrNull
 import me.rerere.highlight.CodeHighlightText
 import me.rerere.hugeicons.HugeIcons
@@ -161,6 +159,10 @@ object MemoryToolUI : ToolUIRenderer {
     }
 }
 
+/** 搜索结果的 items 数组; 字段缺失或类型不符 (如字符串) 时视为空列表, 不抛异常 */
+internal fun searchItemsOf(content: JsonElement?): List<JsonElement> =
+    content?.jsonObjectOrNull?.get("items")?.jsonArrayOrNull ?: emptyList()
+
 /**
  * 网络搜索: 标题带查询词, 摘要显示 answer 与结果数, 详情为结果列表
  */
@@ -175,8 +177,7 @@ object SearchWebToolUI : ToolUIRenderer {
         context.arguments.getStringContent("query") ?: ""
     )
 
-    private fun items(context: ToolUIContext): List<JsonElement> =
-        context.content?.jsonObjectOrNull?.get("items")?.jsonArray ?: emptyList()
+    private fun items(context: ToolUIContext): List<JsonElement> = searchItemsOf(context.content)
 
     override fun hasSummary(context: ToolUIContext): Boolean =
         context.content.getStringContent("answer") != null || items(context).isNotEmpty()
@@ -679,12 +680,12 @@ private fun SearchWebPreview(
     content: JsonElement,
 ) {
     val context = LocalContext.current
-    val items = content.jsonObject["items"]?.jsonArray ?: emptyList()
+    val items = searchItemsOf(content)
     val answer = content.getStringContent("answer")
     val query = arguments.getStringContent("query") ?: ""
     val parameters = arguments.jsonObjectOrNull?.entries?.filter { it.key != "query" }.orEmpty()
-    val images = content.jsonObject["images"]?.jsonArray
-        ?.mapNotNull { it.jsonPrimitive.contentOrNull }
+    val images = content.jsonObjectOrNull?.get("images")?.jsonArrayOrNull
+        ?.mapNotNull { it.jsonPrimitiveOrNull?.contentOrNull }
         ?.filter { it.isNotBlank() }
         ?: emptyList()
 
@@ -839,9 +840,24 @@ private fun SearchWebPreview(
     }
 }
 
+/** scrape_web 输出的 urls 数组; 字段缺失/类型不符 (如字符串) 时视为空列表, 不抛异常 */
+internal fun scrapeUrlsOf(content: JsonElement?): List<JsonElement> =
+    content?.jsonObjectOrNull?.get("urls")?.jsonArrayOrNull ?: emptyList()
+
+/** 单个抓取结果的 url + Markdown 内容; 条目不是 JSON 对象时返回 null (渲染时跳过) */
+internal fun scrapeUrlEntryOf(element: JsonElement): ScrapeUrlEntry? =
+    element.jsonObjectOrNull?.let { obj ->
+        ScrapeUrlEntry(
+            url = obj["url"]?.jsonPrimitiveOrNull?.contentOrNull ?: "",
+            content = obj["content"]?.jsonPrimitiveOrNull?.contentOrNull ?: "",
+        )
+    }
+
+internal data class ScrapeUrlEntry(val url: String, val content: String)
+
 @Composable
 private fun ScrapeWebPreview(content: JsonElement) {
-    val urls = content.jsonObject["urls"]?.jsonArray ?: emptyList()
+    val urls = scrapeUrlsOf(content)
 
     LazyColumn(
         modifier = Modifier
@@ -858,21 +874,20 @@ private fun ScrapeWebPreview(content: JsonElement) {
             )
         }
 
-        items(urls) { url ->
-            val urlObject = url.jsonObject
+        items(urls.mapNotNull(::scrapeUrlEntryOf)) { entry ->
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Text(
-                    text = urlObject["url"]?.jsonPrimitive?.content ?: "",
+                    text = entry.url,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
                     modifier = Modifier.fillMaxWidth()
                 )
                 Card {
                     MarkdownBlock(
-                        content = urlObject["content"]?.jsonPrimitive?.content ?: "",
+                        content = entry.content,
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(8.dp)
