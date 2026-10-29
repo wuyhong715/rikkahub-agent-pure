@@ -24,8 +24,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
-import kotlinx.serialization.json.longOrNull
 import me.rerere.ai.ui.DiffMetadata
 import me.rerere.ai.ui.metadataAs
 import me.rerere.common.http.jsonObjectOrNull
@@ -368,15 +368,10 @@ object ShellToolUI : ToolUIRenderer {
     @Composable
     override fun Summary(context: ToolUIContext) {
         val content = context.content ?: return
-        val combined = remember(content) {
-            listOf(content.getStringContent("stdout"), content.getStringContent("stderr"))
-                .filterNot { it.isNullOrBlank() }
-                .joinToString("\n")
-                .trim()
-        }
+        val summary = remember(content) { shellSummaryOf(content) }
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            ShellExitStatus(content, MaterialTheme.typography.labelSmall)
-            if (combined.isNotEmpty()) {
+            ShellExitStatus(summary, MaterialTheme.typography.labelSmall)
+            if (summary.output.isNotEmpty()) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -386,7 +381,7 @@ object ShellToolUI : ToolUIRenderer {
                         .shimmer(isLoading = context.loading),
                 ) {
                     Text(
-                        text = combined.lineSequence().take(SUMMARY_MAX_LINES).joinToString("\n"),
+                        text = summary.output.lineSequence().take(SUMMARY_MAX_LINES).joinToString("\n"),
                         style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
                         fontSize = 11.sp,
                         lineHeight = 14.sp,
@@ -405,10 +400,9 @@ object ShellToolUI : ToolUIRenderer {
             DefaultToolPreview(context = context)
             return
         }
+        val summary = remember(content) { shellSummaryOf(content) }
         val command = context.arguments.getStringContent("command").orEmpty()
         val cwd = context.arguments.getStringContent("cwd")
-        val stdout = content.getStringContent("stdout").orEmpty()
-        val stderr = content.getStringContent("stderr").orEmpty()
         Column(
             modifier = Modifier
                 .fillMaxHeight(0.8f)
@@ -426,29 +420,29 @@ object ShellToolUI : ToolUIRenderer {
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.weight(1f),
                 )
-                ShellExitStatus(content, MaterialTheme.typography.labelMedium)
+                ShellExitStatus(summary, MaterialTheme.typography.labelMedium)
             }
             HighlightCodeBlock(
                 code = if (cwd.isNullOrBlank()) command else "# cwd: $cwd\n$command",
                 language = "bash",
                 modifier = Modifier.fillMaxWidth(),
             )
-            if (stdout.isNotEmpty()) {
+            if (summary.stdout.isNotEmpty()) {
                 Text(text = "stdout", style = MaterialTheme.typography.labelMedium)
                 HighlightCodeBlock(
-                    code = stdout,
+                    code = summary.stdout,
                     language = "plaintext",
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
-            if (stderr.isNotEmpty()) {
+            if (summary.stderr.isNotEmpty()) {
                 Text(
                     text = "stderr",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.error,
                 )
                 HighlightCodeBlock(
-                    code = stderr,
+                    code = summary.stderr,
                     language = "plaintext",
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -459,31 +453,47 @@ object ShellToolUI : ToolUIRenderer {
 
 /** Shell 退出状态文本: exit code 为 0 显示绿色, 超时或非零显示错误色 */
 @Composable
-private fun ShellExitStatus(content: JsonElement, style: androidx.compose.ui.text.TextStyle) {
-    val exitCode = content.int("exitCode")
-    val timedOut = content.boolean("timedOut") ?: false
-    val ok = !timedOut && exitCode == 0
+private fun ShellExitStatus(summary: ShellSummary, style: androidx.compose.ui.text.TextStyle) {
+    val ok = !summary.timedOut && summary.exitCode == 0
     Text(
         text = when {
-            timedOut -> stringResource(R.string.tool_ui_shell_timeout)
-            else -> stringResource(R.string.tool_ui_shell_exit, exitCode?.toString() ?: "?")
+            summary.timedOut -> stringResource(R.string.tool_ui_shell_timeout)
+            else -> stringResource(R.string.tool_ui_shell_exit, summary.exitCode?.toString() ?: "?")
         },
         style = style,
         color = if (ok) DiffAddedColor else MaterialTheme.colorScheme.error,
     )
 }
 
-/** 从工具输出 JSON 读取布尔字段 */
-private fun JsonElement?.boolean(key: String): Boolean? =
-    this?.jsonObjectOrNull?.get(key)?.jsonPrimitiveOrNull?.booleanOrNull
+/**
+ * Shell 工具输出的摘要模型.
+ *
+ * 旧实现直接对 tool 输出调用 `JsonElement.getJsonArray`, 当输出是纯文本 (JsonLiteral)
+ * 或 stdout/stderr 等字段不是数组时抛 `IllegalArgumentException: Element class ... is not
+ * a JsonArray`, 整个聊天界面崩溃。这里所有字段访问都走 null 安全的 jsonObjectOrNull /
+ * jsonPrimitiveOrNull, 类型不符时安全回退而不是抛异常。
+ */
+internal data class ShellSummary(
+    val exitCode: Int?,
+    val timedOut: Boolean,
+    val stdout: String,
+    val stderr: String,
+) {
+    /** stdout + stderr 合并文本 (供摘要折叠行使用) */
+    val output: String
+        get() = listOf(stdout, stderr).filterNot { it.isBlank() }.joinToString("\n").trim()
+}
 
-/** 从工具输出 JSON 读取整型字段 */
-private fun JsonElement?.int(key: String): Int? =
-    this?.jsonObjectOrNull?.get(key)?.jsonPrimitiveOrNull?.intOrNull
-
-/** 从工具输出 JSON 读取长整型字段 */
-private fun JsonElement?.long(key: String): Long? =
-    this?.jsonObjectOrNull?.get(key)?.jsonPrimitiveOrNull?.longOrNull
+/** 解析 [ShellSummary]; 对任何非对象输出 (null / JsonLiteral / JsonArray) 都安全回退 */
+internal fun shellSummaryOf(content: JsonElement?): ShellSummary {
+    val obj = content.jsonObjectOrNull
+    return ShellSummary(
+        exitCode = obj?.get("exitCode")?.jsonPrimitiveOrNull?.intOrNull,
+        timedOut = obj?.get("timedOut")?.jsonPrimitiveOrNull?.booleanOrNull ?: false,
+        stdout = obj?.get("stdout")?.jsonPrimitiveOrNull?.contentOrNull ?: "",
+        stderr = obj?.get("stderr")?.jsonPrimitiveOrNull?.contentOrNull ?: "",
+    )
+}
 
 private const val FILE_SUMMARY_MAX_LINES = 10
 
