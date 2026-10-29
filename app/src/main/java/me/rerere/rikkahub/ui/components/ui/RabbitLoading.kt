@@ -25,13 +25,16 @@ fun RabbitLoadingIndicator(modifier: Modifier = Modifier) {
                     val drawable = AppCompatResources.getDrawable(context, R.drawable.rabbit) as? AnimatedVectorDrawable
                     setImageDrawable(drawable)
                     drawable?.setTint(primaryColor)
-                    drawable?.start()
                 }
             },
             update = { imageView ->
                 (imageView.drawable as? AnimatedVectorDrawable)?.apply {
                     setTint(primaryColor)
-                    start()
+                    // Chat state changes frequently while a reply streams. AndroidView calls
+                    // update on every recomposition; restarting an AnimatedVectorDrawable here
+                    // repeatedly resets its 3-second animation and can leave the icon looking
+                    // like a static, solid blob. Start it only when it is not already running.
+                    if (!isRunning) start()
                 }
             }
         )
