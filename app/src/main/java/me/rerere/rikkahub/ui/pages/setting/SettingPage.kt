@@ -71,6 +71,7 @@ import me.rerere.hugeicons.stroke.Sun01
 import me.rerere.hugeicons.stroke.Telegram
 import me.rerere.hugeicons.stroke.Tick01
 import me.rerere.hugeicons.stroke.Tiktok
+import me.rerere.hugeicons.stroke.UserCircle
 import me.rerere.hugeicons.stroke.View
 import me.rerere.hugeicons.stroke.Wrench01
 import me.rerere.rikkahub.R
@@ -213,6 +214,12 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                     modifier = Modifier.padding(horizontal = 8.dp),
                     title = { Text(stringResource(R.string.setting_page_group_models)) },
                 ) {
+                    item(
+                        onClick = { navController.navigate(Screen.SettingMoxwAccount) },
+                        leadingContent = { SettingIcon(HugeIcons.UserCircle, tint = MaterialTheme.colorScheme.primary) },
+                        supportingContent = { Text(stringResource(R.string.setting_moxw_title_desc)) },
+                        headlineContent = { Text(stringResource(R.string.setting_moxw_title)) },
+                    )
                     item(
                         onClick = { navController.navigate(Screen.SettingModels) },
                         leadingContent = { SettingIcon(HugeIcons.AiMagic, tint = MaterialTheme.colorScheme.primary) },

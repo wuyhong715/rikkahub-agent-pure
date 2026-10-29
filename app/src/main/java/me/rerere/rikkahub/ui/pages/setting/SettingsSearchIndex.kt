@@ -64,6 +64,12 @@ fun settingsSearchIndex(developerMode: Boolean): List<SettingsSearchEntry> {
             route = Screen.SettingModels,
         ),
         SettingsSearchEntry(
+            titleRes = R.string.setting_moxw_title,
+            descriptionRes = R.string.setting_moxw_title_desc,
+            groupRes = R.string.setting_page_group_models,
+            route = Screen.SettingMoxwAccount,
+        ),
+        SettingsSearchEntry(
             titleRes = R.string.setting_page_providers,
             descriptionRes = R.string.setting_page_providers_desc,
             groupRes = R.string.setting_page_group_models,

@@ -772,6 +772,17 @@ val dataSourceModule = module {
         client
     }
 
+    single<OkHttpClient>(named("moxw")) {
+        OkHttpClient.Builder()
+            .connectTimeout(20, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .writeTimeout(60, TimeUnit.SECONDS)
+            .followSslRedirects(true)
+            .followRedirects(true)
+            .retryOnConnectionFailure(true)
+            .build()
+    }
+
     single<OkHttpClient>(named("codex")) {
         OkHttpClient.Builder()
             .connectTimeout(20, TimeUnit.SECONDS)
@@ -842,6 +853,19 @@ val dataSourceModule = module {
 
     single {
         HuggingFaceAPI.create(get())
+    }
+
+    single {
+        me.rerere.rikkahub.data.moxw.MoxwAccountRepository(
+            store = me.rerere.rikkahub.data.moxw.MoxwCredentialStore(context = get(), json = get()),
+            api = me.rerere.rikkahub.data.moxw.MoxwApi(
+                client = get(named("moxw")),
+                json = get(),
+                baseUrl = me.rerere.rikkahub.data.moxw.MOXW_API_BASE,
+            ),
+            settingsStore = get(),
+            userAgent = me.rerere.rikkahub.data.moxw.moxwUserAgent(android.os.Build.VERSION.RELEASE),
+        )
     }
 
     single {

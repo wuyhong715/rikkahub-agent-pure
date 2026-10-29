@@ -172,6 +172,16 @@ fun GettingStartedPage() {
                 IntroCard(requiredDone = requiredDone, requiredTotal = requiredTotal)
             }
 
+            item(key = "step-moxw") {
+                // Sits above the generic model step on purpose: signing in is the one action
+                // that completes the step below without the user owning an API key, so it has
+                // to be the first thing they see, not a link buried in a sub-page.
+                MoxwSignInStepCard(
+                    done = steps[GettingStartedStep.Model] == true,
+                    onSignIn = { nav.navigate(Screen.SettingMoxwAccount) },
+                )
+            }
+
             item(key = "step-model") {
                 StepCard(
                     index = 1,
@@ -407,6 +417,56 @@ private fun KeepAliveTip(onAction: () -> Unit) {
         )
         TextButton(onClick = onAction, contentPadding = PaddingValues(0.dp)) {
             Text(stringResource(R.string.getting_started_keepalive_open))
+        }
+    }
+}
+
+/**
+ * The "just sign in" path to a working model.
+ *
+ * Rendered as its own card rather than a line inside the model step because it is a different
+ * kind of action: the model step asks the user to go configure a provider, this one completes
+ * that step in two fields.
+ */
+@Composable
+private fun MoxwSignInStepCard(
+    done: Boolean,
+    onSignIn: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp)
+            .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(20.dp))
+            .padding(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                stringResource(R.string.getting_started_moxw_title),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                stringResource(
+                    if (done) R.string.getting_started_moxw_desc_done
+                    else R.string.getting_started_moxw_desc
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
+        }
+        Button(onClick = onSignIn) {
+            Text(
+                stringResource(
+                    if (done) R.string.getting_started_moxw_manage
+                    else R.string.getting_started_moxw_action
+                )
+            )
         }
     }
 }

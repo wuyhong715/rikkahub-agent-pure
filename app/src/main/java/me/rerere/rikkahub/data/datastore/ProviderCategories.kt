@@ -6,6 +6,7 @@ import me.rerere.ai.provider.LLAMACPP_PROVIDER_ID
 import me.rerere.ai.provider.LITERT_PROVIDER_ID
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.moxw.MOXW_PROVIDER_ID
 import kotlin.uuid.Uuid
 
 /**
@@ -30,6 +31,9 @@ enum class ProviderCategory(@StringRes val titleRes: Int) {
  * - 国际：海外厂商与全球聚合网关。
  */
 private val BUILT_IN_PROVIDER_CATEGORY: Map<Uuid, ProviderCategory> = buildMap {
+    // 官方中转（Moxw 自有网关，登录即用）
+    put(MOXW_PROVIDER_ID, ProviderCategory.DOMESTIC)
+
     // 本地（端侧）
     put(AICORE_PROVIDER_ID, ProviderCategory.LOCAL)
     put(LITERT_PROVIDER_ID, ProviderCategory.LOCAL)

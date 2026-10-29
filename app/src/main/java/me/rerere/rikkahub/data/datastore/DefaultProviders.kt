@@ -14,6 +14,11 @@ import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.moxw.MOXW_BALANCE_API_PATH
+import me.rerere.rikkahub.data.moxw.MOXW_BALANCE_RESULT_PATH
+import me.rerere.rikkahub.data.moxw.MOXW_BASE_URL
+import me.rerere.rikkahub.data.moxw.MOXW_DEFAULT_MODEL
+import me.rerere.rikkahub.data.moxw.MOXW_PROVIDER_ID
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
 import kotlin.uuid.Uuid
 
@@ -23,6 +28,38 @@ val DEFAULT_GROK_PROVIDER_ID = Uuid.parse("8f3e1d20-4b6a-4c9e-a1f2-9d5c7e0b3a44"
 val DEFAULT_GEMINI_OAUTH_PROVIDER_ID = Uuid.parse("2b6c1f84-73ad-4e35-b0c7-1a9e4d5f8c21")
 
 val DEFAULT_PROVIDERS = listOf(
+    // The Moxw gateway sits above everything else: it is the one provider a new install can
+    // use without the user owning an API key, and the account page fills it in on sign-in.
+    // Seeded disabled and empty on purpose - an enabled provider with no key and no models is
+    // an error card on the provider list, and signing in flips it on anyway.
+    ProviderSetting.OpenAI(
+        id = MOXW_PROVIDER_ID,
+        name = "Moxw",
+        baseUrl = MOXW_BASE_URL,
+        apiKey = "",
+        enabled = false,
+        builtIn = true,
+        balanceOption = BalanceOption(
+            enabled = true,
+            apiPath = MOXW_BALANCE_API_PATH,
+            resultPath = MOXW_BALANCE_RESULT_PATH,
+        ),
+        models = listOf(
+            Model(
+                modelId = MOXW_DEFAULT_MODEL,
+                displayName = "DeepSeek V4.1 Flash",
+                inputModalities = listOf(Modality.TEXT),
+                outputModalities = listOf(Modality.TEXT),
+                abilities = listOf(ModelAbility.TOOL),
+            )
+        ),
+        description = {
+            Text("Official Moxw gateway. Sign in once and the key, models and balance are handled for you - no API key to paste.")
+        },
+        shortDescription = {
+            Text("Sign in - no API key")
+        },
+    ),
     ProviderSetting.AICore(
         // On-device provider sits at the top of the list so the agent's primary surface for
         // privacy-conscious / offline use is the first thing users see.
