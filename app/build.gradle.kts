@@ -60,13 +60,13 @@ android {
         create("moxw") {
             dimension = "brand"
             applicationId = "com.moxw.agent"
-            versionCode = 11
-            versionName = "0.8.3"
+            versionCode = 12
+            versionName = "0.8.4"
             resValue("string", "app_name", "Moxw Agent")
             buildConfigField("String", "BRAND_NAME", "\"Moxw\"")
             buildConfigField("String", "BRAND_ID", "\"moxw\"")
-            buildConfigField("String", "VERSION_NAME", "\"0.8.3\"")
-            buildConfigField("String", "VERSION_CODE", "\"11\"")
+            buildConfigField("String", "VERSION_NAME", "\"0.8.4\"")
+            buildConfigField("String", "VERSION_CODE", "\"12\"")
             buildConfigField("String", "UPDATE_API_URL", "\"\"")
             // Moxw ships from its own branch; this repo's /releases/latest still points at
             // the Pure line (vX.Y.Z-pure.N). Without this guard a Moxw build fetches that
