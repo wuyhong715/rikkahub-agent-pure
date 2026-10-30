@@ -919,6 +919,7 @@ sealed interface Screen : NavKey {
     @Serializable
     data object SettingMoxwAccount : Screen
 
+    @Serializable
     data object SettingSsh : Screen
 
     @Serializable
