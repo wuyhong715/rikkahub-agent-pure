@@ -964,7 +964,7 @@ private fun TopBar(
     // 收起进度控制三件事：底色浓度、底部发丝线的可见度、元信息那一行的高度。
     // 三者用同一个 fraction，滚动停下时不会出现「底已经实了但线还没出来」的错位。
     val barColor = MaterialTheme.colorScheme.surface.copy(
-        alpha = 0.92f * collapseFraction.coerceIn(0f, 1f),
+        alpha = 0.26f * collapseFraction.coerceIn(0f, 1f),
     )
     Box(modifier = Modifier.fillMaxWidth()) {
     TopAppBar(
