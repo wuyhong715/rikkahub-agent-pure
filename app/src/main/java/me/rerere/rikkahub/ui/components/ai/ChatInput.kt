@@ -86,7 +86,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.collectLatest
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.provider.Model
-import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ModelType
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.asr.ASRStatus
@@ -485,7 +484,8 @@ private fun ModelReasoningChip(
 ) {
     val model = settings.resolveChatModel(conversationChatModelId, assistant.id)
     val effectiveModelId = model?.id
-    val showReasoning = model?.abilities?.contains(ModelAbility.REASONING) == true
+    // Keep the depth control available even when a model's capability metadata is incomplete.
+    val showReasoning = true
     val level = model?.reasoningLevel ?: assistant.reasoningLevel
     val modelListState = rememberModelListState(
         modelId = effectiveModelId,
