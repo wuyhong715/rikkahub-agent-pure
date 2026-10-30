@@ -42,6 +42,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
@@ -850,7 +851,9 @@ private fun BoxScope.MessageJumper(
             ),
         ) {
             Column(
-                modifier = Modifier.padding(vertical = 4.dp),
+                modifier = Modifier
+                    .width(40.dp)
+                    .padding(vertical = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 JumperButton(
