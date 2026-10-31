@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
@@ -183,15 +182,8 @@ private fun ReasoningContent(
                 modifier = Modifier.fillMaxSize(),
             )
         }
-        // 流式生成期间不启用 SelectionContainer，避免 selectable 列表并发修改导致的
-        // ConcurrentModificationException（详见 ChatMessage.kt 文本块同样处理）。
-        if (loading) {
-            reasoningContent()
-        } else {
-            SelectionContainer {
-                reasoningContent()
-            }
-        }
+        // 推理卡片的预览状态使用 verticalScroll；不要让文本选择层抢占卡片/消息列表的拖动手势。
+        reasoningContent()
     }
 }
 

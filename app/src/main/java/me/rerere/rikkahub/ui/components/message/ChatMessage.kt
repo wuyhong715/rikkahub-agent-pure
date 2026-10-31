@@ -23,7 +23,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
@@ -598,18 +597,11 @@ private fun MessagePartsBlock(
                             }
                         }
 
-                        // 流式生成期间不启用 SelectionContainer：Markdown 在不断重渲染，
-                        // 内部可选择的 Text 会频繁注册/注销，与 Compose 选择工具栏在绘制阶段
-                        // 对 selectable 列表的排序产生并发修改，导致 ConcurrentModificationException。
-                        // 生成结束后内容稳定，再启用文本选择。
+                        // SelectionContainer 在 LazyColumn 中会把拖动手势优先当成文本选择，
+                        // 导致消息正文无法随列表滚动，且会和表格的横向滚动竞争指针事件。
+                        // 文本复制仍由消息操作菜单提供；正文必须把拖动交给外层列表/表格。
                         if (!renderedAsWebviewCard) {
-                            if (loading) {
-                                textContent()
-                            } else {
-                                SelectionContainer {
-                                    textContent()
-                                }
-                            }
+                            textContent()
                         }
                     }
 
