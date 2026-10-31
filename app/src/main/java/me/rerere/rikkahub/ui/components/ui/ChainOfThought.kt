@@ -75,6 +75,7 @@ fun <T> ChainOfThought(
     collapsedVisibleCount: Int = 2,
     collapsedAdaptiveWidth: Boolean = false,
     forceExpanded: Boolean = false,
+    compactSummary: String? = null,
     content: @Composable ChainOfThoughtScope.(T) -> Unit
 ) {
     var userExpanded by remember { mutableStateOf(false) }
@@ -101,14 +102,45 @@ fun <T> ChainOfThought(
                         animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec()
                     ),
             ) {
-                val visibleSteps = if (expanded || !canCollapse) {
-                    steps
-                } else {
-                    steps.takeLast(collapsedVisibleCount)
+                val visibleSteps = when {
+                    compactSummary != null && !expanded -> emptyList()
+                    expanded || !canCollapse -> steps
+                    else -> steps.takeLast(collapsedVisibleCount)
                 }
 
-                // 显示展开/折叠按钮（统一在顶部）
-                if (canCollapse) {
+                // 默认只展示一行摘要，完整步骤仍可点击展开。
+                if (compactSummary != null && !expanded) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(MaterialTheme.shapes.small)
+                            .clickable { userExpanded = true }
+                            .padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Icon(
+                            imageVector = HugeIcons.Sparkles,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                        Text(
+                            text = compactSummary,
+                            modifier = Modifier.weight(1f),
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Icon(
+                            imageVector = HugeIcons.ArrowDown01,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                } else if (canCollapse || compactSummary != null) {
                     Row(
                         modifier = Modifier
                             .then(
