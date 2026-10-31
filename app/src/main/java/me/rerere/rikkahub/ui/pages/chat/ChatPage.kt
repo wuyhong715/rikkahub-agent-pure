@@ -528,91 +528,104 @@ private fun ChatPageContent(
             bottomBar = {
                 val messageQueue by vm.messageQueue.collectAsStateWithLifecycle()
                 val voiceState by vm.voiceSession.state.collectAsStateWithLifecycle()
-                ChatInput(
-                    onStartVoiceMode = onStartVoiceMode,
-                    voiceState = voiceState,
-                    onStopVoiceMode = vm.voiceSession::stop,
-                    state = inputState,
-                    messageQueue = messageQueue,
-                    onRemoveQueuedMessage = vm::removeQueuedMessage,
-                    onBeginEditQueuedMessage = vm::beginEditQueuedMessage,
-                    onFinishEditQueuedMessage = vm::finishEditQueuedMessage,
-                    onResumeMessageQueue = vm::resumeMessageQueue,
-                    loading = loadingJob != null,
-                    settings = setting,
-                    hazeState = hazeState,
-                    completionProviders = completionProviders,
-                    onCancelClick = {
-                        vm.stopGeneration()
-                    },
-                    onSendClick = {
-                        // Settings.dummy() is still standing in for the real settings: nothing
-                        // resolves yet, so do nothing (the draft stays) rather than misreport.
-                        if (setting.init) return@ChatInput
-                        if (currentChatModel == null) {
-                            toaster.show(
-                                context.getString(R.string.chat_select_model_first),
-                                type = ToastType.Error,
-                            )
-                            // Dead-end fix: instead of only refusing, take the user to the
-                            // first-run checklist so they can see everything that still needs
-                            // setting up — and land on the "add a model" step.
-                            navController.navigate(Screen.GettingStarted)
-                            return@ChatInput
-                        }
-                        if (inputState.isEditing()) {
-                            vm.handleMessageEdit(
-                                parts = inputState.getContents(),
-                                messageId = inputState.editingMessage!!,
-                            )
-                        } else {
-                            vm.handleMessageSend(inputState.getContents())
-                            scope.launch {
-                                delay(100.milliseconds)
-                                chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
+                Column {
+                    ChatPageQuickActions(
+                        loading = loadingJob != null,
+                        processingStatus = mergedStatus,
+                        showQuickStart = conversation.currentMessages.isEmpty(),
+                        subAgentCount = subAgentRuns.count { it.value.status == SubAgentStatus.RUNNING },
+                        onStop = vm::stopGeneration,
+                        onPromptSelected = { prompt ->
+                            inputState.editingMessage = null
+                            inputState.setMessageText(prompt)
+                        },
+                    )
+                    ChatInput(
+                        onStartVoiceMode = onStartVoiceMode,
+                        voiceState = voiceState,
+                        onStopVoiceMode = vm.voiceSession::stop,
+                        state = inputState,
+                        messageQueue = messageQueue,
+                        onRemoveQueuedMessage = vm::removeQueuedMessage,
+                        onBeginEditQueuedMessage = vm::beginEditQueuedMessage,
+                        onFinishEditQueuedMessage = vm::finishEditQueuedMessage,
+                        onResumeMessageQueue = vm::resumeMessageQueue,
+                        loading = loadingJob != null,
+                        settings = setting,
+                        hazeState = hazeState,
+                        completionProviders = completionProviders,
+                        onCancelClick = {
+                            vm.stopGeneration()
+                        },
+                        onSendClick = {
+                            // Settings.dummy() is still standing in for the real settings: nothing
+                            // resolves yet, so do nothing (the draft stays) rather than misreport.
+                            if (setting.init) return@ChatInput
+                            if (currentChatModel == null) {
+                                toaster.show(
+                                    context.getString(R.string.chat_select_model_first),
+                                    type = ToastType.Error,
+                                )
+                                // Dead-end fix: instead of only refusing, take the user to the
+                                // first-run checklist so they can see everything that still needs
+                                // setting up — and land on the "add a model" step.
+                                navController.navigate(Screen.GettingStarted)
+                                return@ChatInput
                             }
-                        }
-                        inputState.clearInput()
-                    },
-                    onLongSendClick = {
-                        if (inputState.isEditing()) {
-                            vm.handleMessageEdit(
-                                parts = inputState.getContents(),
-                                messageId = inputState.editingMessage!!,
-                            )
-                        } else {
-                            vm.handleMessageSend(content = inputState.getContents(), answer = false)
-                            scope.launch {
-                                chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
-                            }
-                        }
-                        inputState.clearInput()
-                    },
-                    onUpdateAssistant = {
-                        vm.updateSettings(
-                            setting.copy(
-                                assistants = setting.assistants.map { assistant ->
-                                    if (assistant.id == it.id) {
-                                        it
-                                    } else {
-                                        assistant
-                                    }
+                            if (inputState.isEditing()) {
+                                vm.handleMessageEdit(
+                                    parts = inputState.getContents(),
+                                    messageId = inputState.editingMessage!!,
+                                )
+                            } else {
+                                vm.handleMessageSend(inputState.getContents())
+                                scope.launch {
+                                    delay(100.milliseconds)
+                                    chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
                                 }
+                            }
+                            inputState.clearInput()
+                        },
+                        onLongSendClick = {
+                            if (inputState.isEditing()) {
+                                vm.handleMessageEdit(
+                                    parts = inputState.getContents(),
+                                    messageId = inputState.editingMessage!!,
+                                )
+                            } else {
+                                vm.handleMessageSend(content = inputState.getContents(), answer = false)
+                                scope.launch {
+                                    chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
+                                }
+                            }
+                            inputState.clearInput()
+                        },
+                        onUpdateAssistant = {
+                            vm.updateSettings(
+                                setting.copy(
+                                    assistants = setting.assistants.map { assistant ->
+                                        if (assistant.id == it.id) {
+                                            it
+                                        } else {
+                                            assistant
+                                        }
+                                    }
+                                )
                             )
-                        )
-                    },
-                    enableSearch = enableWebSearch,
-                    conversationChatModelId = conversation.chatModelId,
-                    onUpdateChatModel = onUpdateChatModel,
-                    onUpdateModelReasoningLevel = { model, level ->
-                        vm.setModelReasoningLevel(model, level)
-                    },
-                    onUpdateSearchMode = onUpdateSearchMode,
-                    onUpdateSearchService = onUpdateSearchService,
-                    onMoreClick = {
-                        showFilesSheet = true
-                    },
-                )
+                        },
+                        enableSearch = enableWebSearch,
+                        conversationChatModelId = conversation.chatModelId,
+                        onUpdateChatModel = onUpdateChatModel,
+                        onUpdateModelReasoningLevel = { model, level ->
+                            vm.setModelReasoningLevel(model, level)
+                        },
+                        onUpdateSearchMode = onUpdateSearchMode,
+                        onUpdateSearchService = onUpdateSearchService,
+                        onMoreClick = {
+                            showFilesSheet = true
+                        },
+                    )
+                }
             },
             containerColor = Color.Transparent,
         ) { innerPadding ->

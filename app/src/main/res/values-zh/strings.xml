@@ -243,6 +243,7 @@
   <string name="cancel_edit">取消编辑</string>
   <string name="chain_of_thought_collapse">收起</string>
   <string name="chain_of_thought_show_more_steps">再显示 %d 步</string>
+  <string name="chain_of_thought_compact_summary">%1$d 步 · %2$s</string>
   <string name="chat_input_placeholder">输入消息与AI聊天</string>
   <string name="chat_input_hint_1">说点什么？</string>
   <string name="app_speaker_name">Moxw</string>
@@ -3202,4 +3203,15 @@ HARDLINE 保护仍然生效：rm -rf /、mkfs、shutdown / reboot、向块设备
   <string name="mission_trigger_every_day">每天</string>
   <string name="mission_trigger_next_run">下次运行：%1$s</string>
   <string name="mission_trigger_paused">已暂停</string>
+  <string name="chat_quick_start_title">从任务开始</string>
+  <string name="chat_quick_working">正在处理</string>
+  <string name="chat_quick_subagents_running">正在运行 %1$d 个子任务</string>
+  <string name="chat_quick_summarize">总结</string>
+  <string name="chat_quick_summarize_prompt">总结这段对话的关键内容。</string>
+  <string name="chat_quick_plan">制定计划</string>
+  <string name="chat_quick_plan_prompt">把我的目标整理成清晰的分步计划。</string>
+  <string name="chat_quick_analyze">分析</string>
+  <string name="chat_quick_analyze_prompt">分析上面的信息，并指出风险或遗漏。</string>
+  <string name="chat_quick_continue">继续</string>
+  <string name="chat_quick_continue_prompt">从上次未完成的步骤继续，并告诉我还需要什么。</string>
 </resources>
