@@ -95,6 +95,23 @@ class RunResumePolicyTest {
     }
 
     @Test
+    fun `a mission run without a run id is never resumed`() {
+        assertEquals(
+            RunResumeDecision.NOT_RESUMABLE,
+            RunResumePolicy.decide(
+                kind = "mission",
+                checkpoint = checkpoint(),
+                conversationExists = true,
+                mission = MissionClaim(
+                    status = "ACTIVE",
+                    executionState = "RUNNING",
+                    lastRunId = "run-1",
+                ),
+            ),
+        )
+    }
+
+    @Test
     fun `cron runs do not consult a mission claim`() {
         assertEquals(
             RunResumeDecision.AUTO_RESUME,

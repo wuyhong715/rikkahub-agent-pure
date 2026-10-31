@@ -90,9 +90,10 @@ object RunResumePolicy {
     /** True when [mission] is active, running, and names [runId] as its last round. */
     private fun missionOwnsRun(mission: MissionClaim?, runId: String?): Boolean {
         if (mission == null) return false
+        if (runId == null) return false
         if (mission.status != MISSION_ACTIVE) return false
         if (mission.executionState != MISSION_RUNNING) return false
-        if (runId != null && mission.lastRunId != runId) return false
+        if (mission.lastRunId != runId) return false
         return true
     }
 
