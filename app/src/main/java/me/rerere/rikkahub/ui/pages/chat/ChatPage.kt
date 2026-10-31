@@ -531,9 +531,9 @@ private fun ChatPageContent(
                 Column {
                     ChatPageQuickActions(
                         loading = loadingJob != null,
-                        processingStatus = mergedStatus,
+                        processingStatus = listOfNotNull(processingStatus),
                         showQuickStart = conversation.currentMessages.isEmpty(),
-                        subAgentCount = subAgentRuns.count { it.value.status == SubAgentStatus.RUNNING },
+                        subAgentCount = 0,
                         onStop = vm::stopGeneration,
                         onPromptSelected = { prompt ->
                             inputState.editingMessage = null
