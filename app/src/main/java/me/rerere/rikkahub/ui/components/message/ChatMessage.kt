@@ -467,6 +467,15 @@ private fun MessagePartsBlock(
                         steps = block.steps,
                         collapsedAdaptiveWidth = isReasoningOnlyBlock,
                         forceExpanded = hasPendingApproval,
+                        compactSummary = if (hasPendingApproval) null else {
+                            val latestStep = block.steps.last()
+                            val latestLabel = when (latestStep) {
+                                is ThinkingStep.ReasoningStep -> latestStep.reasoning.reasoning.trim().lineSequence().firstOrNull().orEmpty()
+                                is ThinkingStep.ToolStep -> latestStep.tool.toolName
+                                is ThinkingStep.ServerToolStep -> latestStep.tool.toolName
+                            }.ifBlank { "Working" }
+                            stringResource(R.string.chain_of_thought_compact_summary, block.steps.size, latestLabel)
+                        },
                         cardColors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = settings.displaySetting.bubbleOpacity),
                         ),

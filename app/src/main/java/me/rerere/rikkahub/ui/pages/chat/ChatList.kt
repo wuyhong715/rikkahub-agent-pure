@@ -448,14 +448,30 @@ private fun ChatListNormal(
                         RabbitLoadingIndicator(
                             modifier = Modifier.size(28.dp)
                         )
-                        AnimatedVisibility(
-                            visible = processingStatus != null,
-                        ) {
-                            Text(
-                                text = processingStatus ?: "",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                        var statusExpanded by remember { mutableStateOf(false) }
+                        AnimatedVisibility(visible = processingStatus != null) {
+                            Row(
+                                modifier = Modifier
+                                    .clip(MaterialTheme.shapes.small)
+                                    .clickable { statusExpanded = !statusExpanded }
+                                    .padding(horizontal = 6.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                Text(
+                                    text = processingStatus ?: "",
+                                    maxLines = if (statusExpanded) 3 else 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Icon(
+                                    imageVector = if (statusExpanded) HugeIcons.ArrowUp01 else HugeIcons.ArrowDown01,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(14.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
                     }
                 }

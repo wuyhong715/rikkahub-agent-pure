@@ -388,6 +388,7 @@
   <string name="cancel_edit">Cancel Edit</string>
   <string name="chain_of_thought_collapse">Collapse</string>
   <string name="chain_of_thought_show_more_steps">Show %d more steps</string>
+  <string name="chain_of_thought_compact_summary">%1$d steps · %2$s</string>
   <string name="chat_input_placeholder">Chat with AI</string>
   <string name="chat_input_hint_1">Say something…</string>
   <string name="app_speaker_name">Moxw</string>
@@ -3541,4 +3542,15 @@ HARDLINE protections still apply: rm -rf /, mkfs, shutdown / reboot, dd to block
   <string name="instances_perm_missing">Not granted</string>
   <string name="assistant_page_workspace_all">Allow all workspaces</string>
   <string name="assistant_page_workspace_all_desc">Workspace tools get an optional workspace argument, so this assistant can read, write and run commands in any Linux workspace. Cold memory and the file library still use the selected workspace above.</string>
+  <string name="chat_quick_start_title">Start with a task</string>
+  <string name="chat_quick_working">Working</string>
+  <string name="chat_quick_subagents_running">%1$d sub-agents running</string>
+  <string name="chat_quick_summarize">Summarize</string>
+  <string name="chat_quick_summarize_prompt">Summarize the key points of this conversation.</string>
+  <string name="chat_quick_plan">Make a plan</string>
+  <string name="chat_quick_plan_prompt">Turn my goal into a clear step-by-step plan.</string>
+  <string name="chat_quick_analyze">Analyze</string>
+  <string name="chat_quick_analyze_prompt">Analyze the information above and point out risks or gaps.</string>
+  <string name="chat_quick_continue">Continue</string>
+  <string name="chat_quick_continue_prompt">Continue from the last unfinished step and tell me what you need.</string>
 </resources>
